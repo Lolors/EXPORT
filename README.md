@@ -1,4 +1,6 @@
-# NTP Export
+# 수출관리
+
+Export Management System
 
 실제 수출 업무 흐름에 맞춰 주문 접수부터 실출고 입력, 박스 패킹, 국내배송, 엑셀 출력, 사진 증빙까지 관리하는 Streamlit 앱입니다.
 
