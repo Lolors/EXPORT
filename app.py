@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 import html
 import time
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -30,8 +31,14 @@ def rerun():
     st.rerun()
 
 
+def date_value(value: str | None):
+    parsed = db.parse_date(value)
+    return parsed.date() if parsed else date.today()
+
+
 def case_label(r):
-    return f"{r['export_no']} | {r['country']} | {r['buyer'] or '바이어 미입력'} | {r['stage']}"
+    note = f" | {r['note']}" if 'note' in r.keys() and r['note'] else ''
+    return f"{r['export_no']} | {r['country']} | {r['buyer'] or '바이어 미입력'} | {r['stage']}{note}"
 
 
 def choose_active_case(key, country=None):
@@ -166,6 +173,8 @@ if menu == '오버뷰':
     for c in cases:
         orders = db.rows('SELECT product_name,quantity,unit FROM order_items WHERE case_id=? ORDER BY id', (c['id'],))
         title = f"{c['export_no']} · {c['country']} · {c['stage']}" + (f" · {c['buyer']}" if c['buyer'] else '')
+        if c['note']:
+            title += f" · {c['note']}"
         with st.expander(title):
             if orders:
                 st.dataframe(
@@ -175,11 +184,14 @@ if menu == '오버뷰':
                 )
             else:
                 st.caption('주문 제품이 아직 입력되지 않았습니다.')
-            cols = st.columns(4)
+            cols = st.columns(5)
             cols[0].metric('국가', c['country'])
             cols[1].metric('운송', c['transport_mode'])
             cols[2].metric('예상 출고일', c['expected_ship_date'] or '-')
             cols[3].metric('단계', c['stage'])
+            cols[4].metric('비고', c['note'] or '-')
+            if c['folder_path']:
+                st.caption(f"폴더: {c['folder_path']}")
 
 elif menu == '수출 주문 입력':
     st.subheader('수출 주문 등록')
@@ -191,6 +203,7 @@ elif menu == '수출 주문 입력':
         expected = c3.date_input('예상출고일')
         transport = c1.selectbox('운송방식', db.TRANSPORT_MODES)
         stage = c2.selectbox('현재 진행 단계', db.STAGES[:5])
+        note = c3.text_input('비고', help='완료 후 폴더명에 사용됩니다. 예: 메디풀 7월 발주, 리쥬란 샘플')
         submitted = st.form_submit_button('수출 건 생성')
     if submitted:
         if not country.strip():
@@ -199,10 +212,11 @@ elif menu == '수출 주문 입력':
             no = db.next_export_no()
             now = db.now_text()
             cid = db.execute(
-                '''INSERT INTO export_cases(export_no,buyer,country,expected_ship_date,transport_mode,stage,status,created_at,updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?)''',
-                (no, buyer, country, str(expected), transport, stage, '진행중', now, now),
+                '''INSERT INTO export_cases(export_no,buyer,country,expected_ship_date,transport_mode,stage,status,note,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                (no, buyer, country, str(expected), transport, stage, '진행중', note, now, now),
             )
+            db.ensure_case_folder(cid)
             db.add_history(cid, '수출 건 생성', no)
             st.session_state['order_case'] = cid
             st.success(f'{no} 생성 완료')
@@ -215,6 +229,28 @@ elif menu == '수출 주문 입력':
             list(opts),
             index=list(opts.values()).index(cid) if cid in opts.values() else 0,
         )]
+        case = db.row('SELECT * FROM export_cases WHERE id=?', (cid,))
+        with st.form(f'case_edit_{cid}'):
+            st.markdown('#### 기본 정보 수정')
+            c1, c2, c3 = st.columns(3)
+            new_country = c1.text_input('국가 *', value=case['country'])
+            new_buyer = c2.text_input('바이어 (선택)', value=case['buyer'])
+            new_expected = c3.date_input('예상출고일', value=date_value(case['expected_ship_date']))
+            new_transport = c1.selectbox('운송방식', db.TRANSPORT_MODES, index=db.TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in db.TRANSPORT_MODES else 0)
+            new_stage = c2.selectbox('현재 진행 단계', db.STAGES[:5], index=db.STAGES[:5].index(case['stage']) if case['stage'] in db.STAGES[:5] else 0)
+            new_note = c3.text_input('비고', value=case['note'])
+            if st.form_submit_button('기본 정보 저장'):
+                if not new_country.strip():
+                    st.error('국가는 필수입니다.')
+                else:
+                    db.execute(
+                        'UPDATE export_cases SET country=?,buyer=?,expected_ship_date=?,transport_mode=?,stage=?,note=?,updated_at=? WHERE id=?',
+                        (new_country, new_buyer, str(new_expected), new_transport, new_stage, new_note, db.now_text(), cid),
+                    )
+                    db.sync_case_folder(cid)
+                    db.add_history(cid, '수출 기본 정보 수정', f'{new_country} / {new_transport} / {new_note}')
+                    st.success('기본 정보를 저장했습니다.')
+                    rerun()
         old = dataframe('SELECT product_name AS 제품명, quantity AS 수량, unit AS 단위 FROM order_items WHERE case_id=?', (cid,))
         if old.empty:
             old = pd.DataFrame([{'제품명': '', '수량': 0, '단위': 'EA'}])
@@ -316,7 +352,8 @@ elif menu == '패킹 결과·배송·엑셀':
     if not cid:
         st.stop()
     case = db.row('SELECT * FROM export_cases WHERE id=?', (cid,))
-    st.info(f"국가: {case['country']}  |  바이어: {case['buyer'] or '-'}  |  운송방식: {case['transport_mode']}")
+    st.info(f"국가: {case['country']}  |  바이어: {case['buyer'] or '-'}  |  운송방식: {case['transport_mode']}  |  비고: {case['note'] or '-'}")
+    st.caption('완료 후 폴더명: 바이어가 있으면 MMDD_바이어_운송방식_비고, 바이어가 없으면 MMDD_운송방식_비고')
     preview = dataframe(
         '''SELECT s.box_no AS 박스번호,s.business_unit AS 사업장,s.location AS 로케이션,s.product_name AS 제품명,
                   s.lot_no AS LOT,s.expiry_date AS 유통기한,s.requested_qty AS 수량,b.weight_kg AS 무게,
@@ -330,6 +367,7 @@ elif menu == '패킹 결과·배송·엑셀':
         preview['박스사이즈'] = preview['박스사이즈'].apply(lambda value: f'{value} cm' if value else '')
     render_packing_preview(preview)
     with st.form('delivery'):
+        actual_ship_date = st.date_input('실제출고일', value=date_value(case['actual_ship_date']))
         method = st.radio('국내배송', ['로젠택배', '퀵배송'], index=0 if case['domestic_method'] != '퀵배송' else 1, horizontal=True)
         tracking = ''
         driver = ''
@@ -342,11 +380,12 @@ elif menu == '패킹 결과·배송·엑셀':
             phone = c2.text_input('연락처', value=case['driver_phone'])
         if st.form_submit_button('배송정보 저장'):
             db.execute(
-                "UPDATE export_cases SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,stage='국내배송',status='완료',updated_at=? WHERE id=?",
-                (method, tracking, driver, phone, db.now_text(), cid),
+                "UPDATE export_cases SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,actual_ship_date=?,stage='국내배송',status='완료',updated_at=? WHERE id=?",
+                (method, tracking, driver, phone, str(actual_ship_date), db.now_text(), cid),
             )
-            db.add_history(cid, '국내배송 완료', method)
-            st.success('국내배송 정보가 저장되어 수출 건이 완료 처리되었습니다.')
+            folder = db.sync_case_folder(cid)
+            db.add_history(cid, '국내배송 완료', f'{method} / {folder}')
+            st.success(f'국내배송 정보가 저장되어 수출 건이 완료 처리되었습니다. 폴더: {folder}')
             time.sleep(1)
             rerun()
     st.download_button(
@@ -362,14 +401,16 @@ elif menu == '출고 사진':
     if not cid:
         st.stop()
     case = db.row('SELECT * FROM export_cases WHERE id=?', (cid,))
+    case_folder = db.ensure_case_folder(cid)
     st.caption('업로드한 사진은 방향을 자동 보정하고, 긴 변 800px 이하로 축소해 저장합니다.')
+    st.caption(f'저장 폴더: {case_folder}')
     files = st.file_uploader(
         '사진 업로드',
         type=['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp'],
         accept_multiple_files=True,
     )
     if st.button('사진 저장') and files:
-        folder = db.UPLOAD_DIR / str(cid) / 'photos'
+        folder = case_folder / '출고사진'
         folder.mkdir(parents=True, exist_ok=True)
         existing_count = db.row(
             "SELECT COUNT(*) AS count FROM attachments WHERE case_id=? AND category='출고사진'",
