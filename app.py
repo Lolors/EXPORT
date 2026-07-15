@@ -1,11 +1,12 @@
 from __future__ import annotations
 from pathlib import Path
+import time
 import pandas as pd
 import streamlit as st
 import db
 from export_excel import build_packing_export
 
-st.set_page_config(page_title='NTP Export', page_icon='🌏', layout='wide')
+st.set_page_config(page_title='수출관리', page_icon='🌏', layout='wide')
 db.init_db()
 
 def dataframe(query, params=()): return pd.DataFrame([dict(r) for r in db.rows(query,params)])
@@ -36,7 +37,8 @@ def save_shipment_editor(case_id, edited):
     if vals: db.executemany('''INSERT INTO shipment_items(case_id,business_unit,location,product_name,lot_no,expiry_date,requested_qty,box_no,created_at,updated_at)
                               VALUES (?,?,?,?,?,?,?,?,?,?)''',vals)
 
-st.title('🌏 NTP Export')
+st.title('수출관리')
+st.caption('Export Management System')
 menu=st.sidebar.radio('메뉴',['오버뷰','수출 주문 입력','실출고 입력','박스 패킹','패킹 결과·배송·엑셀','출고 사진'],label_visibility='collapsed')
 
 if menu=='오버뷰':
@@ -98,10 +100,11 @@ elif menu=='박스 패킹':
     if not items: st.warning('먼저 실출고 목록을 입력하세요.'); st.stop()
     selected=[]
     for item in items:
-        c1,c2,c3,c4=st.columns([1,4,2,2])
-        if c1.checkbox('',key=f"sel_{item['id']}"): selected.append(item['id'])
-        c2.write(f"{item['product_name']} · {item['lot_no']} · {item['requested_qty']:g}")
-        c3.write(item['location']); c4.write(f"BOX {item['box_no']}" if item['box_no'] else '미패킹')
+        c1,c2,c3=st.columns([6,2,2])
+        label=f"{item['product_name']} · {item['lot_no']} · {item['requested_qty']:g}"
+        if c1.checkbox(label,key=f"sel_{item['id']}"): selected.append(item['id'])
+        c2.write(item['location'])
+        c3.write(f"BOX {item['box_no']}" if item['box_no'] else '미패킹')
     next_box=db.row('SELECT COALESCE(MAX(box_no),0)+1 AS n FROM boxes WHERE case_id=?',(cid,))['n']
     box_no=st.number_input('배정할 박스번호',min_value=1,value=int(next_box),step=1)
     if st.button('선택 제품 패킹'):
@@ -115,9 +118,18 @@ elif menu=='박스 패킹':
         with st.form(f"box_{b['id']}"):
             st.write(f"**BOX {b['box_no']}**")
             c1,c2,c3,c4=st.columns(4)
-            l=c1.number_input('가로(cm)',0.0,value=float(b['length_cm']),key=f"l{b['id']}"); w=c2.number_input('세로(cm)',0.0,value=float(b['width_cm']),key=f"w{b['id']}"); h=c3.number_input('높이(cm)',0.0,value=float(b['height_cm']),key=f"h{b['id']}"); kg=c4.number_input('무게(kg)',0.0,value=float(b['weight_kg']),key=f"kg{b['id']}")
-            if st.form_submit_button('박스 정보 저장'):
-                db.execute('UPDATE boxes SET length_cm=?,width_cm=?,height_cm=?,weight_kg=?,updated_at=? WHERE id=?',(l,w,h,kg,db.now_text(),b['id'])); db.add_history(cid,'박스 정보 수정',f"BOX {b['box_no']}"); rerun()
+            l=c1.number_input('가로(cm)',0.0,value=float(b['length_cm']),key=f"l{b['id']}")
+            w=c2.number_input('세로(cm)',0.0,value=float(b['width_cm']),key=f"w{b['id']}")
+            h=c3.number_input('높이(cm)',0.0,value=float(b['height_cm']),key=f"h{b['id']}")
+            kg=c4.number_input('무게(kg)',0.0,value=float(b['weight_kg']),key=f"kg{b['id']}")
+            saved=st.form_submit_button('박스 정보 저장')
+        if saved:
+            db.execute('UPDATE boxes SET length_cm=?,width_cm=?,height_cm=?,weight_kg=?,updated_at=? WHERE id=?',(l,w,h,kg,db.now_text(),b['id']))
+            db.add_history(cid,'박스 정보 수정',f"BOX {b['box_no']}")
+            message=st.empty()
+            message.success('저장되었습니다.')
+            time.sleep(3)
+            message.empty()
 
 elif menu=='패킹 결과·배송·엑셀':
     st.subheader('패킹 결과 및 국내배송')
@@ -125,7 +137,10 @@ elif menu=='패킹 결과·배송·엑셀':
     if not cid: st.stop()
     case=db.row('SELECT * FROM export_cases WHERE id=?',(cid,))
     st.info(f"국가: {case['country']}  |  바이어: {case['buyer'] or '-'}  |  운송방식: {case['transport_mode']}")
-    preview=dataframe('''SELECT s.box_no AS 박스번호,s.business_unit AS 사업장,s.location AS 로케이션,s.product_name AS 제품명,s.lot_no AS LOT,s.expiry_date AS 유통기한,s.requested_qty AS 수량,b.length_cm AS 가로,b.width_cm AS 세로,b.height_cm AS 높이,b.weight_kg AS 무게 FROM shipment_items s LEFT JOIN boxes b ON b.case_id=s.case_id AND b.box_no=s.box_no WHERE s.case_id=? AND s.box_no IS NOT NULL ORDER BY s.box_no,s.id''',(cid,))
+    preview=dataframe('''SELECT s.box_no AS 박스번호,s.business_unit AS 사업장,s.location AS 로케이션,s.product_name AS 제품명,s.lot_no AS LOT,s.expiry_date AS 유통기한,s.requested_qty AS 수량,b.weight_kg AS 무게,
+        printf('%g x %g x %g',b.length_cm,b.width_cm,b.height_cm) AS 박스사이즈
+        FROM shipment_items s LEFT JOIN boxes b ON b.case_id=s.case_id AND b.box_no=s.box_no
+        WHERE s.case_id=? AND s.box_no IS NOT NULL ORDER BY s.box_no,s.id''',(cid,))
     st.dataframe(preview,hide_index=True,use_container_width=True)
     with st.form('delivery'):
         method=st.radio('국내배송 방식',['로젠택배','퀵배송'],index=0 if case['domestic_method']!='퀵배송' else 1,horizontal=True)
