@@ -170,17 +170,19 @@ def sanitize_folder_part(value: str | None, fallback: str = '미입력') -> str:
 
 def case_folder_name(case: sqlite3.Row | dict[str, Any]) -> str:
     actual = parse_date(case['actual_ship_date'] if 'actual_ship_date' in case.keys() else '')
+    export_no = sanitize_folder_part(case['export_no'])
+    note = sanitize_folder_part(case['note'], '') if 'note' in case.keys() else ''
     if not actual:
-        return sanitize_folder_part(case['export_no'])
+        return f'{export_no}_{note}' if note else export_no
 
     mmdd = actual.strftime('%m%d')
     buyer = sanitize_folder_part(case['buyer'], '') if case['buyer'] else ''
     transport = sanitize_folder_part(case['transport_mode'], 'AIR')
-    note = sanitize_folder_part(case['note'], case['export_no'])
+    final_note = note or export_no
     parts = [mmdd]
     if buyer:
         parts.append(buyer)
-    parts.extend([transport, note])
+    parts.extend([transport, final_note])
     return '_'.join(parts)
 
 def case_folder_base(case: sqlite3.Row | dict[str, Any]) -> Path:
