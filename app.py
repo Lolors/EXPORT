@@ -1,249 +1,155 @@
 from __future__ import annotations
-
 from pathlib import Path
-
 import pandas as pd
 import streamlit as st
-
 import db
-from export_excel import build_packing_list
+from export_excel import build_packing_export
 
-st.set_page_config(page_title="NTP Export", page_icon="🌏", layout="wide")
+st.set_page_config(page_title='NTP Export', page_icon='🌏', layout='wide')
 db.init_db()
 
+def dataframe(query, params=()): return pd.DataFrame([dict(r) for r in db.rows(query,params)])
+def rerun(): st.rerun()
+def case_label(r): return f"{r['export_no']} | {r['country']} | {r['buyer'] or '바이어 미입력'} | {r['stage']}"
+def choose_active_case(key, country=None):
+    cases=db.active_cases(country)
+    if not cases: return None
+    options={case_label(r):int(r['id']) for r in cases}
+    return options[st.selectbox('진행 중 수출 건',list(options),key=key)]
 
-def rerun() -> None:
-    st.rerun()
+def replace_order_items(case_id, edited):
+    db.execute('DELETE FROM order_items WHERE case_id=?',(case_id,))
+    vals=[]
+    for _,r in edited.iterrows():
+        name=str(r.get('제품명','')).strip()
+        if name:
+            vals.append((case_id,name,float(r.get('수량',0) or 0),str(r.get('단위','EA') or 'EA'),db.now_text()))
+    if vals: db.executemany('INSERT INTO order_items(case_id,product_name,quantity,unit,created_at) VALUES (?,?,?,?,?)',vals)
 
+def save_shipment_editor(case_id, edited):
+    db.execute('DELETE FROM shipment_items WHERE case_id=?',(case_id,))
+    vals=[]
+    for _,r in edited.iterrows():
+        name=str(r.get('제품명','')).strip()
+        if name:
+            vals.append((case_id,str(r.get('사업장','')),str(r.get('로케이션','')),name,str(r.get('LOT','')),str(r.get('유통기한','')),float(r.get('요청수량',0) or 0),None,db.now_text(),db.now_text()))
+    if vals: db.executemany('''INSERT INTO shipment_items(case_id,business_unit,location,product_name,lot_no,expiry_date,requested_qty,box_no,created_at,updated_at)
+                              VALUES (?,?,?,?,?,?,?,?,?,?)''',vals)
 
-def df(query: str, params: tuple = ()) -> pd.DataFrame:
-    return pd.DataFrame([dict(r) for r in db.rows(query, params)])
+st.title('🌏 NTP Export')
+menu=st.sidebar.radio('메뉴',['오버뷰','수출 주문 입력','실출고 입력','박스 패킹','패킹 결과·배송·엑셀','출고 사진'],label_visibility='collapsed')
 
+if menu=='오버뷰':
+    st.subheader('진행 중 수출 오버뷰')
+    cases=db.active_cases()
+    if not cases: st.info('현재 진행 중인 수출 건이 없습니다.')
+    for c in cases:
+        orders=db.rows('SELECT product_name,quantity,unit FROM order_items WHERE case_id=? ORDER BY id',(c['id'],))
+        title=f"{c['export_no']} · {c['country']} · {c['stage']}"+(f" · {c['buyer']}" if c['buyer'] else '')
+        with st.expander(title):
+            if orders:
+                st.dataframe(pd.DataFrame([{'제품명':o['product_name'],'수량':o['quantity'],'단위':o['unit']} for o in orders]),hide_index=True,use_container_width=True)
+            else: st.caption('주문 제품이 아직 입력되지 않았습니다.')
+            cols=st.columns(4); cols[0].metric('국가',c['country']); cols[1].metric('운송',c['transport_mode']); cols[2].metric('예상 출고일',c['expected_ship_date'] or '-'); cols[3].metric('단계',c['stage'])
 
-def selected_case_id() -> int | None:
-    case_rows = db.case_summary()
-    if not case_rows:
-        return None
-    options = {f"{r['export_no']} | {r['buyer']} | {r['stage']}": r["id"] for r in case_rows}
-    label = st.sidebar.selectbox("수출 건 선택", list(options.keys()))
-    return int(options[label])
-
-
-def save_case(case_id: int | None, data: dict) -> int:
-    now = db.now_text()
-    if case_id:
-        old = db.row("SELECT * FROM export_cases WHERE id = ?", (case_id,))
-        db.execute(
-            """
-            UPDATE export_cases
-               SET export_no=?, buyer=?, country=?, manager=?, expected_ship_date=?, stage=?, status=?,
-                   invoice_no=?, incoterms=?, transport_mode=?, port_loading=?, final_destination=?, memo=?, updated_at=?
-             WHERE id=?
-            """,
-            (
-                data["export_no"], data["buyer"], data["country"], data["manager"], data["expected_ship_date"],
-                data["stage"], data["status"], data["invoice_no"], data["incoterms"], data["transport_mode"],
-                data["port_loading"], data["final_destination"], data["memo"], now, case_id,
-            ),
-        )
-        if old and old["stage"] != data["stage"]:
-            db.add_history(case_id, "진행 단계 변경", f"{old['stage']} → {data['stage']}")
-        db.add_history(case_id, "수출 건 수정", f"{data['export_no']} 정보를 수정했습니다.")
-        return case_id
-
-    new_id = db.execute(
-        """
-        INSERT INTO export_cases(export_no, buyer, country, manager, expected_ship_date, stage, status,
-                                 invoice_no, incoterms, transport_mode, port_loading, final_destination, memo,
-                                 created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            data["export_no"], data["buyer"], data["country"], data["manager"], data["expected_ship_date"],
-            data["stage"], data["status"], data["invoice_no"], data["incoterms"], data["transport_mode"],
-            data["port_loading"], data["final_destination"], data["memo"], now, now,
-        ),
-    )
-    db.create_default_documents(new_id)
-    db.add_history(new_id, "수출 건 등록", f"{data['export_no']} 수출 건을 등록했습니다.")
-    return new_id
-
-
-st.title("🌏 NTP Export")
-st.caption("수출 건, 제품, 박스 포장, 서류, 첨부파일, 변경 이력, Packing List 엑셀 내보내기를 관리합니다.")
-
-with st.sidebar:
-    st.header("메뉴")
-    menu = st.radio("이동", ["수출 건", "제품 관리", "포장 등록", "서류 체크리스트", "파일 첨부", "이력", "엑셀 내보내기"], label_visibility="collapsed")
-    case_id = selected_case_id()
-
-if menu == "수출 건":
-    st.subheader("수출 건 등록·수정")
-    summaries = db.case_summary()
-    if summaries:
-        st.dataframe(pd.DataFrame([dict(r) for r in summaries]), use_container_width=True, hide_index=True)
-    else:
-        st.info("아직 등록된 수출 건이 없습니다. 아래에서 첫 수출 건을 등록하세요.")
-
-    edit_case = db.row("SELECT * FROM export_cases WHERE id = ?", (case_id,)) if case_id else None
-    is_new = st.toggle("새 수출 건 등록", value=edit_case is None)
-    target = None if is_new else edit_case
-
-    with st.form("case_form"):
-        c1, c2, c3 = st.columns(3)
-        export_no = c1.text_input("수출관리번호", value=(db.next_export_no() if is_new else target["export_no"]))
-        buyer = c2.text_input("바이어", value=("" if is_new else target["buyer"]))
-        country = c3.text_input("국가", value=("" if is_new else target["country"]))
-        manager = c1.text_input("담당자", value=("" if is_new else target["manager"]))
-        expected_ship_date = c2.text_input("출고예정일", value=("" if is_new else target["expected_ship_date"]), placeholder="2026-07-30")
-        stage = c3.selectbox("진행 단계", db.STAGES, index=db.STAGES.index(target["stage"]) if target and target["stage"] in db.STAGES else 0)
-        status = c1.selectbox("상태", ["진행중", "보류", "완료", "취소"], index=0 if is_new else ["진행중", "보류", "완료", "취소"].index(target["status"]) if target["status"] in ["진행중", "보류", "완료", "취소"] else 0)
-        invoice_no = c2.text_input("Invoice No.", value=("" if is_new else target["invoice_no"]))
-        incoterms = c3.text_input("Incoterms", value=("" if is_new else target["incoterms"]), placeholder="CIP TOKYO")
-        transport_mode = c1.text_input("운송 방식", value=("" if is_new else target["transport_mode"]), placeholder="AIR / SEA")
-        port_loading = c2.text_input("선적지", value=("" if is_new else target["port_loading"]), placeholder="INCHEON, KOREA")
-        final_destination = c3.text_input("최종 도착지", value=("" if is_new else target["final_destination"]))
-        memo = st.text_area("메모", value=("" if is_new else target["memo"]))
-        submitted = st.form_submit_button("저장")
-
+elif menu=='수출 주문 입력':
+    st.subheader('수출 주문 등록')
+    with st.form('new_case'):
+        st.text_input('수출번호',value=db.next_export_no(),disabled=True)
+        c1,c2,c3=st.columns(3)
+        country=c1.text_input('국가 *'); buyer=c2.text_input('바이어 (선택)'); expected=c3.date_input('예상출고일')
+        transport=c1.selectbox('운송방식',db.TRANSPORT_MODES); stage=c2.selectbox('현재 진행 단계',db.STAGES[:-2]); submitted=st.form_submit_button('수출 건 생성')
     if submitted:
-        if not export_no.strip() or not buyer.strip():
-            st.error("수출관리번호와 바이어는 필수입니다.")
+        if not country.strip(): st.error('국가는 필수입니다.')
         else:
-            new_id = save_case(None if is_new else int(target["id"]), locals())
-            st.success(f"저장 완료: {export_no}")
-            rerun()
+            no=db.next_export_no(); now=db.now_text(); cid=db.execute('''INSERT INTO export_cases(export_no,buyer,country,expected_ship_date,transport_mode,stage,status,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?, ?,?)''',(no,buyer,country,str(expected),transport,stage,'진행중',now,now)); db.add_history(cid,'수출 건 생성',no); st.session_state['order_case']=cid; st.success(f'{no} 생성 완료')
+    cid=st.session_state.get('order_case')
+    active=db.active_cases(); opts={case_label(r):int(r['id']) for r in active}
+    if opts:
+        cid=opts[st.selectbox('주문 목록을 입력할 수출 건',list(opts),index=list(opts.values()).index(cid) if cid in opts.values() else 0)]
+        old=dataframe('SELECT product_name AS 제품명, quantity AS 수량, unit AS 단위 FROM order_items WHERE case_id=?',(cid,))
+        if old.empty: old=pd.DataFrame([{'제품명':'','수량':0,'단위':'EA'}])
+        edited=st.data_editor(old,num_rows='dynamic',use_container_width=True,key=f'orders_{cid}')
+        if st.button('주문 목록 저장'):
+            replace_order_items(cid,edited); db.add_history(cid,'주문 목록 저장',f'{len(edited)}행'); st.success('저장했습니다.'); rerun()
 
-elif menu == "제품 관리":
-    st.subheader("제품 등록")
-    products = df("SELECT * FROM products ORDER BY product_name")
-    st.dataframe(products, use_container_width=True, hide_index=True)
-    with st.form("product_form", clear_on_submit=True):
-        c1, c2, c3 = st.columns(3)
-        product_name = c1.text_input("제품명")
-        spec = c2.text_input("규격")
-        unit = c3.text_input("단위", value="EA")
-        hs_code = c1.text_input("HS Code")
-        note = st.text_area("비고")
-        submitted = st.form_submit_button("제품 추가")
-    if submitted:
-        if not product_name.strip():
-            st.error("제품명을 입력하세요.")
+elif menu=='실출고 입력':
+    st.subheader('실제 출고 제품 입력')
+    countries=[r['country'] for r in db.rows("SELECT DISTINCT country FROM export_cases WHERE status='진행중' AND stage NOT IN ('완료','취소') ORDER BY country")]
+    if not countries: st.info('진행 중 수출 건이 없습니다.'); st.stop()
+    country=st.selectbox('국가',countries); cid=choose_active_case('ship_case',country)
+    if not cid: st.stop()
+    st.markdown('#### 주문 목록')
+    st.dataframe(dataframe('SELECT product_name AS 제품명, quantity AS 수량, unit AS 단위 FROM order_items WHERE case_id=?',(cid,)),hide_index=True,use_container_width=True)
+    st.markdown('#### 실제 출고 목록')
+    st.caption('WMS에서 사업장, 로케이션, 제품명, LOT, 유통기한, 요청수량 6개 열을 복사해 첫 셀에 붙여넣으세요. 행 추가도 가능합니다.')
+    old=dataframe('''SELECT business_unit AS 사업장, location AS 로케이션, product_name AS 제품명, lot_no AS LOT, expiry_date AS 유통기한, requested_qty AS 요청수량 FROM shipment_items WHERE case_id=? ORDER BY id''',(cid,))
+    if old.empty: old=pd.DataFrame([{'사업장':'','로케이션':'','제품명':'','LOT':'','유통기한':'','요청수량':0}])
+    edited=st.data_editor(old,num_rows='dynamic',use_container_width=True,key=f'ship_{cid}')
+    if st.button('실출고 목록 저장'):
+        save_shipment_editor(cid,edited); db.execute("UPDATE export_cases SET stage='실출고 입력',updated_at=? WHERE id=?",(db.now_text(),cid)); db.add_history(cid,'실출고 목록 저장',f'{len(edited)}행'); st.success('저장했습니다.'); rerun()
+
+elif menu=='박스 패킹':
+    st.subheader('박스 패킹')
+    cid=choose_active_case('pack_case')
+    if not cid: st.info('진행 중 수출 건이 없습니다.'); st.stop()
+    items=db.rows('SELECT * FROM shipment_items WHERE case_id=? ORDER BY id',(cid,))
+    if not items: st.warning('먼저 실출고 목록을 입력하세요.'); st.stop()
+    selected=[]
+    for item in items:
+        c1,c2,c3,c4=st.columns([1,4,2,2])
+        if c1.checkbox('',key=f"sel_{item['id']}"): selected.append(item['id'])
+        c2.write(f"{item['product_name']} · {item['lot_no']} · {item['requested_qty']:g}")
+        c3.write(item['location']); c4.write(f"BOX {item['box_no']}" if item['box_no'] else '미패킹')
+    next_box=db.row('SELECT COALESCE(MAX(box_no),0)+1 AS n FROM boxes WHERE case_id=?',(cid,))['n']
+    box_no=st.number_input('배정할 박스번호',min_value=1,value=int(next_box),step=1)
+    if st.button('선택 제품 패킹'):
+        if not selected: st.error('제품을 선택하세요.')
         else:
-            now = db.now_text()
-            db.execute("INSERT INTO products(product_name, spec, unit, hs_code, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (product_name, spec, unit, hs_code, note, now, now))
-            db.add_history(case_id, "제품 등록", product_name)
-            st.success("제품을 추가했습니다.")
-            rerun()
+            for iid in selected: db.execute('UPDATE shipment_items SET box_no=?,updated_at=? WHERE id=?',(box_no,db.now_text(),iid))
+            db.execute('INSERT OR IGNORE INTO boxes(case_id,box_no,updated_at) VALUES (?,?,?)',(cid,box_no,db.now_text())); db.add_history(cid,'박스 패킹',f'{len(selected)}개 행 → BOX {box_no}'); rerun()
+    st.markdown('#### 박스 정보')
+    boxes=db.rows('SELECT * FROM boxes WHERE case_id=? ORDER BY box_no',(cid,))
+    for b in boxes:
+        with st.form(f"box_{b['id']}"):
+            st.write(f"**BOX {b['box_no']}**")
+            c1,c2,c3,c4=st.columns(4)
+            l=c1.number_input('가로(cm)',0.0,value=float(b['length_cm']),key=f"l{b['id']}"); w=c2.number_input('세로(cm)',0.0,value=float(b['width_cm']),key=f"w{b['id']}"); h=c3.number_input('높이(cm)',0.0,value=float(b['height_cm']),key=f"h{b['id']}"); kg=c4.number_input('무게(kg)',0.0,value=float(b['weight_kg']),key=f"kg{b['id']}")
+            if st.form_submit_button('박스 정보 저장'):
+                db.execute('UPDATE boxes SET length_cm=?,width_cm=?,height_cm=?,weight_kg=?,updated_at=? WHERE id=?',(l,w,h,kg,db.now_text(),b['id'])); db.add_history(cid,'박스 정보 수정',f"BOX {b['box_no']}"); rerun()
 
-elif menu == "포장 등록":
-    st.subheader("박스별 포장 등록")
-    if not case_id:
-        st.warning("먼저 수출 건을 등록하세요.")
-        st.stop()
-    items = df("SELECT * FROM packing_items WHERE case_id = ? ORDER BY box_no, id", (case_id,))
-    st.dataframe(items, use_container_width=True, hide_index=True)
-    products = db.rows("SELECT * FROM products ORDER BY product_name")
-    product_options = {"직접 입력": None} | {f"{p['product_name']} / {p['spec']}": p for p in products}
-    with st.form("packing_form", clear_on_submit=True):
-        c1, c2, c3, c4 = st.columns(4)
-        box_no = c1.number_input("BOX No.", min_value=1, step=1)
-        marks = c2.text_input("Marks", value="NTP")
-        selected = c3.selectbox("제품 선택", list(product_options.keys()))
-        selected_product = product_options[selected]
-        product_name = st.text_input("제품명", value="" if selected_product is None else selected_product["product_name"])
-        lot_no = c1.text_input("LOT(내부관리용)")
-        expiry_date = c2.text_input("유통기한(내부관리용)", placeholder="2028-07-01")
-        quantity = c3.number_input("수량", min_value=0.0, step=1.0)
-        unit = c4.text_input("단위", value="EA" if selected_product is None else selected_product["unit"])
-        net_weight = c1.number_input("순중량 kg", min_value=0.0, step=0.1)
-        gross_weight = c2.number_input("총중량 kg", min_value=0.0, step=0.1)
-        length_cm = c3.number_input("가로 cm", min_value=0.0, step=1.0)
-        width_cm = c4.number_input("세로 cm", min_value=0.0, step=1.0)
-        height_cm = c1.number_input("높이 cm", min_value=0.0, step=1.0)
-        note = st.text_area("비고")
-        submitted = st.form_submit_button("포장 행 추가")
-    if submitted:
-        if not product_name.strip():
-            st.error("제품명을 입력하세요.")
+elif menu=='패킹 결과·배송·엑셀':
+    st.subheader('패킹 결과 및 국내배송')
+    cid=choose_active_case('result_case')
+    if not cid: st.stop()
+    case=db.row('SELECT * FROM export_cases WHERE id=?',(cid,))
+    st.info(f"국가: {case['country']}  |  바이어: {case['buyer'] or '-'}  |  운송방식: {case['transport_mode']}")
+    preview=dataframe('''SELECT s.box_no AS 박스번호,s.business_unit AS 사업장,s.location AS 로케이션,s.product_name AS 제품명,s.lot_no AS LOT,s.expiry_date AS 유통기한,s.requested_qty AS 수량,b.length_cm AS 가로,b.width_cm AS 세로,b.height_cm AS 높이,b.weight_kg AS 무게 FROM shipment_items s LEFT JOIN boxes b ON b.case_id=s.case_id AND b.box_no=s.box_no WHERE s.case_id=? AND s.box_no IS NOT NULL ORDER BY s.box_no,s.id''',(cid,))
+    st.dataframe(preview,hide_index=True,use_container_width=True)
+    with st.form('delivery'):
+        method=st.radio('국내배송 방식',['로젠택배','퀵배송'],index=0 if case['domestic_method']!='퀵배송' else 1,horizontal=True)
+        tracking=''; driver=''; phone=''
+        if method=='로젠택배': tracking=st.text_input('송장번호',value=case['tracking_no'])
         else:
-            now = db.now_text()
-            db.execute(
-                """
-                INSERT INTO packing_items(case_id, box_no, marks, product_id, product_name, lot_no, expiry_date,
-                                          quantity, unit, net_weight, gross_weight, length_cm, width_cm, height_cm,
-                                          note, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (case_id, box_no, marks, selected_product["id"] if selected_product else None, product_name, lot_no, expiry_date, quantity, unit, net_weight, gross_weight, length_cm, width_cm, height_cm, note, now, now),
-            )
-            db.add_history(case_id, "포장 등록", f"BOX {box_no} / {product_name} / {quantity:g}{unit}")
-            st.success("포장 행을 추가했습니다.")
-            rerun()
+            c1,c2=st.columns(2); driver=c1.text_input('기사 이름',value=case['driver_name']); phone=c2.text_input('기사 연락처',value=case['driver_phone'])
+        if st.form_submit_button('배송정보 저장'):
+            db.execute('UPDATE export_cases SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,updated_at=? WHERE id=?',(method,tracking,driver,phone,db.now_text(),cid)); db.add_history(cid,'국내배송 정보 저장',method); rerun()
+    st.download_button('전체 화면 엑셀로 내보내기',build_packing_export(cid),file_name=f"{case['export_no']}_packing.xlsx",mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
-elif menu == "서류 체크리스트":
-    st.subheader("서류 체크리스트")
-    if not case_id:
-        st.warning("먼저 수출 건을 등록하세요.")
-        st.stop()
-    docs = db.rows("SELECT * FROM documents WHERE case_id = ? ORDER BY id", (case_id,))
-    for doc in docs:
-        c1, c2 = st.columns([1, 3])
-        done = c1.checkbox(doc["doc_name"], value=bool(doc["is_done"]), key=f"doc_{doc['id']}")
-        note = c2.text_input("메모", value=doc["note"], key=f"note_{doc['id']}", label_visibility="collapsed")
-        if done != bool(doc["is_done"]) or note != doc["note"]:
-            db.execute("UPDATE documents SET is_done=?, note=?, updated_at=? WHERE id=?", (1 if done else 0, note, db.now_text(), doc["id"]))
-            db.add_history(case_id, "서류 체크 변경", f"{doc['doc_name']}: {'완료' if done else '미완료'}")
-            rerun()
-    with st.form("add_doc", clear_on_submit=True):
-        new_doc = st.text_input("추가 서류명")
-        submitted = st.form_submit_button("서류 추가")
-    if submitted and new_doc.strip():
-        db.execute("INSERT OR IGNORE INTO documents(case_id, doc_name, updated_at) VALUES (?, ?, ?)", (case_id, new_doc, db.now_text()))
-        db.add_history(case_id, "서류 추가", new_doc)
-        rerun()
-
-elif menu == "파일 첨부":
-    st.subheader("파일 첨부")
-    if not case_id:
-        st.warning("먼저 수출 건을 등록하세요.")
-        st.stop()
-    uploaded = st.file_uploader("관련 파일 업로드", accept_multiple_files=True)
-    category = st.text_input("분류", placeholder="PO, COA, Invoice, 라벨 시안 등")
-    if st.button("첨부 저장") and uploaded:
-        case_dir = db.UPLOAD_DIR / str(case_id)
-        case_dir.mkdir(parents=True, exist_ok=True)
-        for file in uploaded:
-            stored = case_dir / file.name
-            stored.write_bytes(file.getbuffer())
-            db.execute("INSERT INTO attachments(case_id, file_name, stored_path, category, uploaded_at) VALUES (?, ?, ?, ?, ?)", (case_id, file.name, str(stored), category, db.now_text()))
-            db.add_history(case_id, "파일 첨부", file.name)
-        st.success("파일을 저장했습니다.")
-        rerun()
-    attachments = df("SELECT id, file_name, category, stored_path, uploaded_at FROM attachments WHERE case_id = ? ORDER BY uploaded_at DESC", (case_id,))
-    st.dataframe(attachments, use_container_width=True, hide_index=True)
-
-elif menu == "이력":
-    st.subheader("변경 이력")
-    if not case_id:
-        st.warning("먼저 수출 건을 등록하세요.")
-        st.stop()
-    history = df("SELECT created_at, action, detail FROM history WHERE case_id = ? ORDER BY created_at DESC", (case_id,))
-    st.dataframe(history, use_container_width=True, hide_index=True)
-
-elif menu == "엑셀 내보내기":
-    st.subheader("Packing List 엑셀 내보내기")
-    if not case_id:
-        st.warning("먼저 수출 건을 등록하세요.")
-        st.stop()
-    case = db.row("SELECT * FROM export_cases WHERE id = ?", (case_id,))
-    include_lot = st.checkbox("Packing List에 LOT 표시", value=False)
-    include_expiry = st.checkbox("Packing List에 유통기한 표시", value=False)
-    st.caption("LOT/유통기한은 내부 데이터에는 저장하지만, 회사 양식에 맞게 출력에서는 기본 숨김으로 처리했습니다.")
-    data = build_packing_list(case_id, include_lot=include_lot, include_expiry=include_expiry)
-    st.download_button(
-        "Packing List 다운로드",
-        data=data,
-        file_name=f"{case['export_no']}_packing_list.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+elif menu=='출고 사진':
+    st.subheader('출고 증빙 사진')
+    cid=choose_active_case('photo_case')
+    if not cid: st.stop()
+    files=st.file_uploader('사진 업로드',type=['jpg','jpeg','png','heic','webp'],accept_multiple_files=True)
+    if st.button('사진 저장') and files:
+        folder=db.UPLOAD_DIR/str(cid)/'photos'; folder.mkdir(parents=True,exist_ok=True)
+        for f in files:
+            path=folder/f.name; path.write_bytes(f.getbuffer()); db.execute('INSERT INTO attachments(case_id,file_name,stored_path,category,uploaded_at) VALUES (?,?,?,?,?)',(cid,f.name,str(path),'출고사진',db.now_text()))
+        db.add_history(cid,'출고 사진 업로드',f'{len(files)}장'); rerun()
+    photos=db.rows("SELECT * FROM attachments WHERE case_id=? AND category='출고사진' ORDER BY uploaded_at DESC",(cid,))
+    if photos:
+        cols=st.columns(4)
+        for i,p in enumerate(photos):
+            path=Path(p['stored_path'])
+            if path.exists(): cols[i%4].image(str(path),caption=p['file_name'],use_container_width=True)
