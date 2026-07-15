@@ -91,7 +91,6 @@ def save_shipment_editor(case_id, edited):
 
 
 def optimize_uploaded_photo(uploaded_file, output_path: Path) -> None:
-    # EXIF 방향을 보정하고 긴 변을 최대 800px로 축소해 저장합니다.
     with Image.open(BytesIO(uploaded_file.getvalue())) as source:
         image = ImageOps.exif_transpose(source)
         image.thumbnail((MAX_PHOTO_SIZE, MAX_PHOTO_SIZE), Image.Resampling.LANCZOS)
@@ -108,13 +107,7 @@ def optimize_uploaded_photo(uploaded_file, output_path: Path) -> None:
         elif image.mode != 'RGB':
             image = image.convert('RGB')
 
-        image.save(
-            output_path,
-            format='JPEG',
-            quality=JPEG_QUALITY,
-            optimize=True,
-            progressive=True,
-        )
+        image.save(output_path, format='JPEG', quality=JPEG_QUALITY, optimize=True, progressive=True)
 
 
 def render_packing_preview(preview: pd.DataFrame) -> None:
@@ -122,11 +115,11 @@ def render_packing_preview(preview: pd.DataFrame) -> None:
         st.info('패킹된 제품이 없습니다.')
         return
 
-    columns = ['박스번호', '사업장', '로케이션', '제품명', 'LOT', '유통기한', '수량', '무게', '박스사이즈']
+    columns = ['박스번호', '사업장', '제품명', 'LOT', '유통기한', '수량', '무게', '박스사이즈']
     styles = '''
     <style>
     .packing-table-wrap {overflow-x:auto; border:1px solid #d9dee7; border-radius:10px;}
-    table.packing-table {border-collapse:collapse; width:100%; min-width:980px; font-size:15px;}
+    table.packing-table {border-collapse:collapse; width:100%; min-width:880px; font-size:15px;}
     .packing-table th {background:#f5f7fa; color:#5f6878; font-weight:500; text-align:left; padding:14px 12px; border-bottom:1px solid #d9dee7; white-space:nowrap;}
     .packing-table td {padding:14px 12px; border-bottom:1px solid #e5e9f0; border-right:1px solid #e5e9f0; vertical-align:middle; white-space:nowrap;}
     .packing-table td:last-child, .packing-table th:last-child {border-right:none;}
@@ -145,7 +138,7 @@ def render_packing_preview(preview: pd.DataFrame) -> None:
             parts.append('<tr>')
             if row_index == 0:
                 parts.append(f"<td class='merged' rowspan='{rowspan}'>{html.escape(str(row['박스번호']))}</td>")
-            for col in ['사업장', '로케이션', '제품명', 'LOT', '유통기한']:
+            for col in ['사업장', '제품명', 'LOT', '유통기한']:
                 value = '' if pd.isna(row[col]) else str(row[col])
                 parts.append(f'<td>{html.escape(value)}</td>')
             qty = '' if pd.isna(row['수량']) else f"{float(row['수량']):g}"
@@ -181,7 +174,6 @@ def completed_case_search(start_date, end_date, country, buyer_keyword, product_
           AND date(COALESCE(NULLIF(c.actual_ship_date,''), NULLIF(c.expected_ship_date,''), substr(c.created_at,1,10))) BETWEEN date(?) AND date(?)
     '''
     params = [str(start_date), str(end_date)]
-
     if country != '전체':
         query += ' AND c.country = ?'
         params.append(country)
@@ -194,7 +186,6 @@ def completed_case_search(start_date, end_date, country, buyer_keyword, product_
     if note_keyword.strip():
         query += ' AND c.note LIKE ?'
         params.append(f"%{note_keyword.strip()}%")
-
     query += " ORDER BY COALESCE(NULLIF(c.actual_ship_date,''), NULLIF(c.expected_ship_date,''), c.created_at) DESC, c.export_no DESC"
     return dataframe(query, tuple(params))
 
@@ -241,36 +232,22 @@ if menu == '오버뷰':
         "SELECT DISTINCT country FROM export_cases WHERE (status IN ('완료','취소') OR stage IN ('완료','취소')) AND country<>'' ORDER BY country"
     )
     countries = ['전체'] + [r['country'] for r in country_rows]
-
     c1, c2, c3 = st.columns([1.2, 1.2, 1])
     search_start = c1.date_input('시작일', value=date(date.today().year, 1, 1), key='completed_start')
     search_end = c2.date_input('종료일', value=date.today(), key='completed_end')
     search_country = c3.selectbox('국가', countries, key='completed_country')
-
     c4, c5, c6 = st.columns(3)
     buyer_keyword = c4.text_input('바이어 검색', key='completed_buyer')
     product_keyword = c5.text_input('제품명 검색', key='completed_product')
     note_keyword = c6.text_input('비고 검색', key='completed_note')
-
     if search_start > search_end:
         st.error('시작일은 종료일보다 늦을 수 없습니다.')
     else:
-        result = completed_case_search(
-            search_start,
-            search_end,
-            search_country,
-            buyer_keyword,
-            product_keyword,
-            note_keyword,
-        )
+        result = completed_case_search(search_start, search_end, search_country, buyer_keyword, product_keyword, note_keyword)
         if result.empty:
             st.info('검색 결과가 없습니다.')
         else:
-            st.dataframe(
-                result.drop(columns=['id']),
-                hide_index=True,
-                use_container_width=True,
-            )
+            st.dataframe(result.drop(columns=['id']), hide_index=True, use_container_width=True)
 
 elif menu == '수출 주문 입력':
     st.subheader('수출 주문 등록')
@@ -351,11 +328,7 @@ elif menu == '실출고 입력':
     if not cid:
         st.stop()
     st.markdown('#### 주문 목록')
-    st.dataframe(
-        dataframe('SELECT product_name AS 제품명, quantity AS 수량, unit AS 단위 FROM order_items WHERE case_id=?', (cid,)),
-        hide_index=True,
-        use_container_width=True,
-    )
+    st.dataframe(dataframe('SELECT product_name AS 제품명, quantity AS 수량, unit AS 단위 FROM order_items WHERE case_id=?', (cid,)), hide_index=True, use_container_width=True)
     st.markdown('#### 실제 출고 목록')
     st.caption('WMS에서 사업장, 로케이션, 제품명, LOT, 유통기한, 요청수량 6개 열을 복사해 첫 셀에 붙여넣으세요. 행 추가도 가능합니다.')
     old = dataframe(
@@ -440,7 +413,7 @@ elif menu == '패킹 결과·배송·엑셀':
     st.info(' | '.join(summary_parts))
     st.caption('완료 후 폴더명: 바이어가 있으면 MMDD_바이어_운송방식_비고, 바이어가 없으면 MMDD_운송방식_비고')
     preview = dataframe(
-        '''SELECT s.box_no AS 박스번호,s.business_unit AS 사업장,s.location AS 로케이션,s.product_name AS 제품명,
+        '''SELECT s.box_no AS 박스번호,s.business_unit AS 사업장,s.product_name AS 제품명,
                   s.lot_no AS LOT,s.expiry_date AS 유통기한,s.requested_qty AS 수량,b.weight_kg AS 무게,
                   printf('%g x %g x %g',b.length_cm,b.width_cm,b.height_cm) AS 박스사이즈
            FROM shipment_items s LEFT JOIN boxes b ON b.case_id=s.case_id AND b.box_no=s.box_no
@@ -451,24 +424,25 @@ elif menu == '패킹 결과·배송·엑셀':
         preview['무게'] = preview['무게'].apply(lambda value: f'{float(value):g} kg' if pd.notna(value) else '')
         preview['박스사이즈'] = preview['박스사이즈'].apply(lambda value: f'{value} cm' if value else '')
     render_packing_preview(preview)
-    with st.form(f'delivery_{cid}'):
-        actual_ship_date = st.date_input('실제출고일', value=date_value(case['actual_ship_date']), key=f'actual_ship_date_{cid}')
-        method = st.radio(
-            '국내배송',
-            ['로젠택배', '퀵배송'],
-            index=0 if case['domestic_method'] != '퀵배송' else 1,
-            horizontal=True,
-            key=f'delivery_method_{cid}',
-        )
+
+    method = st.radio(
+        '국내배송',
+        ['로젠택배', '퀵배송'],
+        index=0 if case['domestic_method'] != '퀵배송' else 1,
+        horizontal=True,
+        key=f'delivery_method_{cid}',
+    )
+    with st.form(f'delivery_{cid}_{method}'):
+        actual_ship_date = st.date_input('실제출고일', value=date_value(case['actual_ship_date']), key=f'actual_ship_date_{cid}_{method}')
         tracking = ''
         driver = ''
         phone = ''
         if method == '로젠택배':
-            tracking = st.text_input('송장번호', value=case['tracking_no'], key=f'tracking_{cid}')
+            tracking = st.text_input('송장번호', value=case['tracking_no'], key=f'tracking_{cid}_{method}')
         else:
             c1, c2 = st.columns(2)
-            driver = c1.text_input('배송기사', value=case['driver_name'], key=f'driver_{cid}')
-            phone = c2.text_input('연락처', value=case['driver_phone'], key=f'phone_{cid}')
+            driver = c1.text_input('배송기사 이름', value=case['driver_name'], key=f'driver_{cid}_{method}')
+            phone = c2.text_input('연락처', value=case['driver_phone'], key=f'phone_{cid}_{method}')
         if st.form_submit_button('배송정보 저장'):
             if method == '로젠택배':
                 driver = ''
@@ -505,11 +479,7 @@ elif menu == '출고 사진':
     upload_types = ['jpg', 'jpeg', 'png', 'webp']
     if HEIC_ENABLED:
         upload_types.extend(['heic', 'heif'])
-    files = st.file_uploader(
-        '사진 업로드',
-        type=upload_types,
-        accept_multiple_files=True,
-    )
+    files = st.file_uploader('사진 업로드', type=upload_types, accept_multiple_files=True)
     if st.button('사진 저장') and files:
         folder = case_folder / '출고사진'
         folder.mkdir(parents=True, exist_ok=True)
@@ -519,7 +489,6 @@ elif menu == '출고 사진':
         )['count']
         saved_count = 0
         failures = []
-
         for sequence, uploaded in enumerate(files, start=int(existing_count) + 1):
             is_png = Path(uploaded.name).suffix.lower() == '.png'
             extension = '.png' if is_png else '.jpg'
@@ -534,7 +503,6 @@ elif menu == '출고 사진':
                 saved_count += 1
             except Exception as exc:
                 failures.append(f'{uploaded.name}: {exc}')
-
         if saved_count:
             db.add_history(cid, '출고 사진 업로드', f'{saved_count}장 최적화 저장')
             st.success(f'{saved_count}장의 사진을 최적화하여 저장했습니다.')
