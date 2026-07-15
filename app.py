@@ -60,12 +60,12 @@ elif menu=='수출 주문 입력':
         st.text_input('수출번호',value=db.next_export_no(),disabled=True)
         c1,c2,c3=st.columns(3)
         country=c1.text_input('국가 *'); buyer=c2.text_input('바이어 (선택)'); expected=c3.date_input('예상출고일')
-        transport=c1.selectbox('운송방식',db.TRANSPORT_MODES); stage=c2.selectbox('현재 진행 단계',db.STAGES[:-2]); submitted=st.form_submit_button('수출 건 생성')
+        transport=c1.selectbox('운송방식',db.TRANSPORT_MODES); stage=c2.selectbox('현재 진행 단계',db.STAGES[:5]); submitted=st.form_submit_button('수출 건 생성')
     if submitted:
         if not country.strip(): st.error('국가는 필수입니다.')
         else:
             no=db.next_export_no(); now=db.now_text(); cid=db.execute('''INSERT INTO export_cases(export_no,buyer,country,expected_ship_date,transport_mode,stage,status,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?, ?,?)''',(no,buyer,country,str(expected),transport,stage,'진행중',now,now)); db.add_history(cid,'수출 건 생성',no); st.session_state['order_case']=cid; st.success(f'{no} 생성 완료')
+                VALUES (?,?,?,?,?,?,?,?,?)''',(no,buyer,country,str(expected),transport,stage,'진행중',now,now)); db.add_history(cid,'수출 건 생성',no); st.session_state['order_case']=cid; st.success(f'{no} 생성 완료')
     cid=st.session_state.get('order_case')
     active=db.active_cases(); opts={case_label(r):int(r['id']) for r in active}
     if opts:
@@ -126,10 +126,7 @@ elif menu=='박스 패킹':
         if saved:
             db.execute('UPDATE boxes SET length_cm=?,width_cm=?,height_cm=?,weight_kg=?,updated_at=? WHERE id=?',(l,w,h,kg,db.now_text(),b['id']))
             db.add_history(cid,'박스 정보 수정',f"BOX {b['box_no']}")
-            message=st.empty()
-            message.success('저장되었습니다.')
-            time.sleep(3)
-            message.empty()
+            message=st.empty(); message.success('저장되었습니다.'); time.sleep(3); message.empty()
 
 elif menu=='패킹 결과·배송·엑셀':
     st.subheader('패킹 결과 및 국내배송')
@@ -141,15 +138,25 @@ elif menu=='패킹 결과·배송·엑셀':
         printf('%g x %g x %g',b.length_cm,b.width_cm,b.height_cm) AS 박스사이즈
         FROM shipment_items s LEFT JOIN boxes b ON b.case_id=s.case_id AND b.box_no=s.box_no
         WHERE s.case_id=? AND s.box_no IS NOT NULL ORDER BY s.box_no,s.id''',(cid,))
+    if not preview.empty:
+        preview['무게']=preview['무게'].apply(lambda value: f'{float(value):g} kg' if pd.notna(value) else '')
+        preview['박스사이즈']=preview['박스사이즈'].apply(lambda value: f'{value} cm' if value else '')
     st.dataframe(preview,hide_index=True,use_container_width=True)
     with st.form('delivery'):
-        method=st.radio('국내배송 방식',['로젠택배','퀵배송'],index=0 if case['domestic_method']!='퀵배송' else 1,horizontal=True)
+        method=st.radio('국내배송',['로젠택배','퀵배송'],index=0 if case['domestic_method']!='퀵배송' else 1,horizontal=True)
         tracking=''; driver=''; phone=''
-        if method=='로젠택배': tracking=st.text_input('송장번호',value=case['tracking_no'])
+        if method=='로젠택배':
+            tracking=st.text_input('송장번호',value=case['tracking_no'])
         else:
-            c1,c2=st.columns(2); driver=c1.text_input('기사 이름',value=case['driver_name']); phone=c2.text_input('기사 연락처',value=case['driver_phone'])
+            c1,c2=st.columns(2)
+            driver=c1.text_input('배송기사 이름',value=case['driver_name'])
+            phone=c2.text_input('연락처',value=case['driver_phone'])
         if st.form_submit_button('배송정보 저장'):
-            db.execute('UPDATE export_cases SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,updated_at=? WHERE id=?',(method,tracking,driver,phone,db.now_text(),cid)); db.add_history(cid,'국내배송 정보 저장',method); rerun()
+            db.execute("UPDATE export_cases SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,stage='국내배송',status='완료',updated_at=? WHERE id=?",(method,tracking,driver,phone,db.now_text(),cid))
+            db.add_history(cid,'국내배송 완료',method)
+            st.success('국내배송 정보가 저장되어 수출 건이 완료 처리되었습니다.')
+            time.sleep(1)
+            rerun()
     st.download_button('전체 화면 엑셀로 내보내기',build_packing_export(cid),file_name=f"{case['export_no']}_packing.xlsx",mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 elif menu=='출고 사진':
