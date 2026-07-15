@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import html
 import time
 import pandas as pd
 import streamlit as st
@@ -36,6 +37,49 @@ def save_shipment_editor(case_id, edited):
             vals.append((case_id,str(r.get('사업장','')),str(r.get('로케이션','')),name,str(r.get('LOT','')),str(r.get('유통기한','')),float(r.get('요청수량',0) or 0),None,db.now_text(),db.now_text()))
     if vals: db.executemany('''INSERT INTO shipment_items(case_id,business_unit,location,product_name,lot_no,expiry_date,requested_qty,box_no,created_at,updated_at)
                               VALUES (?,?,?,?,?,?,?,?,?,?)''',vals)
+
+def render_packing_preview(preview: pd.DataFrame) -> None:
+    if preview.empty:
+        st.info('패킹된 제품이 없습니다.')
+        return
+
+    columns=['박스번호','사업장','로케이션','제품명','LOT','유통기한','수량','무게','박스사이즈']
+    styles='''
+    <style>
+    .packing-table-wrap {overflow-x:auto; border:1px solid #d9dee7; border-radius:10px;}
+    table.packing-table {border-collapse:collapse; width:100%; min-width:980px; font-size:15px;}
+    .packing-table th {background:#f5f7fa; color:#5f6878; font-weight:500; text-align:left; padding:14px 12px; border-bottom:1px solid #d9dee7; white-space:nowrap;}
+    .packing-table td {padding:14px 12px; border-bottom:1px solid #e5e9f0; border-right:1px solid #e5e9f0; vertical-align:middle; white-space:nowrap;}
+    .packing-table td:last-child, .packing-table th:last-child {border-right:none;}
+    .packing-table tr:last-child td {border-bottom:none;}
+    .packing-table .merged {text-align:center; font-weight:500; background:#fbfcfe;}
+    .packing-table .qty {text-align:right;}
+    </style>
+    '''
+    parts=[styles,"<div class='packing-table-wrap'><table class='packing-table'><thead><tr>"]
+    parts.extend(f'<th>{html.escape(col)}</th>' for col in columns)
+    parts.append('</tr></thead><tbody>')
+
+    for _,group in preview.groupby('박스번호',sort=False,dropna=False):
+        rowspan=len(group)
+        for row_index,(_,row) in enumerate(group.iterrows()):
+            parts.append('<tr>')
+            if row_index==0:
+                parts.append(f"<td class='merged' rowspan='{rowspan}'>{html.escape(str(row['박스번호']))}</td>")
+            for col in ['사업장','로케이션','제품명','LOT','유통기한']:
+                value='' if pd.isna(row[col]) else str(row[col])
+                parts.append(f'<td>{html.escape(value)}</td>')
+            qty='' if pd.isna(row['수량']) else f"{float(row['수량']):g}"
+            parts.append(f"<td class='qty'>{html.escape(qty)}</td>")
+            if row_index==0:
+                weight='' if pd.isna(row['무게']) else str(row['무게'])
+                size='' if pd.isna(row['박스사이즈']) else str(row['박스사이즈'])
+                parts.append(f"<td class='merged' rowspan='{rowspan}'>{html.escape(weight)}</td>")
+                parts.append(f"<td class='merged' rowspan='{rowspan}'>{html.escape(size)}</td>")
+            parts.append('</tr>')
+
+    parts.append('</tbody></table></div>')
+    st.markdown(''.join(parts),unsafe_allow_html=True)
 
 st.title('수출관리')
 st.caption('Export Management System')
@@ -141,7 +185,7 @@ elif menu=='패킹 결과·배송·엑셀':
     if not preview.empty:
         preview['무게']=preview['무게'].apply(lambda value: f'{float(value):g} kg' if pd.notna(value) else '')
         preview['박스사이즈']=preview['박스사이즈'].apply(lambda value: f'{value} cm' if value else '')
-    st.dataframe(preview,hide_index=True,use_container_width=True)
+    render_packing_preview(preview)
     with st.form('delivery'):
         method=st.radio('국내배송',['로젠택배','퀵배송'],index=0 if case['domestic_method']!='퀵배송' else 1,horizontal=True)
         tracking=''; driver=''; phone=''
