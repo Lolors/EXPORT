@@ -5,7 +5,7 @@ import streamlit as st
 import db
 from export_excel import build_packing_export
 
-st.set_page_config(page_title='NTP Export', page_icon='🌏', layout='wide')
+st.set_page_config(page_title='수출관리', page_icon='🌏', layout='wide')
 db.init_db()
 
 def dataframe(query, params=()): return pd.DataFrame([dict(r) for r in db.rows(query,params)])
@@ -36,7 +36,8 @@ def save_shipment_editor(case_id, edited):
     if vals: db.executemany('''INSERT INTO shipment_items(case_id,business_unit,location,product_name,lot_no,expiry_date,requested_qty,box_no,created_at,updated_at)
                               VALUES (?,?,?,?,?,?,?,?,?,?)''',vals)
 
-st.title('🌏 NTP Export')
+st.title('수출관리')
+st.caption('Export Management System')
 menu=st.sidebar.radio('메뉴',['오버뷰','수출 주문 입력','실출고 입력','박스 패킹','패킹 결과·배송·엑셀','출고 사진'],label_visibility='collapsed')
 
 if menu=='오버뷰':
