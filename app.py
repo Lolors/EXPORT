@@ -9,12 +9,16 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 from PIL import Image, ImageOps
-from pillow_heif import register_heif_opener
+
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    HEIC_ENABLED = True
+except Exception:
+    HEIC_ENABLED = False
 
 import db
 from export_excel import build_packing_export
-
-register_heif_opener()
 
 MAX_PHOTO_SIZE = 800
 JPEG_QUALITY = 92
@@ -87,7 +91,7 @@ def save_shipment_editor(case_id, edited):
 
 
 def optimize_uploaded_photo(uploaded_file, output_path: Path) -> None:
-    """EXIF 방향을 보정하고 긴 변을 최대 800px로 축소해 저장합니다."""
+    # EXIF 방향을 보정하고 긴 변을 최대 800px로 축소해 저장합니다.
     with Image.open(BytesIO(uploaded_file.getvalue())) as source:
         image = ImageOps.exif_transpose(source)
         image.thumbnail((MAX_PHOTO_SIZE, MAX_PHOTO_SIZE), Image.Resampling.LANCZOS)
@@ -157,6 +161,44 @@ def render_packing_preview(preview: pd.DataFrame) -> None:
     st.markdown(''.join(parts), unsafe_allow_html=True)
 
 
+def completed_case_search(start_date, end_date, country, buyer_keyword, product_keyword, note_keyword):
+    query = '''
+        SELECT DISTINCT
+               c.id,
+               c.export_no AS 수출번호,
+               c.country AS 국가,
+               c.buyer AS 바이어,
+               c.transport_mode AS 운송방식,
+               c.actual_ship_date AS 실제출고일,
+               c.expected_ship_date AS 예상출고일,
+               c.status AS 상태,
+               c.stage AS 단계,
+               c.note AS 비고,
+               c.folder_path AS 폴더
+        FROM export_cases c
+        LEFT JOIN order_items o ON o.case_id = c.id
+        WHERE (c.status IN ('완료','취소') OR c.stage IN ('완료','취소'))
+          AND date(COALESCE(NULLIF(c.actual_ship_date,''), NULLIF(c.expected_ship_date,''), substr(c.created_at,1,10))) BETWEEN date(?) AND date(?)
+    '''
+    params = [str(start_date), str(end_date)]
+
+    if country != '전체':
+        query += ' AND c.country = ?'
+        params.append(country)
+    if buyer_keyword.strip():
+        query += ' AND c.buyer LIKE ?'
+        params.append(f"%{buyer_keyword.strip()}%")
+    if product_keyword.strip():
+        query += ' AND o.product_name LIKE ?'
+        params.append(f"%{product_keyword.strip()}%")
+    if note_keyword.strip():
+        query += ' AND c.note LIKE ?'
+        params.append(f"%{note_keyword.strip()}%")
+
+    query += " ORDER BY COALESCE(NULLIF(c.actual_ship_date,''), NULLIF(c.expected_ship_date,''), c.created_at) DESC, c.export_no DESC"
+    return dataframe(query, tuple(params))
+
+
 st.title('수출관리')
 st.caption('Export Management System')
 menu = st.sidebar.radio(
@@ -166,7 +208,7 @@ menu = st.sidebar.radio(
 )
 
 if menu == '오버뷰':
-    st.subheader('진행 중 수출 오버뷰')
+    st.subheader('진행중 수출')
     cases = db.active_cases()
     if not cases:
         st.info('현재 진행 중인 수출 건이 없습니다.')
@@ -192,6 +234,43 @@ if menu == '오버뷰':
             cols[4].metric('비고', c['note'] or '-')
             if c['folder_path']:
                 st.caption(f"폴더: {c['folder_path']}")
+
+    st.divider()
+    st.subheader('완료/취소 수출 검색')
+    country_rows = db.rows(
+        "SELECT DISTINCT country FROM export_cases WHERE (status IN ('완료','취소') OR stage IN ('완료','취소')) AND country<>'' ORDER BY country"
+    )
+    countries = ['전체'] + [r['country'] for r in country_rows]
+
+    c1, c2, c3 = st.columns([1.2, 1.2, 1])
+    search_start = c1.date_input('시작일', value=date(date.today().year, 1, 1), key='completed_start')
+    search_end = c2.date_input('종료일', value=date.today(), key='completed_end')
+    search_country = c3.selectbox('국가', countries, key='completed_country')
+
+    c4, c5, c6 = st.columns(3)
+    buyer_keyword = c4.text_input('바이어 검색', key='completed_buyer')
+    product_keyword = c5.text_input('제품명 검색', key='completed_product')
+    note_keyword = c6.text_input('비고 검색', key='completed_note')
+
+    if search_start > search_end:
+        st.error('시작일은 종료일보다 늦을 수 없습니다.')
+    else:
+        result = completed_case_search(
+            search_start,
+            search_end,
+            search_country,
+            buyer_keyword,
+            product_keyword,
+            note_keyword,
+        )
+        if result.empty:
+            st.info('검색 결과가 없습니다.')
+        else:
+            st.dataframe(
+                result.drop(columns=['id']),
+                hide_index=True,
+                use_container_width=True,
+            )
 
 elif menu == '수출 주문 입력':
     st.subheader('수출 주문 등록')
@@ -352,7 +431,13 @@ elif menu == '패킹 결과·배송·엑셀':
     if not cid:
         st.stop()
     case = db.row('SELECT * FROM export_cases WHERE id=?', (cid,))
-    st.info(f"국가: {case['country']}  |  바이어: {case['buyer'] or '-'}  |  운송방식: {case['transport_mode']}  |  비고: {case['note'] or '-'}")
+    summary_parts = [case['country']]
+    if case['buyer']:
+        summary_parts.append(case['buyer'])
+    summary_parts.append(f"운송방식: {case['transport_mode'] or '-'}")
+    if case['note']:
+        summary_parts.append(f"비고: {case['note']}")
+    st.info(' | '.join(summary_parts))
     st.caption('완료 후 폴더명: 바이어가 있으면 MMDD_바이어_운송방식_비고, 바이어가 없으면 MMDD_운송방식_비고')
     preview = dataframe(
         '''SELECT s.box_no AS 박스번호,s.business_unit AS 사업장,s.location AS 로케이션,s.product_name AS 제품명,
@@ -366,19 +451,30 @@ elif menu == '패킹 결과·배송·엑셀':
         preview['무게'] = preview['무게'].apply(lambda value: f'{float(value):g} kg' if pd.notna(value) else '')
         preview['박스사이즈'] = preview['박스사이즈'].apply(lambda value: f'{value} cm' if value else '')
     render_packing_preview(preview)
-    with st.form('delivery'):
-        actual_ship_date = st.date_input('실제출고일', value=date_value(case['actual_ship_date']))
-        method = st.radio('국내배송', ['로젠택배', '퀵배송'], index=0 if case['domestic_method'] != '퀵배송' else 1, horizontal=True)
+    with st.form(f'delivery_{cid}'):
+        actual_ship_date = st.date_input('실제출고일', value=date_value(case['actual_ship_date']), key=f'actual_ship_date_{cid}')
+        method = st.radio(
+            '국내배송',
+            ['로젠택배', '퀵배송'],
+            index=0 if case['domestic_method'] != '퀵배송' else 1,
+            horizontal=True,
+            key=f'delivery_method_{cid}',
+        )
         tracking = ''
         driver = ''
         phone = ''
         if method == '로젠택배':
-            tracking = st.text_input('송장번호', value=case['tracking_no'])
+            tracking = st.text_input('송장번호', value=case['tracking_no'], key=f'tracking_{cid}')
         else:
             c1, c2 = st.columns(2)
-            driver = c1.text_input('배송기사 이름', value=case['driver_name'])
-            phone = c2.text_input('연락처', value=case['driver_phone'])
+            driver = c1.text_input('배송기사', value=case['driver_name'], key=f'driver_{cid}')
+            phone = c2.text_input('연락처', value=case['driver_phone'], key=f'phone_{cid}')
         if st.form_submit_button('배송정보 저장'):
+            if method == '로젠택배':
+                driver = ''
+                phone = ''
+            else:
+                tracking = ''
             db.execute(
                 "UPDATE export_cases SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,actual_ship_date=?,stage='국내배송',status='완료',updated_at=? WHERE id=?",
                 (method, tracking, driver, phone, str(actual_ship_date), db.now_text(), cid),
@@ -403,10 +499,15 @@ elif menu == '출고 사진':
     case = db.row('SELECT * FROM export_cases WHERE id=?', (cid,))
     case_folder = db.ensure_case_folder(cid)
     st.caption('업로드한 사진은 방향을 자동 보정하고, 긴 변 800px 이하로 축소해 저장합니다.')
+    if not HEIC_ENABLED:
+        st.caption('HEIC/HEIF 지원 라이브러리가 없어 JPG, PNG, WEBP만 업로드할 수 있습니다.')
     st.caption(f'저장 폴더: {case_folder}')
+    upload_types = ['jpg', 'jpeg', 'png', 'webp']
+    if HEIC_ENABLED:
+        upload_types.extend(['heic', 'heif'])
     files = st.file_uploader(
         '사진 업로드',
-        type=['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp'],
+        type=upload_types,
         accept_multiple_files=True,
     )
     if st.button('사진 저장') and files:
