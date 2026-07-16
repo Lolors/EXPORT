@@ -13,6 +13,7 @@ STAGES = ['주문 접수','제품 준비','실출고 입력','패킹','국내배
 TRANSPORT_MODES = ['AIR','SEA','HAND']
 INVALID_FOLDER_CHARS = '\\/ :*?"<>|'
 
+
 @contextmanager
 def connect() -> Iterable[sqlite3.Connection]:
     conn = sqlite3.connect(DB_PATH)
@@ -24,16 +25,20 @@ def connect() -> Iterable[sqlite3.Connection]:
     finally:
         conn.close()
 
+
 def now_text() -> str:
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {r['name'] for r in conn.execute(f'PRAGMA table_info({table})')}
+
 
 def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> None:
     name = definition.split()[0]
     if name not in _columns(conn, table):
         conn.execute(f'ALTER TABLE {table} ADD COLUMN {definition}')
+
 
 def init_db() -> None:
     UPLOAD_DIR.mkdir(exist_ok=True)
@@ -98,6 +103,11 @@ def init_db() -> None:
             detail TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL
+        );
         ''')
         for definition in [
             "domestic_method TEXT DEFAULT ''",
@@ -110,26 +120,65 @@ def init_db() -> None:
         ]:
             _add_column(conn, 'export_cases', definition)
 
+
 def rows(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
     with connect() as conn:
         return list(conn.execute(query, params).fetchall())
 
+
 def row(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
     with connect() as conn:
         return conn.execute(query, params).fetchone()
+
 
 def execute(query: str, params: tuple[Any, ...] = ()) -> int:
     with connect() as conn:
         cur = conn.execute(query, params)
         return int(cur.lastrowid or 0)
 
+
 def executemany(query: str, values: list[tuple[Any, ...]]) -> None:
     with connect() as conn:
         conn.executemany(query, values)
 
+
+def get_setting(key: str, default: str = '') -> str:
+    result = row('SELECT value FROM settings WHERE key=?', (key,))
+    return str(result['value']) if result else default
+
+
+def set_setting(key: str, value: str) -> None:
+    execute(
+        '''INSERT INTO settings(key,value,updated_at) VALUES (?,?,?)
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at''',
+        (key, value, now_text()),
+    )
+
+
+def storage_root() -> Path:
+    configured = get_setting('shared_root').strip()
+    return Path(configured).expanduser() if configured else UPLOAD_DIR
+
+
+def test_storage_root(path_text: str) -> tuple[bool, str]:
+    path_text = path_text.strip()
+    if not path_text:
+        return False, '폴더 경로를 입력하세요.'
+    try:
+        path = Path(path_text).expanduser()
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / '.export_write_test'
+        probe.write_text('ok', encoding='utf-8')
+        probe.unlink()
+        return True, str(path.resolve())
+    except Exception as exc:
+        return False, str(exc)
+
+
 def add_history(case_id: int | None, action: str, detail: str) -> None:
     execute('INSERT INTO history(case_id, action, detail, created_at) VALUES (?,?,?,?)',
             (case_id, action, detail, now_text()))
+
 
 def next_export_no() -> str:
     year = datetime.now().year
@@ -143,6 +192,7 @@ def next_export_no() -> str:
         number = 1
     return f'EXP-{year}-{number:03d}'
 
+
 def active_cases(country: str | None = None) -> list[sqlite3.Row]:
     sql = "SELECT * FROM export_cases WHERE status='진행중' AND stage NOT IN ('완료','취소')"
     params: tuple[Any, ...] = ()
@@ -150,6 +200,7 @@ def active_cases(country: str | None = None) -> list[sqlite3.Row]:
         sql += ' AND country=?'
         params = (country,)
     return rows(sql + ' ORDER BY expected_ship_date, created_at', params)
+
 
 def parse_date(value: str | None) -> datetime | None:
     if not value:
@@ -161,12 +212,14 @@ def parse_date(value: str | None) -> datetime | None:
             continue
     return None
 
+
 def sanitize_folder_part(value: str | None, fallback: str = '미입력') -> str:
     text = str(value or '').strip() or fallback
     for char in INVALID_FOLDER_CHARS:
         text = text.replace(char, '_')
     text = ' '.join(text.split())
     return text.strip(' .') or fallback
+
 
 def case_folder_name(case: sqlite3.Row | dict[str, Any]) -> str:
     actual = parse_date(case['actual_ship_date'] if 'actual_ship_date' in case.keys() else '')
@@ -185,12 +238,14 @@ def case_folder_name(case: sqlite3.Row | dict[str, Any]) -> str:
     parts.extend([transport, final_note])
     return '_'.join(parts)
 
+
 def case_folder_base(case: sqlite3.Row | dict[str, Any]) -> Path:
     actual = parse_date(case['actual_ship_date'] if 'actual_ship_date' in case.keys() else '')
     expected = parse_date(case['expected_ship_date'] if case['expected_ship_date'] else '')
     year = (actual or expected or datetime.now()).strftime('%Y')
     country = sanitize_folder_part(case['country'], '국가미입력')
-    return UPLOAD_DIR / country / year
+    return storage_root() / country / year
+
 
 def unique_folder_path(base: Path, folder_name: str, current_path: Path | None = None) -> Path:
     target = base / folder_name
@@ -207,6 +262,7 @@ def unique_folder_path(base: Path, folder_name: str, current_path: Path | None =
             return candidate
         idx += 1
 
+
 def ensure_case_folder(case_id: int) -> Path:
     case = row('SELECT * FROM export_cases WHERE id=?', (case_id,))
     if not case:
@@ -221,6 +277,7 @@ def ensure_case_folder(case_id: int) -> Path:
     execute('UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?', (str(target), now_text(), case_id))
     return target
 
+
 def refresh_attachment_paths(case_id: int, old_root: Path, new_root: Path) -> None:
     old_text = str(old_root)
     for attachment in rows('SELECT id, stored_path FROM attachments WHERE case_id=?', (case_id,)):
@@ -229,14 +286,15 @@ def refresh_attachment_paths(case_id: int, old_root: Path, new_root: Path) -> No
             replacement = str(new_root / Path(stored).relative_to(old_root))
             execute('UPDATE attachments SET stored_path=? WHERE id=?', (replacement, attachment['id']))
 
+
 def sync_case_folder(case_id: int) -> Path:
     case = row('SELECT * FROM export_cases WHERE id=?', (case_id,))
     if not case:
         raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
     base = case_folder_base(case)
     base.mkdir(parents=True, exist_ok=True)
-    target = unique_folder_path(base, case_folder_name(case), Path(case['folder_path']) if case['folder_path'] else None)
     current = Path(case['folder_path']) if case['folder_path'] else None
+    target = unique_folder_path(base, case_folder_name(case), current)
 
     if current and current.exists() and current.resolve() != target.resolve():
         target.parent.mkdir(parents=True, exist_ok=True)
