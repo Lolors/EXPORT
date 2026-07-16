@@ -30,11 +30,11 @@ Export Management System
 
 ## 실행 방법
 
+기본 실행 주소는 `http://localhost:8503`입니다.
+
 ### Windows에서 바로 실행
 
 `run_app.bat` 파일을 더블클릭하면 됩니다.
-
-처음 실행할 때 자동으로 가상환경을 만들고 필요한 패키지를 설치한 뒤 `app.py`를 실행합니다.
 
 ### 직접 실행
 
@@ -42,7 +42,7 @@ Export Management System
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run app.py --server.port 8503
 ```
 
 처음 실행하면 `export.db` SQLite 데이터베이스와 `uploads/` 폴더가 자동 생성됩니다.
