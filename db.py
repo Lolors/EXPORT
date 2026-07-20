@@ -144,6 +144,12 @@ def executemany(query: str, values: list[tuple[Any, ...]]) -> None:
     with connect() as conn:
         conn.executemany(query, values)
 
+    # 주문 목록 저장 직후 폴더명도 주문품목 요약에 맞게 갱신합니다.
+    if 'insert into order_items' in ' '.join(query.lower().split()):
+        case_ids = {int(value[0]) for value in values if value}
+        for case_id in case_ids:
+            sync_case_folder(case_id)
+
 
 def get_setting(key: str, default: str = '') -> str:
     result = row('SELECT value FROM settings WHERE key=?', (key,))
@@ -224,22 +230,34 @@ def sanitize_folder_part(value: str | None, fallback: str = '미입력') -> str:
     return text.strip(' .') or fallback
 
 
+def order_item_summary(case_id: int) -> str:
+    """주문품목을 'A, B 외 1품목' 형식으로 요약합니다."""
+    product_rows = rows(
+        'SELECT product_name FROM order_items WHERE case_id=? ORDER BY id',
+        (case_id,),
+    )
+    products: list[str] = []
+    seen: set[str] = set()
+    for product in product_rows:
+        name = sanitize_folder_part(product['product_name'], '')
+        if name and name not in seen:
+            products.append(name)
+            seen.add(name)
+
+    if not products:
+        return '주문품목미입력'
+    if len(products) <= 2:
+        return ', '.join(products)
+    return f'{products[0]}, {products[1]} 외 {len(products) - 2}품목'
+
+
 def case_folder_name(case: sqlite3.Row | dict[str, Any]) -> str:
-    actual = parse_date(case['actual_ship_date'] if 'actual_ship_date' in case.keys() else '')
-    export_no = sanitize_folder_part(case['export_no'])
-    note = sanitize_folder_part(case['note'], '') if 'note' in case.keys() else ''
-    if not actual:
-        name = f'{export_no}_{note}' if note else export_no
-    else:
-        mmdd = actual.strftime('%m%d')
-        buyer = sanitize_folder_part(case['buyer'], '') if case['buyer'] else ''
-        transport = sanitize_folder_part(case['transport_mode'], 'AIR')
-        final_note = note or export_no
-        parts = [mmdd]
-        if buyer:
-            parts.append(buyer)
-        parts.extend([transport, final_note])
-        name = '_'.join(parts)
+    case_id = int(case['id'])
+    country = sanitize_folder_part(case['country'], '국가미입력')
+    buyer = sanitize_folder_part(case['buyer'], '바이어미입력')
+    transport = sanitize_folder_part(case['transport_mode'], '운송수단미입력')
+    summary = order_item_summary(case_id)
+    name = '_'.join([country, buyer, transport, summary])
 
     status = str(case['status'] if 'status' in case.keys() else '')
     stage = str(case['stage'] if 'stage' in case.keys() else '')
