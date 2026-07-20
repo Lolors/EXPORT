@@ -1,33 +1,37 @@
 from __future__ import annotations
 
-from io import BytesIO
+from datetime import date
 from pathlib import Path
 import html
 import time
-from datetime import date
 
-import pandas as pd
 import streamlit as st
-from PIL import Image, ImageOps
-
-try:
-    from pillow_heif import register_heif_opener
-    register_heif_opener()
-    HEIC_ENABLED = True
-except Exception:
-    HEIC_ENABLED = False
 
 import db
-from export_excel import build_packing_export
 
 MAX_PHOTO_SIZE = 800
 JPEG_QUALITY = 92
 
 st.set_page_config(page_title='수출관리', page_icon='🌏', layout='wide')
-db.init_db()
+
+
+@st.cache_resource
+def initialize_database() -> bool:
+    """Streamlit 프로세스에서 데이터베이스 초기화를 한 번만 실행합니다."""
+    db.init_db()
+    return True
+
+
+initialize_database()
+
+
+def get_pandas():
+    import pandas as pd
+    return pd
 
 
 def dataframe(query, params=()):
+    pd = get_pandas()
     return pd.DataFrame([dict(r) for r in db.rows(query, params)])
 
 
@@ -91,6 +95,10 @@ def save_shipment_editor(case_id, edited):
 
 
 def optimize_uploaded_photo(uploaded_file, output_path: Path) -> None:
+    """사진 메뉴에서 저장할 때만 Pillow를 불러옵니다."""
+    from io import BytesIO
+    from PIL import Image, ImageOps
+
     with Image.open(BytesIO(uploaded_file.getvalue())) as source:
         image = ImageOps.exif_transpose(source)
         image.thumbnail((MAX_PHOTO_SIZE, MAX_PHOTO_SIZE), Image.Resampling.LANCZOS)
@@ -110,7 +118,19 @@ def optimize_uploaded_photo(uploaded_file, output_path: Path) -> None:
         image.save(output_path, format='JPEG', quality=JPEG_QUALITY, optimize=True, progressive=True)
 
 
-def render_packing_preview(preview: pd.DataFrame) -> None:
+@st.cache_resource
+def enable_heic_support() -> bool:
+    """출고 사진 메뉴에 들어왔을 때만 HEIC 라이브러리를 등록합니다."""
+    try:
+        from pillow_heif import register_heif_opener
+        register_heif_opener()
+        return True
+    except Exception:
+        return False
+
+
+def render_packing_preview(preview) -> None:
+    pd = get_pandas()
     if preview.empty:
         st.info('패킹된 제품이 없습니다.')
         return
@@ -210,6 +230,7 @@ if menu == '오버뷰':
             title += f" · {c['note']}"
         with st.expander(title):
             if orders:
+                pd = get_pandas()
                 st.dataframe(
                     pd.DataFrame([{'제품명': o['product_name'], '수량': o['quantity'], '단위': o['unit']} for o in orders]),
                     hide_index=True,
@@ -223,8 +244,48 @@ if menu == '오버뷰':
             cols[2].metric('예상 출고일', c['expected_ship_date'] or '-')
             cols[3].metric('단계', c['stage'])
             cols[4].metric('비고', c['note'] or '-')
-            if c['folder_path']:
-                st.caption(f"폴더: {c['folder_path']}")
+            st.caption(f"폴더: {c['folder_path'] or '아직 생성되지 않음'}")
+
+    st.divider()
+    st.subheader('수출 폴더 관리')
+    configured_root = db.get_setting('shared_root').strip()
+    st.caption(
+        '내 폴더를 나중에 지정했거나 국가·연도·출고일을 수정한 경우, 모든 수출 건의 폴더를 현재 설정에 맞게 다시 생성하거나 이동합니다.'
+    )
+    st.code(configured_root or str(db.UPLOAD_DIR.resolve()))
+    folder_confirm = st.checkbox(
+        '기존 폴더를 현재 내 폴더의 국가 / 연도 / 수출건 구조로 이동·정리하는 것에 동의합니다.',
+        key='folder_rebuild_confirm',
+    )
+    if st.button('모든 수출 폴더 재생성·정리', type='primary', disabled=not folder_confirm):
+        if configured_root:
+            root_ok, root_message = db.test_storage_root(configured_root)
+        else:
+            root_ok, root_message = True, str(db.UPLOAD_DIR.resolve())
+
+        if not root_ok:
+            st.error(f'내 폴더에 연결할 수 없어 작업을 중단했습니다.\n\n{root_message}')
+        else:
+            all_cases = db.rows('SELECT id, export_no FROM export_cases ORDER BY id')
+            succeeded = []
+            failures = []
+            progress = st.progress(0, text='수출 폴더를 확인하고 있습니다.')
+            total = max(len(all_cases), 1)
+            for index, case_row in enumerate(all_cases, start=1):
+                try:
+                    folder = db.sync_case_folder(int(case_row['id']))
+                    succeeded.append(f"{case_row['export_no']} → {folder}")
+                except Exception as exc:
+                    failures.append(f"{case_row['export_no']}: {exc}")
+                progress.progress(index / total, text=f'{index}/{len(all_cases)} 처리 중')
+            progress.empty()
+            if succeeded:
+                db.add_history(None, '전체 수출 폴더 재정리', f'{len(succeeded)}건 완료 / {len(failures)}건 실패')
+                st.success(f'{len(succeeded)}건의 폴더를 현재 구조에 맞게 생성·정리했습니다.')
+                with st.expander('처리된 폴더 보기'):
+                    st.code('\n'.join(succeeded))
+            if failures:
+                st.error('일부 폴더를 처리하지 못했습니다.\n\n' + '\n'.join(f'- {item}' for item in failures))
 
     st.divider()
     st.subheader('완료/취소 수출 검색')
@@ -250,6 +311,7 @@ if menu == '오버뷰':
             st.dataframe(result.drop(columns=['id']), hide_index=True, use_container_width=True)
 
 elif menu == '수출 주문 입력':
+    pd = get_pandas()
     st.subheader('수출 주문 등록')
     with st.form('new_case'):
         st.text_input('수출번호', value=db.next_export_no(), disabled=True)
@@ -318,6 +380,7 @@ elif menu == '수출 주문 입력':
             rerun()
 
 elif menu == '실출고 입력':
+    pd = get_pandas()
     st.subheader('실제 출고 제품 입력')
     countries = [r['country'] for r in db.rows("SELECT DISTINCT country FROM export_cases WHERE status='진행중' AND stage NOT IN ('완료','취소') ORDER BY country")]
     if not countries:
@@ -393,12 +456,10 @@ elif menu == '박스 패킹':
                 (length, width, height, weight, db.now_text(), b['id']),
             )
             db.add_history(cid, '박스 정보 수정', f"BOX {b['box_no']}")
-            message = st.empty()
-            message.success('저장되었습니다.')
-            time.sleep(3)
-            message.empty()
+            st.success('저장되었습니다.')
 
 elif menu == '패킹 결과·배송·엑셀':
+    pd = get_pandas()
     st.subheader('패킹 결과 및 국내배송')
     cid = choose_active_case('result_case')
     if not cid:
@@ -458,14 +519,23 @@ elif menu == '패킹 결과·배송·엑셀':
             st.success(f'국내배송 정보가 저장되어 수출 건이 완료 처리되었습니다. 폴더: {folder}')
             time.sleep(1)
             rerun()
-    st.download_button(
-        '전체 화면 엑셀로 내보내기',
-        build_packing_export(cid),
-        file_name=f"{case['export_no']}_packing.xlsx",
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    )
+
+    excel_key = f'packing_excel_{cid}'
+    if st.button('엑셀 파일 준비', key=f'prepare_excel_{cid}'):
+        with st.spinner('엑셀 파일을 만드는 중입니다.'):
+            from export_excel import build_packing_export
+            st.session_state[excel_key] = build_packing_export(cid)
+    if excel_key in st.session_state:
+        st.download_button(
+            '전체 화면 엑셀로 내보내기',
+            st.session_state[excel_key],
+            file_name=f"{case['export_no']}_packing.xlsx",
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            key=f'download_excel_{cid}',
+        )
 
 elif menu == '출고 사진':
+    heic_enabled = enable_heic_support()
     st.subheader('출고 증빙 사진')
     cid = choose_active_case('photo_case')
     if not cid:
@@ -473,11 +543,11 @@ elif menu == '출고 사진':
     case = db.row('SELECT * FROM export_cases WHERE id=?', (cid,))
     case_folder = db.ensure_case_folder(cid)
     st.caption('업로드한 사진은 방향을 자동 보정하고, 긴 변 800px 이하로 축소해 저장합니다.')
-    if not HEIC_ENABLED:
+    if not heic_enabled:
         st.caption('HEIC/HEIF 지원 라이브러리가 없어 JPG, PNG, WEBP만 업로드할 수 있습니다.')
     st.caption(f'저장 폴더: {case_folder}')
     upload_types = ['jpg', 'jpeg', 'png', 'webp']
-    if HEIC_ENABLED:
+    if heic_enabled:
         upload_types.extend(['heic', 'heif'])
     files = st.file_uploader('사진 업로드', type=upload_types, accept_multiple_files=True)
     if st.button('사진 저장') and files:
