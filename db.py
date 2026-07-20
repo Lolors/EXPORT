@@ -11,7 +11,7 @@ DB_PATH = Path('export.db')
 UPLOAD_DIR = Path('uploads')
 STAGES = ['주문 접수','제품 준비','실출고 입력','패킹','국내배송','선적 준비','선적 완료','완료','취소']
 TRANSPORT_MODES = ['AIR','SEA','HAND']
-INVALID_FOLDER_CHARS = '\\/ :*?"<>|'
+INVALID_FOLDER_CHARS = '\\/:*?"<>|'
 
 
 @contextmanager
