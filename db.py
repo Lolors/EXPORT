@@ -245,7 +245,7 @@ def order_item_summary(case_id: int) -> str:
             seen.add(name)
 
     if not products:
-        return '주문품목미입력'
+        return ''
     if len(products) <= 2:
         return ', '.join(products)
     return f'{products[0]}, {products[1]} 외 {len(products) - 2}품목'
@@ -254,10 +254,29 @@ def order_item_summary(case_id: int) -> str:
 def case_folder_name(case: sqlite3.Row | dict[str, Any]) -> str:
     case_id = int(case['id'])
     country = sanitize_folder_part(case['country'], '국가미입력')
-    buyer = sanitize_folder_part(case['buyer'], '바이어미입력')
-    transport = sanitize_folder_part(case['transport_mode'], '운송수단미입력')
+    buyer = sanitize_folder_part(case['buyer'], '')
+    transport = sanitize_folder_part(case['transport_mode'], '')
     summary = order_item_summary(case_id)
-    name = '_'.join([country, buyer, transport, summary])
+
+    parts = [country]
+    if buyer:
+        parts.append(buyer)
+    if transport:
+        parts.append(transport)
+    if summary:
+        parts.append(summary)
+
+    name = '_'.join(parts)
+
+    # 국내배송 완료일이 입력되면 폴더명 맨 앞에 MMDD_를 붙입니다.
+    actual_ship_date = parse_date(
+        case['actual_ship_date'] if 'actual_ship_date' in case.keys() else ''
+    )
+    domestic_method = str(
+        case['domestic_method'] if 'domestic_method' in case.keys() else ''
+    ).strip()
+    if actual_ship_date and domestic_method:
+        name = f'{actual_ship_date.strftime("%m%d")}_{name}'
 
     status = str(case['status'] if 'status' in case.keys() else '')
     stage = str(case['stage'] if 'stage' in case.keys() else '')
