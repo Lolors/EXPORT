@@ -52,7 +52,12 @@ st.title('내 폴더 설정')
 st.caption('수출 관련 문서와 출고사진을 저장할 최상위 폴더를 설정합니다.')
 
 current_root = db.get_setting('shared_root').strip()
-default_folder = st.session_state.pop('selected_folder_value', current_root)
+
+# text_input이 만들어지기 전에만 값을 초기화하거나 교체합니다.
+if 'folder_path_input' not in st.session_state:
+    st.session_state['folder_path_input'] = current_root
+if 'pending_folder_path' in st.session_state:
+    st.session_state['folder_path_input'] = st.session_state.pop('pending_folder_path')
 
 st.info(
     '설정한 내 폴더 아래에 국가 / 연도 / 수출건 폴더가 자동 생성됩니다. '
@@ -66,13 +71,14 @@ with c2:
     if st.button('폴더 찾아보기', use_container_width=True):
         selected = browse_folder()
         if selected:
-            st.session_state['selected_folder_value'] = selected
+            # 다음 rerun 시작 시 text_input 생성 전에 반영합니다.
+            st.session_state['pending_folder_path'] = selected
             st.rerun()
 
 with c1:
     folder_text = st.text_input(
         '내 폴더 위치',
-        value=default_folder,
+        key='folder_path_input',
         placeholder=r'예: E:\수출관리 또는 \\NAS\수출관리',
     )
 
@@ -95,8 +101,7 @@ if b2.button('설정 저장', type='primary', use_container_width=True):
 
 if b3.button('기본 uploads 사용', use_container_width=True):
     db.set_setting('shared_root', '')
-    st.session_state['selected_folder_value'] = ''
-    st.success('내 폴더 설정을 해제했습니다. 이제 프로그램의 uploads 폴더를 사용합니다.')
+    st.session_state['pending_folder_path'] = ''
     st.rerun()
 
 st.divider()
