@@ -117,6 +117,9 @@ def init_db() -> None:
             "note TEXT DEFAULT ''",
             "actual_ship_date TEXT DEFAULT ''",
             "folder_path TEXT DEFAULT ''",
+            "cancel_reason TEXT DEFAULT ''",
+            "cancelled_at TEXT DEFAULT ''",
+            "previous_stage TEXT DEFAULT ''",
         ]:
             _add_column(conn, 'export_cases', definition)
 
@@ -226,17 +229,23 @@ def case_folder_name(case: sqlite3.Row | dict[str, Any]) -> str:
     export_no = sanitize_folder_part(case['export_no'])
     note = sanitize_folder_part(case['note'], '') if 'note' in case.keys() else ''
     if not actual:
-        return f'{export_no}_{note}' if note else export_no
+        name = f'{export_no}_{note}' if note else export_no
+    else:
+        mmdd = actual.strftime('%m%d')
+        buyer = sanitize_folder_part(case['buyer'], '') if case['buyer'] else ''
+        transport = sanitize_folder_part(case['transport_mode'], 'AIR')
+        final_note = note or export_no
+        parts = [mmdd]
+        if buyer:
+            parts.append(buyer)
+        parts.extend([transport, final_note])
+        name = '_'.join(parts)
 
-    mmdd = actual.strftime('%m%d')
-    buyer = sanitize_folder_part(case['buyer'], '') if case['buyer'] else ''
-    transport = sanitize_folder_part(case['transport_mode'], 'AIR')
-    final_note = note or export_no
-    parts = [mmdd]
-    if buyer:
-        parts.append(buyer)
-    parts.extend([transport, final_note])
-    return '_'.join(parts)
+    status = str(case['status'] if 'status' in case.keys() else '')
+    stage = str(case['stage'] if 'stage' in case.keys() else '')
+    if status == '취소' or stage == '취소':
+        return name if name.startswith('[취소]') else f'[취소]{name}'
+    return name.removeprefix('[취소]')
 
 
 def case_folder_base(case: sqlite3.Row | dict[str, Any]) -> Path:
@@ -305,3 +314,42 @@ def sync_case_folder(case_id: int) -> Path:
 
     execute('UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?', (str(target), now_text(), case_id))
     return target
+
+
+def cancel_case(case_id: int, reason: str) -> Path:
+    reason = reason.strip()
+    if not reason:
+        raise ValueError('취소사유를 입력하세요.')
+    case = row('SELECT * FROM export_cases WHERE id=?', (case_id,))
+    if not case:
+        raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
+    if case['status'] == '취소' or case['stage'] == '취소':
+        return sync_case_folder(case_id)
+
+    cancelled_at = now_text()
+    execute(
+        '''UPDATE export_cases
+           SET previous_stage=?, stage='취소', status='취소', cancel_reason=?, cancelled_at=?, updated_at=?
+           WHERE id=?''',
+        (case['stage'], reason, cancelled_at, cancelled_at, case_id),
+    )
+    folder = sync_case_folder(case_id)
+    add_history(case_id, '수출 취소', f'{reason} / 문서 및 사진 유지 / {folder}')
+    return folder
+
+
+def restore_cancelled_case(case_id: int) -> Path:
+    case = row('SELECT * FROM export_cases WHERE id=?', (case_id,))
+    if not case:
+        raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
+    restored_stage = case['previous_stage'] or '주문 접수'
+    restored_at = now_text()
+    execute(
+        '''UPDATE export_cases
+           SET stage=?, status='진행중', cancel_reason='', cancelled_at='', previous_stage='', updated_at=?
+           WHERE id=?''',
+        (restored_stage, restored_at, case_id),
+    )
+    folder = sync_case_folder(case_id)
+    add_history(case_id, '수출 취소 복원', f'{restored_stage} 단계로 복원 / {folder}')
+    return folder
