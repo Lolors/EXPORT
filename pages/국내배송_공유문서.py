@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date
 import html
 
@@ -45,6 +46,20 @@ def order_rows(case_id: int):
     )
 
 
+def shipment_totals(case_id: int) -> dict[str, float]:
+    totals: dict[str, float] = defaultdict(float)
+    for row in db.rows(
+        '''SELECT product_name, requested_qty
+           FROM shipment_items
+           WHERE case_id=?''',
+        (case_id,),
+    ):
+        name = str(row['product_name'] or '').strip()
+        if name:
+            totals[name] += float(row['requested_qty'] or 0)
+    return dict(totals)
+
+
 def fmt_number(value) -> str:
     try:
         return f'{float(value):g}'
@@ -52,7 +67,7 @@ def fmt_number(value) -> str:
         return ''
 
 
-def render_document(case, packed_rows, orders) -> None:
+def render_document(case, packed_rows, orders, shipped_totals) -> None:
     has_packing = bool(packed_rows)
 
     if has_packing:
@@ -109,20 +124,43 @@ def render_document(case, packed_rows, orders) -> None:
         table_header = '<tr><th>박스</th><th>사업장</th><th>제품명</th><th>LOT</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr>'
     else:
         for index, row in enumerate(orders, start=1):
+            product_name = str(row['product_name'] or '').strip()
+            ordered_qty = float(row['quantity'] or 0)
+            shipped_qty = float(shipped_totals.get(product_name, 0))
+            if ordered_qty > 0 and shipped_qty >= ordered_qty:
+                state_class, state_label = 'done', '해결 완료'
+            elif shipped_qty > 0:
+                state_class, state_label = 'partial', '일부 해결'
+            else:
+                state_class, state_label = 'pending', '미해결'
+
+            product_html = (
+                f'<span class="status-dot {state_class}" title="{state_label}"></span>'
+                f'<span>{html.escape(product_name)}</span>'
+            )
+            progress_text = f'{fmt_number(shipped_qty)} / {fmt_number(ordered_qty)}'
             table_parts.append(
                 '<tr>'
                 f'<td class="center">{index}</td>'
-                f'<td class="product">{html.escape(str(row["product_name"] or ""))}</td>'
-                f'<td class="right">{fmt_number(row["quantity"])}</td>'
+                f'<td class="product product-with-status">{product_html}</td>'
+                f'<td class="right">{fmt_number(ordered_qty)}</td>'
                 f'<td class="center">{html.escape(str(row["unit"] or "EA"))}</td>'
+                f'<td class="center"><span class="state-text {state_class}">{state_label}</span><br><small>{progress_text}</small></td>'
                 '</tr>'
             )
         if not table_parts:
-            table_parts.append('<tr><td colspan="4" class="empty">등록된 주문품목이 없습니다.</td></tr>')
+            table_parts.append('<tr><td colspan="5" class="empty">등록된 주문품목이 없습니다.</td></tr>')
 
         detail_title = 'ORDER LIST'
-        detail_notice = '<div class="progress-note">패킹정보가 아직 완료되지 않아 주문목록을 표시합니다.</div>'
-        table_header = '<tr><th>No.</th><th>주문 제품명</th><th>주문수량</th><th>단위</th></tr>'
+        detail_notice = (
+            '<div class="progress-note">패킹정보가 아직 완료되지 않아 주문목록을 표시합니다.</div>'
+            '<div class="status-legend">'
+            '<span><i class="status-dot done"></i> 해결 완료</span>'
+            '<span><i class="status-dot partial"></i> 일부 해결</span>'
+            '<span><i class="status-dot pending"></i> 미해결</span>'
+            '</div>'
+        )
+        table_header = '<tr><th>No.</th><th>주문 제품명</th><th>주문수량</th><th>단위</th><th>해결 상태</th></tr>'
 
     document = f'''<!doctype html>
 <html lang="ko">
@@ -155,9 +193,21 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
 .summary-card {{border:1px solid #dce3eb; border-radius:9px; padding:15px 17px; background:#f8fafc;}}
 .summary-label {{font-size:11px; color:#7b8795;}}
 .summary-value {{font-size:21px; font-weight:800; color:#214f76; margin-top:3px;}}
-.progress-note {{margin:-2px 0 12px; padding:10px 12px; border-radius:7px; background:#fff8e8; color:#74520b; font-size:12px; border:1px solid #f0ddb0;}}
+.progress-note {{margin:-2px 0 9px; padding:10px 12px; border-radius:7px; background:#fff8e8; color:#74520b; font-size:12px; border:1px solid #f0ddb0;}}
+.status-legend {{display:flex; gap:18px; flex-wrap:wrap; margin:0 0 12px; color:#667180; font-size:11px;}}
+.status-legend span {{display:inline-flex; align-items:center; gap:6px;}}
+.status-dot {{display:inline-block; width:10px; height:10px; border-radius:50%; flex:0 0 10px;}}
+.status-dot.done {{background:#24a148; box-shadow:0 0 0 3px rgba(36,161,72,.12);}}
+.status-dot.partial {{background:#f1a208; box-shadow:0 0 0 3px rgba(241,162,8,.13);}}
+.status-dot.pending {{background:#d64545; box-shadow:0 0 0 3px rgba(214,69,69,.12);}}
+.product-with-status {{display:flex; align-items:center; gap:9px;}}
+.state-text {{font-size:11px; font-weight:700;}}
+.state-text.done {{color:#19863a;}}
+.state-text.partial {{color:#a66c00;}}
+.state-text.pending {{color:#bd3535;}}
+.doc-table small {{color:#8a94a1; font-size:10px;}}
 .table-wrap {{overflow-x:auto; border:1px solid #d8e0e8; border-radius:9px;}}
-.doc-table {{border-collapse:collapse; width:100%; min-width:{'920px' if has_packing else '620px'}; font-size:12px;}}
+.doc-table {{border-collapse:collapse; width:100%; min-width:{'920px' if has_packing else '700px'}; font-size:12px;}}
 .doc-table th {{background:#294f71; color:#fff; padding:11px 10px; font-weight:700; text-align:left;}}
 .doc-table td {{padding:11px 10px; border-right:1px solid #e0e6ed; border-bottom:1px solid #e0e6ed; vertical-align:middle;}}
 .doc-table tr:last-child td {{border-bottom:none;}}
@@ -174,7 +224,7 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
   body {{background:#fff; padding:0;}}
   .print-toolbar {{display:none !important;}}
   .export-document {{box-shadow:none; border:none; border-radius:0; margin:0; max-width:none;}}
-  .doc-header,.doc-table th {{-webkit-print-color-adjust:exact; print-color-adjust:exact;}}
+  .doc-header,.doc-table th,.status-dot {{-webkit-print-color-adjust:exact; print-color-adjust:exact;}}
   .table-wrap {{overflow:visible;}}
 }}
 @media(max-width:800px) {{.doc-header {{padding:25px 22px; flex-direction:column;}} .doc-number {{text-align:left;}} .doc-body {{padding:22px;}} .info-grid {{grid-template-columns:1fr 1fr;}} .info-cell {{border-bottom:1px solid #e5eaf0;}} .summary-grid {{grid-template-columns:1fr;}}}}
@@ -228,7 +278,7 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
 </html>'''
 
     visible_rows = len(packed_rows) if has_packing else len(orders)
-    document_height = min(1650, max(800, 730 + visible_rows * 42))
+    document_height = min(1650, max(800, 760 + visible_rows * 46))
     components.html(document, height=document_height, scrolling=True)
 
 
@@ -248,6 +298,7 @@ case_id = options[selected_label]
 case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
 rows = packing_rows(case_id)
 orders = order_rows(case_id)
+shipped = shipment_totals(case_id)
 
 edit_tab, document_tab = st.tabs(['배송정보 입력', '공유용 문서'])
 
@@ -289,14 +340,22 @@ with edit_tab:
         st.success(f'저장했습니다. 폴더도 국내배송 일자에 맞게 정리했습니다.\n\n{folder}')
         st.rerun()
 
-    st.markdown('#### 패킹 현황')
-    if rows:
-        st.caption(f'총 {len({row["box_no"] for row in rows})}박스 · {len(rows)}개 패킹 행')
-    elif orders:
-        st.info(f'패킹 전입니다. 공유용 문서에는 주문목록 {len(orders)}개 행을 표시합니다.')
+    st.markdown('#### 주문 해결 현황')
+    if orders:
+        for order in orders:
+            name = str(order['product_name'] or '').strip()
+            ordered_qty = float(order['quantity'] or 0)
+            shipped_qty = float(shipped.get(name, 0))
+            if ordered_qty > 0 and shipped_qty >= ordered_qty:
+                icon, label = '🟢', '해결 완료'
+            elif shipped_qty > 0:
+                icon, label = '🟡', '일부 해결'
+            else:
+                icon, label = '🔴', '미해결'
+            st.write(f'{icon} **{name}** — {label} ({fmt_number(shipped_qty)} / {fmt_number(ordered_qty)} {order["unit"] or "EA"})')
     else:
-        st.warning('패킹된 제품과 주문목록이 모두 없습니다.')
+        st.warning('주문목록이 없습니다.')
 
 with document_tab:
     st.caption('문서 위의 출력하기 버튼을 누르면 국내배송 및 패킹 내역서만 출력됩니다.')
-    render_document(case, rows, orders)
+    render_document(case, rows, orders, shipped)
