@@ -122,7 +122,7 @@ def render_document(case, packed, actual_rows) -> None:
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{size}</td>')
                 rows_html.append('</tr>')
 
-        table_header = '<tr><th>박스</th><th>사업장</th><th>로케이션</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr>'
+        table_header = '<tr><th>박스</th><th>출고처</th><th>로케이션</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr>'
         section_title = 'PACKING DETAIL'
         first_summary = f'{len({row["box_no"] for row in packed})} BOX'
         first_label = '총 박스 수'
@@ -138,7 +138,7 @@ def render_document(case, packed, actual_rows) -> None:
         if not rows_html:
             rows_html.append('<tr><td colspan="6" class="empty">입력된 실제 출고제품이 없습니다.</td></tr>')
 
-        table_header = '<tr><th>사업장</th><th>로케이션</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr>'
+        table_header = '<tr><th>출고처</th><th>로케이션</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr>'
         section_title = 'ACTUAL SHIPMENT DETAIL'
         first_summary = '패킹 전'
         first_label = '진행 상태'
