@@ -131,7 +131,11 @@ def render_document(case, packed_rows, orders) -> None:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 * {{box-sizing:border-box;}}
+@page {{size:A4; margin:12mm;}}
 body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif;}}
+.print-toolbar {{max-width:1180px; margin:0 auto 10px; display:flex; justify-content:flex-end;}}
+.print-button {{border:0; border-radius:8px; background:#173b5f; color:#fff; font-size:14px; font-weight:700; padding:10px 18px; cursor:pointer; box-shadow:0 4px 12px rgba(23,59,95,.2);}}
+.print-button:hover {{background:#245d88;}}
 .export-document {{max-width:1180px; margin:0 auto 28px; background:#fff; border:1px solid #d8dee8; border-radius:14px; box-shadow:0 12px 34px rgba(30,45,70,.08); overflow:hidden;}}
 .doc-header {{padding:34px 40px 28px; background:linear-gradient(135deg,#173b5f,#245d88); color:#fff; display:flex; justify-content:space-between; gap:24px; align-items:flex-start;}}
 .doc-kicker {{font-size:12px; letter-spacing:2.2px; opacity:.75; font-weight:700;}}
@@ -166,11 +170,18 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
 .note-box {{margin-top:22px; border:1px solid #dce3eb; border-left:4px solid #294f71; border-radius:7px; padding:14px 16px; background:#fafbfd; font-size:13px;}}
 .note-title {{font-size:11px; color:#778493; font-weight:800; margin-bottom:5px;}}
 .doc-footer {{display:flex; justify-content:space-between; margin-top:28px; padding-top:14px; border-top:1px solid #e2e7ed; color:#8a94a1; font-size:10px;}}
-@media print {{body {{background:#fff; padding:0;}} .export-document {{box-shadow:none; border:none; margin:0; max-width:none;}} .doc-header,.doc-table th {{-webkit-print-color-adjust:exact; print-color-adjust:exact;}}}}
+@media print {{
+  body {{background:#fff; padding:0;}}
+  .print-toolbar {{display:none !important;}}
+  .export-document {{box-shadow:none; border:none; border-radius:0; margin:0; max-width:none;}}
+  .doc-header,.doc-table th {{-webkit-print-color-adjust:exact; print-color-adjust:exact;}}
+  .table-wrap {{overflow:visible;}}
+}}
 @media(max-width:800px) {{.doc-header {{padding:25px 22px; flex-direction:column;}} .doc-number {{text-align:left;}} .doc-body {{padding:22px;}} .info-grid {{grid-template-columns:1fr 1fr;}} .info-cell {{border-bottom:1px solid #e5eaf0;}} .summary-grid {{grid-template-columns:1fr;}}}}
 </style>
 </head>
 <body>
+<div class="print-toolbar"><button class="print-button" onclick="window.print()">🖨 출력하기</button></div>
 <div class="export-document">
   <div class="doc-header">
     <div>
@@ -207,10 +218,7 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
     <div class="section-title">{detail_title}</div>
     {detail_notice}
     <div class="table-wrap">
-      <table class="doc-table">
-        <thead>{table_header}</thead>
-        <tbody>{''.join(table_parts)}</tbody>
-      </table>
+      <table class="doc-table"><thead>{table_header}</thead><tbody>{''.join(table_parts)}</tbody></table>
     </div>
     {note_html}
     <div class="doc-footer"><span>주식회사 노투스팜 · 수출관리 시스템</span><span>Generated from Export Management System</span></div>
@@ -220,7 +228,7 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
 </html>'''
 
     visible_rows = len(packed_rows) if has_packing else len(orders)
-    document_height = min(1600, max(760, 680 + visible_rows * 42))
+    document_height = min(1650, max(800, 730 + visible_rows * 42))
     components.html(document, height=document_height, scrolling=True)
 
 
@@ -290,9 +298,5 @@ with edit_tab:
         st.warning('패킹된 제품과 주문목록이 모두 없습니다.')
 
 with document_tab:
-    toolbar1, toolbar2 = st.columns([1, 3])
-    with toolbar1:
-        st.button('문서 새로고침', on_click=lambda: None, use_container_width=True)
-    with toolbar2:
-        st.caption('공유할 때는 브라우저의 인쇄 기능(Ctrl+P)에서 PDF로 저장할 수 있습니다.')
+    st.caption('문서 위의 출력하기 버튼을 누르면 국내배송 및 패킹 내역서만 출력됩니다.')
     render_document(case, rows, orders)
