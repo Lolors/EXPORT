@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 import html
+import textwrap
 
 import streamlit as st
 
@@ -193,7 +194,7 @@ def render_document(case, rows) -> None:
       </div>
     </div>
     '''
-    st.markdown(document, unsafe_allow_html=True)
+    st.markdown(textwrap.dedent(document).strip(), unsafe_allow_html=True)
 
 
 st.title('국내배송 공유문서')
