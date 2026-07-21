@@ -35,6 +35,16 @@ def packing_rows(case_id: int):
     )
 
 
+def order_rows(case_id: int):
+    return db.rows(
+        '''SELECT product_name, quantity, unit
+           FROM order_items
+           WHERE case_id=?
+           ORDER BY id''',
+        (case_id,),
+    )
+
+
 def fmt_number(value) -> str:
     try:
         return f'{float(value):g}'
@@ -42,10 +52,17 @@ def fmt_number(value) -> str:
         return ''
 
 
-def render_document(case, rows) -> None:
-    box_numbers = {row['box_no'] for row in rows if row['box_no'] is not None}
-    product_names = {str(row['product_name']).strip() for row in rows if str(row['product_name']).strip()}
-    total_qty = sum(float(row['requested_qty'] or 0) for row in rows)
+def render_document(case, packed_rows, orders) -> None:
+    has_packing = bool(packed_rows)
+
+    if has_packing:
+        box_numbers = {row['box_no'] for row in packed_rows if row['box_no'] is not None}
+        product_names = {str(row['product_name']).strip() for row in packed_rows if str(row['product_name']).strip()}
+        total_qty = sum(float(row['requested_qty'] or 0) for row in packed_rows)
+    else:
+        box_numbers = set()
+        product_names = {str(row['product_name']).strip() for row in orders if str(row['product_name']).strip()}
+        total_qty = sum(float(row['quantity'] or 0) for row in orders)
 
     if case['domestic_method'] == '로젠택배':
         delivery_detail_label = '송장번호'
@@ -62,32 +79,50 @@ def render_document(case, rows) -> None:
     if case['note']:
         note_html = f'<div class="note-box"><div class="note-title">특이사항</div><div>{html.escape(case["note"])}</div></div>'
 
-    table_parts = []
-    grouped: dict[int, list] = {}
-    for row in rows:
-        grouped.setdefault(int(row['box_no']), []).append(row)
+    table_parts: list[str] = []
+    if has_packing:
+        grouped: dict[int, list] = {}
+        for row in packed_rows:
+            grouped.setdefault(int(row['box_no']), []).append(row)
 
-    for box_no, group in grouped.items():
-        rowspan = len(group)
-        for index, row in enumerate(group):
-            table_parts.append('<tr>')
-            if index == 0:
-                table_parts.append(f'<td class="center merged" rowspan="{rowspan}">BOX {box_no}</td>')
-            table_parts.append(f'<td>{html.escape(str(row["business_unit"] or ""))}</td>')
-            table_parts.append(f'<td class="product">{html.escape(str(row["product_name"] or ""))}</td>')
-            table_parts.append(f'<td>{html.escape(str(row["lot_no"] or ""))}</td>')
-            table_parts.append(f'<td class="center">{html.escape(str(row["expiry_date"] or ""))}</td>')
-            table_parts.append(f'<td class="right">{fmt_number(row["requested_qty"])}</td>')
-            if index == 0:
-                weight = f'{fmt_number(row["weight_kg"])} kg' if row['weight_kg'] else '-'
-                size_values = [row['length_cm'], row['width_cm'], row['height_cm']]
-                size = ' × '.join(fmt_number(value) for value in size_values) + ' cm' if all(size_values) else '-'
-                table_parts.append(f'<td class="center merged" rowspan="{rowspan}">{weight}</td>')
-                table_parts.append(f'<td class="center merged" rowspan="{rowspan}">{size}</td>')
-            table_parts.append('</tr>')
+        for box_no, group in grouped.items():
+            rowspan = len(group)
+            for index, row in enumerate(group):
+                table_parts.append('<tr>')
+                if index == 0:
+                    table_parts.append(f'<td class="center merged" rowspan="{rowspan}">BOX {box_no}</td>')
+                table_parts.append(f'<td>{html.escape(str(row["business_unit"] or ""))}</td>')
+                table_parts.append(f'<td class="product">{html.escape(str(row["product_name"] or ""))}</td>')
+                table_parts.append(f'<td>{html.escape(str(row["lot_no"] or ""))}</td>')
+                table_parts.append(f'<td class="center">{html.escape(str(row["expiry_date"] or ""))}</td>')
+                table_parts.append(f'<td class="right">{fmt_number(row["requested_qty"])}</td>')
+                if index == 0:
+                    weight = f'{fmt_number(row["weight_kg"])} kg' if row['weight_kg'] else '-'
+                    size_values = [row['length_cm'], row['width_cm'], row['height_cm']]
+                    size = ' × '.join(fmt_number(value) for value in size_values) + ' cm' if all(size_values) else '-'
+                    table_parts.append(f'<td class="center merged" rowspan="{rowspan}">{weight}</td>')
+                    table_parts.append(f'<td class="center merged" rowspan="{rowspan}">{size}</td>')
+                table_parts.append('</tr>')
 
-    if not table_parts:
-        table_parts.append('<tr><td colspan="8" class="empty">패킹된 제품이 없습니다.</td></tr>')
+        detail_title = 'PACKING DETAIL'
+        detail_notice = ''
+        table_header = '<tr><th>박스</th><th>사업장</th><th>제품명</th><th>LOT</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr>'
+    else:
+        for index, row in enumerate(orders, start=1):
+            table_parts.append(
+                '<tr>'
+                f'<td class="center">{index}</td>'
+                f'<td class="product">{html.escape(str(row["product_name"] or ""))}</td>'
+                f'<td class="right">{fmt_number(row["quantity"])}</td>'
+                f'<td class="center">{html.escape(str(row["unit"] or "EA"))}</td>'
+                '</tr>'
+            )
+        if not table_parts:
+            table_parts.append('<tr><td colspan="4" class="empty">등록된 주문품목이 없습니다.</td></tr>')
+
+        detail_title = 'ORDER LIST'
+        detail_notice = '<div class="progress-note">패킹정보가 아직 완료되지 않아 주문목록을 표시합니다.</div>'
+        table_header = '<tr><th>No.</th><th>주문 제품명</th><th>주문수량</th><th>단위</th></tr>'
 
     document = f'''<!doctype html>
 <html lang="ko">
@@ -116,8 +151,9 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
 .summary-card {{border:1px solid #dce3eb; border-radius:9px; padding:15px 17px; background:#f8fafc;}}
 .summary-label {{font-size:11px; color:#7b8795;}}
 .summary-value {{font-size:21px; font-weight:800; color:#214f76; margin-top:3px;}}
+.progress-note {{margin:-2px 0 12px; padding:10px 12px; border-radius:7px; background:#fff8e8; color:#74520b; font-size:12px; border:1px solid #f0ddb0;}}
 .table-wrap {{overflow-x:auto; border:1px solid #d8e0e8; border-radius:9px;}}
-.doc-table {{border-collapse:collapse; width:100%; min-width:920px; font-size:12px;}}
+.doc-table {{border-collapse:collapse; width:100%; min-width:{'920px' if has_packing else '620px'}; font-size:12px;}}
 .doc-table th {{background:#294f71; color:#fff; padding:11px 10px; font-weight:700; text-align:left;}}
 .doc-table td {{padding:11px 10px; border-right:1px solid #e0e6ed; border-bottom:1px solid #e0e6ed; vertical-align:middle;}}
 .doc-table tr:last-child td {{border-bottom:none;}}
@@ -162,16 +198,17 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
       <div class="info-cell" style="grid-column:span 2"><div class="info-label">{delivery_detail_label}</div><div class="info-value">{html.escape(delivery_detail)}</div></div>
       <div class="info-cell"><div class="info-label">현재 단계</div><div class="info-value">{html.escape(case['stage'] or '-')}</div></div>
     </div>
-    <div class="section-title">PACKING SUMMARY</div>
+    <div class="section-title">{'PACKING SUMMARY' if has_packing else 'ORDER SUMMARY'}</div>
     <div class="summary-grid">
-      <div class="summary-card"><div class="summary-label">총 박스 수</div><div class="summary-value">{len(box_numbers)} BOX</div></div>
+      <div class="summary-card"><div class="summary-label">{'총 박스 수' if has_packing else '진행 상태'}</div><div class="summary-value">{f'{len(box_numbers)} BOX' if has_packing else '패킹 전'}</div></div>
       <div class="summary-card"><div class="summary-label">총 품목 수</div><div class="summary-value">{len(product_names)} 품목</div></div>
       <div class="summary-card"><div class="summary-label">총 수량</div><div class="summary-value">{fmt_number(total_qty)} EA</div></div>
     </div>
-    <div class="section-title">PACKING DETAIL</div>
+    <div class="section-title">{detail_title}</div>
+    {detail_notice}
     <div class="table-wrap">
       <table class="doc-table">
-        <thead><tr><th>박스</th><th>사업장</th><th>제품명</th><th>LOT</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr></thead>
+        <thead>{table_header}</thead>
         <tbody>{''.join(table_parts)}</tbody>
       </table>
     </div>
@@ -182,7 +219,8 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
 </body>
 </html>'''
 
-    document_height = min(1600, max(760, 680 + len(rows) * 42))
+    visible_rows = len(packed_rows) if has_packing else len(orders)
+    document_height = min(1600, max(760, 680 + visible_rows * 42))
     components.html(document, height=document_height, scrolling=True)
 
 
@@ -201,6 +239,7 @@ selected_label = st.selectbox('수출 건 선택', list(options), key='delivery_
 case_id = options[selected_label]
 case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
 rows = packing_rows(case_id)
+orders = order_rows(case_id)
 
 edit_tab, document_tab = st.tabs(['배송정보 입력', '공유용 문서'])
 
@@ -245,8 +284,10 @@ with edit_tab:
     st.markdown('#### 패킹 현황')
     if rows:
         st.caption(f'총 {len({row["box_no"] for row in rows})}박스 · {len(rows)}개 패킹 행')
+    elif orders:
+        st.info(f'패킹 전입니다. 공유용 문서에는 주문목록 {len(orders)}개 행을 표시합니다.')
     else:
-        st.warning('패킹된 제품이 없습니다.')
+        st.warning('패킹된 제품과 주문목록이 모두 없습니다.')
 
 with document_tab:
     toolbar1, toolbar2 = st.columns([1, 3])
@@ -254,4 +295,4 @@ with document_tab:
         st.button('문서 새로고침', on_click=lambda: None, use_container_width=True)
     with toolbar2:
         st.caption('공유할 때는 브라우저의 인쇄 기능(Ctrl+P)에서 PDF로 저장할 수 있습니다.')
-    render_document(case, rows)
+    render_document(case, rows, orders)
