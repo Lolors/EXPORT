@@ -62,19 +62,15 @@ def order_rows(case_id: int):
     )
 
 
-def linked_rows(case_id: int):
-    result = db.rows(
-        '''SELECT s.order_item_id, s.business_unit, s.location, s.product_name,
-                  s.lot_no, s.expiry_date, s.requested_qty
+def actual_shipment_rows(case_id: int):
+    return db.rows(
+        '''SELECT s.business_unit, s.location, s.product_name, s.lot_no,
+                  s.expiry_date, s.requested_qty
            FROM shipment_items s
            WHERE s.case_id=? AND s.order_item_id IS NOT NULL
-           ORDER BY s.order_item_id, s.id''',
+           ORDER BY s.id''',
         (case_id,),
     )
-    grouped: dict[int, list] = {}
-    for row in result:
-        grouped.setdefault(int(row['order_item_id']), []).append(row)
-    return grouped
 
 
 def progress_state(ordered_qty: float, linked_qty: float) -> tuple[str, str]:
@@ -85,8 +81,9 @@ def progress_state(ordered_qty: float, linked_qty: float) -> tuple[str, str]:
     return 'pending', '미확보'
 
 
-def render_document(case, packed, orders, linked) -> None:
+def render_document(case, packed, actual_rows) -> None:
     has_packing = bool(packed)
+
     if case['domestic_method'] == '로젠택배':
         detail_label = '송장번호'
         detail_value = case['tracking_no'] or '-'
@@ -107,6 +104,7 @@ def render_document(case, packed, orders, linked) -> None:
         grouped: dict[int, list] = {}
         for row in packed:
             grouped.setdefault(int(row['box_no']), []).append(row)
+
         for box_no, group in grouped.items():
             rowspan = len(group)
             for index, row in enumerate(group):
@@ -123,46 +121,31 @@ def render_document(case, packed, orders, linked) -> None:
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{weight}</td>')
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{size}</td>')
                 rows_html.append('</tr>')
+
         table_header = '<tr><th>박스</th><th>사업장</th><th>로케이션</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr>'
         section_title = 'PACKING DETAIL'
-        notice = ''
-        item_count = len({str(row['product_name']).strip() for row in packed if str(row['product_name']).strip()})
-        total_qty = sum(float(row['requested_qty'] or 0) for row in packed)
         first_summary = f'{len({row["box_no"] for row in packed})} BOX'
         first_label = '총 박스 수'
+        display_rows = packed
     else:
-        for order_index, order in enumerate(orders, start=1):
-            ordered_qty = float(order['quantity'] or 0)
-            linked_qty = float(order['linked_qty'] or 0)
-            state_class, state_label = progress_state(ordered_qty, linked_qty)
-            actual_rows = linked.get(int(order['id']), [])
-            rowspan = max(1, len(actual_rows))
-            source_rows = actual_rows or [None]
-            for actual_index, actual in enumerate(source_rows):
-                rows_html.append('<tr>')
-                if actual_index == 0:
-                    product = html.escape(str(order['product_name'] or ''))
-                    rows_html.append(f'<td rowspan="{rowspan}" class="center">{order_index}</td>')
-                    rows_html.append(
-                        f'<td rowspan="{rowspan}" class="order-cell"><span class="dot {state_class}"></span><b>{product}</b><br>'
-                        f'<small>주문 {fmt_number(ordered_qty)} {html.escape(str(order["unit"] or "EA"))} · 확보 {fmt_number(linked_qty)} · {state_label}</small></td>'
-                    )
-                if actual is None:
-                    rows_html.extend(['<td class="empty" colspan="6">연결된 실제 출고제품이 없습니다.</td>'])
-                else:
-                    for value in [actual['business_unit'], actual['location'], actual['product_name'], actual['lot_no'], actual['expiry_date']]:
-                        rows_html.append(f'<td>{html.escape(str(value or ""))}</td>')
-                    rows_html.append(f'<td class="right">{fmt_number(actual["requested_qty"])}</td>')
-                rows_html.append('</tr>')
+        for row in actual_rows:
+            rows_html.append('<tr>')
+            for value in [row['business_unit'], row['location'], row['product_name'], row['lot_no'], row['expiry_date']]:
+                rows_html.append(f'<td>{html.escape(str(value or ""))}</td>')
+            rows_html.append(f'<td class="right">{fmt_number(row["requested_qty"])}</td>')
+            rows_html.append('</tr>')
+
         if not rows_html:
-            rows_html.append('<tr><td colspan="8" class="empty">등록된 주문품목이 없습니다.</td></tr>')
-        table_header = '<tr><th>No.</th><th>주문품목 / 진행상태</th><th>사업장</th><th>로케이션</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr>'
-        section_title = 'ORDER & ACTUAL SHIPMENT'
-        notice = '<div class="notice">패킹 전에는 주문품목별로 연결한 실제 출고제품을 표시합니다.</div>'
-        item_count = len(orders)
-        total_qty = sum(float(order['quantity'] or 0) for order in orders)
+            rows_html.append('<tr><td colspan="6" class="empty">입력된 실제 출고제품이 없습니다.</td></tr>')
+
+        table_header = '<tr><th>사업장</th><th>로케이션</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr>'
+        section_title = 'ACTUAL SHIPMENT DETAIL'
         first_summary = '패킹 전'
         first_label = '진행 상태'
+        display_rows = actual_rows
+
+    item_count = len({str(row['product_name']).strip() for row in display_rows if str(row['product_name']).strip()})
+    total_qty = sum(float(row['requested_qty'] or 0) for row in display_rows)
 
     document = f'''<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -175,11 +158,9 @@ body{{margin:0;padding:8px;background:#f4f7fa;color:#172033;font-family:-apple-s
 .body{{padding:28px 38px 36px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 10px}}
 .grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:9px;overflow:hidden;margin-bottom:22px}} .cell{{padding:12px 14px;border-right:1px solid #e5eaf0}} .label{{font-size:10px;color:#7c8797}} .value{{font-size:13px;font-weight:700;margin-top:4px}}
 .summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:23px}} .card{{border:1px solid #dce3eb;border-radius:9px;padding:14px 16px;background:#f8fafc}} .card b{{font-size:20px;color:#214f76}}
-.notice{{padding:10px 12px;margin-bottom:10px;background:#fff8e8;border:1px solid #f0ddb0;border-radius:7px;color:#74520b;font-size:11px}}
-.wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:9px}} table{{border-collapse:collapse;width:100%;min-width:{'980px' if has_packing else '1000px'};font-size:11px}} th{{background:#294f71;color:#fff;padding:10px;text-align:left}} td{{padding:10px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0}} .order-cell{{min-width:190px}}
-.dot{{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px}} .done{{background:#24a148}} .partial{{background:#f1a208}} .pending{{background:#d64545}} small{{color:#75808d}}
+.wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:9px}} table{{border-collapse:collapse;width:100%;min-width:{'980px' if has_packing else '760px'};font-size:11px}} th{{background:#294f71;color:#fff;padding:10px;text-align:left}} td{{padding:10px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0;padding:28px}}
 .note-box{{margin-top:20px;padding:13px 15px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px}} .footer{{margin-top:25px;padding-top:12px;border-top:1px solid #e2e7ed;color:#8a94a1;font-size:10px;display:flex;justify-content:space-between}}
-@media print{{body{{background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{border:0;border-radius:0;box-shadow:none;max-width:none}} .header,th,.dot{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} .wrap{{overflow:visible}}}}
+@media print{{body{{background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{border:0;border-radius:0;box-shadow:none;max-width:none}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} .wrap{{overflow:visible}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="document"><div class="header"><div><div class="sub">EXPORT LOGISTICS DOCUMENT</div><div class="title">국내배송 및 패킹 내역서</div><div class="sub">Domestic Delivery & Packing Summary</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b><br>{status_text}</div></div>
@@ -189,16 +170,16 @@ body{{margin:0;padding:8px;background:#f4f7fa;color:#172033;font-family:-apple-s
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
 <div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
 <div class="section">DOMESTIC DELIVERY</div><div class="grid"><div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div><div class="cell" style="grid-column:span 2"><div class="label">{detail_label}</div><div class="value">{html.escape(detail_value)}</div></div><div class="cell"><div class="label">현재 단계</div><div class="value">{html.escape(case['stage'] or '-')}</div></div></div>
-<div class="section">{'PACKING SUMMARY' if has_packing else 'ORDER SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>총 품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>총 주문/패킹 수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
-<div class="section">{section_title}</div>{notice}<div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}<div class="footer"><span>주식회사 노투스팜 · 수출관리 시스템</span><span>Generated from Export Management System</span></div></div></div></body></html>'''
+<div class="section">{'PACKING SUMMARY' if has_packing else 'ACTUAL SHIPMENT SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>실제 제품 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>실제 출고수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
+<div class="section">{section_title}</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}<div class="footer"><span>주식회사 노투스팜 · 수출관리 시스템</span><span>Generated from Export Management System</span></div></div></div></body></html>'''
 
-    visible_rows = len(packed) if has_packing else sum(max(1, len(linked.get(int(order['id']), []))) for order in orders)
+    visible_rows = len(display_rows)
     components.html(document, height=min(1800, max(850, 760 + visible_rows * 44)), scrolling=True)
 
 
 ensure_order_item_link_column()
 st.title('국내배송 공유문서')
-st.caption('국내배송 정보를 입력하고, 주문품목과 실제 출고제품 연결 내역 또는 패킹 내역을 출력합니다.')
+st.caption('국내배송 정보와 실제 출고제품 또는 패킹 내역을 깔끔한 문서로 출력합니다.')
 
 cases = db.rows("SELECT * FROM export_cases WHERE status<>'취소' AND stage<>'취소' ORDER BY COALESCE(NULLIF(actual_ship_date,''),NULLIF(expected_ship_date,''),created_at) DESC")
 if not cases:
@@ -210,7 +191,7 @@ case_id = options[st.selectbox('수출 건 선택', list(options), key='delivery
 case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
 packed = packing_rows(case_id)
 orders = order_rows(case_id)
-linked = linked_rows(case_id)
+actual_rows = actual_shipment_rows(case_id)
 
 edit_tab, document_tab = st.tabs(['배송정보 입력', '공유용 문서'])
 with edit_tab:
@@ -239,5 +220,5 @@ with edit_tab:
         st.write(f"{icon} **{order['product_name']}** — {fmt_number(order['linked_qty'])} / {fmt_number(order['quantity'])} {order['unit'] or 'EA'} · {state_label}")
 
 with document_tab:
-    st.caption('문서 위 출력하기 버튼을 누르면 내역서만 출력됩니다.')
-    render_document(case, packed, orders, linked)
+    st.caption('공유문서에는 실제 출고제품 정보만 표시되며, 출력하기 버튼을 누르면 내역서만 출력됩니다.')
+    render_document(case, packed, actual_rows)
