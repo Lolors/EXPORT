@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import date
 import html
 
@@ -12,6 +11,13 @@ import db
 
 st.set_page_config(page_title='국내배송 공유문서', page_icon='📄', layout='wide')
 db.init_db()
+db.execute(
+    '''CREATE TABLE IF NOT EXISTS order_item_progress (
+           order_item_id INTEGER PRIMARY KEY REFERENCES order_items(id) ON DELETE CASCADE,
+           secured_qty REAL NOT NULL DEFAULT 0,
+           updated_at TEXT NOT NULL
+       )'''
+)
 
 
 def date_value(value: str | None):
@@ -38,26 +44,14 @@ def packing_rows(case_id: int):
 
 def order_rows(case_id: int):
     return db.rows(
-        '''SELECT product_name, quantity, unit
-           FROM order_items
-           WHERE case_id=?
-           ORDER BY id''',
+        '''SELECT o.id, o.product_name, o.quantity, o.unit,
+                  COALESCE(p.secured_qty, 0) AS secured_qty
+           FROM order_items o
+           LEFT JOIN order_item_progress p ON p.order_item_id=o.id
+           WHERE o.case_id=?
+           ORDER BY o.id''',
         (case_id,),
     )
-
-
-def shipment_totals(case_id: int) -> dict[str, float]:
-    totals: dict[str, float] = defaultdict(float)
-    for row in db.rows(
-        '''SELECT product_name, requested_qty
-           FROM shipment_items
-           WHERE case_id=?''',
-        (case_id,),
-    ):
-        name = str(row['product_name'] or '').strip()
-        if name:
-            totals[name] += float(row['requested_qty'] or 0)
-    return dict(totals)
 
 
 def fmt_number(value) -> str:
@@ -67,7 +61,15 @@ def fmt_number(value) -> str:
         return ''
 
 
-def render_document(case, packed_rows, orders, shipped_totals) -> None:
+def progress_state(ordered_qty: float, secured_qty: float) -> tuple[str, str, str]:
+    if ordered_qty > 0 and secured_qty >= ordered_qty:
+        return 'done', '해결 완료', '🟢'
+    if secured_qty > 0:
+        return 'partial', '일부 확보', '🟡'
+    return 'pending', '미확보', '🔴'
+
+
+def render_document(case, packed_rows, orders) -> None:
     has_packing = bool(packed_rows)
 
     if has_packing:
@@ -126,41 +128,35 @@ def render_document(case, packed_rows, orders, shipped_totals) -> None:
         for index, row in enumerate(orders, start=1):
             product_name = str(row['product_name'] or '').strip()
             ordered_qty = float(row['quantity'] or 0)
-            shipped_qty = float(shipped_totals.get(product_name, 0))
-            if ordered_qty > 0 and shipped_qty >= ordered_qty:
-                state_class, state_label = 'done', '해결 완료'
-            elif shipped_qty > 0:
-                state_class, state_label = 'partial', '일부 해결'
-            else:
-                state_class, state_label = 'pending', '미해결'
-
+            secured_qty = float(row['secured_qty'] or 0)
+            state_class, state_label, _ = progress_state(ordered_qty, secured_qty)
             product_html = (
                 f'<span class="status-dot {state_class}" title="{state_label}"></span>'
                 f'<span>{html.escape(product_name)}</span>'
             )
-            progress_text = f'{fmt_number(shipped_qty)} / {fmt_number(ordered_qty)}'
             table_parts.append(
                 '<tr>'
                 f'<td class="center">{index}</td>'
                 f'<td class="product product-with-status">{product_html}</td>'
                 f'<td class="right">{fmt_number(ordered_qty)}</td>'
+                f'<td class="right secured">{fmt_number(secured_qty)}</td>'
                 f'<td class="center">{html.escape(str(row["unit"] or "EA"))}</td>'
-                f'<td class="center"><span class="state-text {state_class}">{state_label}</span><br><small>{progress_text}</small></td>'
+                f'<td class="center"><span class="state-text {state_class}">{state_label}</span></td>'
                 '</tr>'
             )
         if not table_parts:
-            table_parts.append('<tr><td colspan="5" class="empty">등록된 주문품목이 없습니다.</td></tr>')
+            table_parts.append('<tr><td colspan="6" class="empty">등록된 주문품목이 없습니다.</td></tr>')
 
         detail_title = 'ORDER LIST'
         detail_notice = (
-            '<div class="progress-note">패킹정보가 아직 완료되지 않아 주문목록을 표시합니다.</div>'
+            '<div class="progress-note">패킹정보가 아직 완료되지 않아 주문목록과 직접 입력한 확보수량을 표시합니다.</div>'
             '<div class="status-legend">'
             '<span><i class="status-dot done"></i> 해결 완료</span>'
-            '<span><i class="status-dot partial"></i> 일부 해결</span>'
-            '<span><i class="status-dot pending"></i> 미해결</span>'
+            '<span><i class="status-dot partial"></i> 일부 확보</span>'
+            '<span><i class="status-dot pending"></i> 미확보</span>'
             '</div>'
         )
-        table_header = '<tr><th>No.</th><th>주문 제품명</th><th>주문수량</th><th>단위</th><th>해결 상태</th></tr>'
+        table_header = '<tr><th>No.</th><th>주문 제품명</th><th>주문수량</th><th>확보수량</th><th>단위</th><th>확보 상태</th></tr>'
 
     document = f'''<!doctype html>
 <html lang="ko">
@@ -205,9 +201,9 @@ body {{margin:0; padding:8px; background:#f4f7fa; color:#172033; font-family:-ap
 .state-text.done {{color:#19863a;}}
 .state-text.partial {{color:#a66c00;}}
 .state-text.pending {{color:#bd3535;}}
-.doc-table small {{color:#8a94a1; font-size:10px;}}
+.secured {{font-weight:800; color:#214f76;}}
 .table-wrap {{overflow-x:auto; border:1px solid #d8e0e8; border-radius:9px;}}
-.doc-table {{border-collapse:collapse; width:100%; min-width:{'920px' if has_packing else '700px'}; font-size:12px;}}
+.doc-table {{border-collapse:collapse; width:100%; min-width:{'920px' if has_packing else '760px'}; font-size:12px;}}
 .doc-table th {{background:#294f71; color:#fff; padding:11px 10px; font-weight:700; text-align:left;}}
 .doc-table td {{padding:11px 10px; border-right:1px solid #e0e6ed; border-bottom:1px solid #e0e6ed; vertical-align:middle;}}
 .doc-table tr:last-child td {{border-bottom:none;}}
@@ -298,7 +294,6 @@ case_id = options[selected_label]
 case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
 rows = packing_rows(case_id)
 orders = order_rows(case_id)
-shipped = shipment_totals(case_id)
 
 edit_tab, document_tab = st.tabs(['배송정보 입력', '공유용 문서'])
 
@@ -340,22 +335,44 @@ with edit_tab:
         st.success(f'저장했습니다. 폴더도 국내배송 일자에 맞게 정리했습니다.\n\n{folder}')
         st.rerun()
 
-    st.markdown('#### 주문 해결 현황')
+    st.markdown('#### 주문품목 확보수량')
+    st.caption('주문명과 실제 확보 제품명이 다를 수 있으므로, 주문품목별로 현재 확보한 수량을 직접 입력합니다.')
     if orders:
-        for order in orders:
-            name = str(order['product_name'] or '').strip()
-            ordered_qty = float(order['quantity'] or 0)
-            shipped_qty = float(shipped.get(name, 0))
-            if ordered_qty > 0 and shipped_qty >= ordered_qty:
-                icon, label = '🟢', '해결 완료'
-            elif shipped_qty > 0:
-                icon, label = '🟡', '일부 해결'
-            else:
-                icon, label = '🔴', '미해결'
-            st.write(f'{icon} **{name}** — {label} ({fmt_number(shipped_qty)} / {fmt_number(ordered_qty)} {order["unit"] or "EA"})')
+        with st.form(f'secured_qty_form_{case_id}'):
+            secured_inputs: dict[int, float] = {}
+            for order in orders:
+                ordered_qty = float(order['quantity'] or 0)
+                current_qty = float(order['secured_qty'] or 0)
+                state_class, state_label, icon = progress_state(ordered_qty, current_qty)
+                name_col, order_col, secured_col = st.columns([4, 1.2, 1.5])
+                name_col.markdown(f'{icon} **{order["product_name"]}**  \n{state_label}')
+                order_col.metric('주문', f'{fmt_number(ordered_qty)} {order["unit"] or "EA"}')
+                secured_inputs[int(order['id'])] = secured_col.number_input(
+                    '확보수량',
+                    min_value=0.0,
+                    value=current_qty,
+                    step=1.0,
+                    key=f'secured_qty_{case_id}_{order["id"]}',
+                )
+            save_progress = st.form_submit_button('확보수량 저장', type='primary', use_container_width=True)
+
+        if save_progress:
+            now = db.now_text()
+            for order_item_id, secured_qty in secured_inputs.items():
+                db.execute(
+                    '''INSERT INTO order_item_progress(order_item_id, secured_qty, updated_at)
+                       VALUES (?,?,?)
+                       ON CONFLICT(order_item_id) DO UPDATE SET
+                           secured_qty=excluded.secured_qty,
+                           updated_at=excluded.updated_at''',
+                    (order_item_id, float(secured_qty), now),
+                )
+            db.add_history(case_id, '주문품목 확보수량 수정', f'{len(secured_inputs)}개 품목')
+            st.success('확보수량을 저장했습니다.')
+            st.rerun()
     else:
         st.warning('주문목록이 없습니다.')
 
 with document_tab:
     st.caption('문서 위의 출력하기 버튼을 누르면 국내배송 및 패킹 내역서만 출력됩니다.')
-    render_document(case, rows, orders, shipped)
+    render_document(case, rows, orders)
