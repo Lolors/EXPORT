@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 import streamlit as st
 
 import db
@@ -15,11 +13,6 @@ def get_pandas():
 def dataframe(query: str, params: tuple = ()):
     pd = get_pandas()
     return pd.DataFrame([dict(row) for row in db.rows(query, params)])
-
-
-def date_value(value: str | None):
-    parsed = db.parse_date(value)
-    return parsed.date() if parsed else date.today()
 
 
 def case_label(case) -> str:
@@ -80,7 +73,6 @@ pd = get_pandas()
 st.markdown('#### 수출 주문 등록')
 country = st.text_input('국가 *', key='new_country')
 buyer = st.text_input('바이어 (선택)', key='new_buyer')
-expected = st.date_input('예상출고일', key='new_expected')
 transport = st.selectbox('운송방식', db.TRANSPORT_MODES, key='new_transport')
 note = st.text_input('비고', key='new_note')
 st.text_input('수출번호', value=db.next_export_no(), disabled=True, key='new_export_no')
@@ -121,10 +113,10 @@ if st.button('수출 건 생성', type='primary', key='create_case'):
         now = db.now_text()
         case_id = db.execute(
             '''INSERT INTO export_cases(
-                   export_no,buyer,country,expected_ship_date,transport_mode,
+                   export_no,buyer,country,transport_mode,
                    stage,status,note,created_at,updated_at
-               ) VALUES (?,?,?,?,?,?,?,?,?,?)''',
-            (export_no, buyer.strip(), country.strip(), str(expected), transport,
+               ) VALUES (?,?,?,?,?,?,?,?,?)''',
+            (export_no, buyer.strip(), country.strip(), transport,
              '주문 접수', '진행중', note.strip(), now, now),
         )
         db.executemany(
@@ -153,10 +145,9 @@ case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
 
 with st.form(f'case_edit_{case_id}'):
     st.markdown('#### 기본 정보 수정')
-    c1, c2, c3 = st.columns(3)
+    c1, c2 = st.columns(2)
     new_country = c1.text_input('국가 *', value=case['country'])
     new_buyer = c2.text_input('바이어 (선택)', value=case['buyer'])
-    new_expected = c3.date_input('예상출고일', value=date_value(case['expected_ship_date']))
     transport_index = db.TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in db.TRANSPORT_MODES else 0
     new_transport = c1.selectbox('운송방식', db.TRANSPORT_MODES, index=transport_index)
     new_note = c2.text_input('비고', value=case['note'])
@@ -168,9 +159,9 @@ if save_basic:
     else:
         db.execute(
             '''UPDATE export_cases
-               SET country=?,buyer=?,expected_ship_date=?,transport_mode=?,note=?,updated_at=?
+               SET country=?,buyer=?,transport_mode=?,note=?,updated_at=?
                WHERE id=?''',
-            (new_country.strip(), new_buyer.strip(), str(new_expected), new_transport,
+            (new_country.strip(), new_buyer.strip(), new_transport,
              new_note.strip(), db.now_text(), case_id),
         )
         db.sync_case_folder(case_id)
