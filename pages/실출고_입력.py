@@ -1,26 +1,11 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
-import db
-
-
-def ensure_order_item_link_column() -> None:
-    columns = {row['name'] for row in db.rows('PRAGMA table_info(shipment_items)')}
-    if 'order_item_id' not in columns:
-        db.execute('ALTER TABLE shipment_items ADD COLUMN order_item_id INTEGER REFERENCES order_items(id)')
-
-
-def fmt_number(value) -> str:
-    try:
-        return f'{float(value):g}'
-    except (TypeError, ValueError):
-        return '0'
-
-
-def case_label(case) -> str:
-    buyer = f" · {case['buyer']}" if case['buyer'] else ''
-    return f"{case['export_no']} · {case['country']}{buyer} · {case['stage']}"
+from components.editors import shipment_editor
+from services import export_service, folder_service, history_service, order_service, shipment_service
+from utils.formatters import case_label, fmt_number
 
 
 def order_state(order_qty: float, linked_qty: float) -> tuple[str, str]:
@@ -31,55 +16,30 @@ def order_state(order_qty: float, linked_qty: float) -> tuple[str, str]:
     return '🔴', '미확보'
 
 
-def linked_rows(order_item_id: int):
-    return db.rows(
-        '''SELECT id, business_unit, product_name, lot_no, expiry_date,
-                  requested_qty, box_no
-           FROM shipment_items
-           WHERE order_item_id=?
-           ORDER BY id''',
-        (order_item_id,),
-    )
-
-
-ensure_order_item_link_column()
-pd = __import__('pandas')
-
 st.title('실출고 입력')
 st.caption('주문품목별로 실제 출고제품의 사업장, 제품명, 제조번호, 유통기한과 수량을 연결합니다.')
 
-cases = db.rows(
-    "SELECT * FROM export_cases WHERE status<>'취소' AND stage NOT IN ('완료','취소') ORDER BY created_at"
-)
+cases = export_service.active_cases()
 if not cases:
     st.info('진행 중인 수출 건이 없습니다.')
     st.stop()
 
 options = {case_label(case): int(case['id']) for case in cases}
 case_id = options[st.selectbox('수출 건 선택', list(options), key='linked_shipment_case')]
-orders = db.rows('SELECT id, product_name, quantity, unit FROM order_items WHERE case_id=? ORDER BY id', (case_id,))
+orders = order_service.list_for_case(case_id)
 
 if not orders:
     st.warning('먼저 주문품목을 입력하세요.')
     st.stop()
 
-unlinked_count = db.row(
-    'SELECT COUNT(*) AS count FROM shipment_items WHERE case_id=? AND order_item_id IS NULL',
-    (case_id,),
-)['count']
+unlinked_count = shipment_service.count_unlinked(case_id)
 if unlinked_count:
     st.warning(
         f'구형 실출고 데이터 중 주문품목에 연결되지 않은 행이 {unlinked_count}개 있습니다. '
         '이 데이터는 현재 주문품목별 실출고 화면에 표시되지 않으며, 필요하지 않다면 아래에서 삭제할 수 있습니다.'
     )
     with st.expander('구형 미연결 실출고 데이터 정리', expanded=True):
-        legacy_rows = db.rows(
-            '''SELECT id, business_unit, product_name, lot_no, expiry_date, requested_qty, box_no
-               FROM shipment_items
-               WHERE case_id=? AND order_item_id IS NULL
-               ORDER BY id''',
-            (case_id,),
-        )
+        legacy_rows = shipment_service.list_unlinked(case_id)
         st.dataframe(
             [
                 {
@@ -104,21 +64,9 @@ if unlinked_count:
             disabled=not delete_confirmed,
             key=f'delete_legacy_{case_id}',
         ):
-            db.execute(
-                'DELETE FROM shipment_items WHERE case_id=? AND order_item_id IS NULL',
-                (case_id,),
-            )
-            db.execute(
-                '''DELETE FROM boxes
-                   WHERE case_id=?
-                     AND NOT EXISTS(
-                         SELECT 1 FROM shipment_items s
-                         WHERE s.case_id=boxes.case_id AND s.box_no=boxes.box_no
-                     )''',
-                (case_id,),
-            )
-            db.sync_case_folder(case_id)
-            db.add_history(case_id, '구형 미연결 실출고 삭제', f'{unlinked_count}개 행')
+            shipment_service.delete_unlinked(case_id)
+            folder_service.sync_case_folder(case_id)
+            history_service.add(case_id, '구형 미연결 실출고 삭제', f'{unlinked_count}개 행')
             st.success('구형 미연결 실출고 데이터를 삭제했습니다.')
             st.rerun()
 
@@ -126,7 +74,7 @@ for order in orders:
     order_id = int(order['id'])
     order_qty = float(order['quantity'] or 0)
     unit = str(order['unit'] or 'EA')
-    current = linked_rows(order_id)
+    current = shipment_service.list_linked(order_id)
     linked_qty = sum(float(row['requested_qty'] or 0) for row in current)
     icon, state = order_state(order_qty, linked_qty)
 
@@ -156,72 +104,37 @@ for order in orders:
                 '출고수량': 0.0,
             }])
 
-        edited = st.data_editor(
-            source,
-            num_rows='dynamic',
-            use_container_width=True,
-            hide_index=True,
-            key=f'linked_order_editor_{order_id}',
-            column_config={
-                '사업장': st.column_config.TextColumn('사업장'),
-                '실제 제품명': st.column_config.TextColumn('실제 제품명', required=True),
-                '제조번호': st.column_config.TextColumn('제조번호'),
-                '유통기한': st.column_config.TextColumn('유통기한', help='예: 2028-07-01'),
-                '출고수량': st.column_config.NumberColumn('출고수량', min_value=0.0, step=1.0),
-            },
-        )
-
+        edited = shipment_editor(source, key=f'linked_order_editor_{order_id}')
         preview_qty = sum(float(value or 0) for value in edited.get('출고수량', []))
         preview_icon, preview_state = order_state(order_qty, preview_qty)
         st.info(f'{preview_icon} 입력 합계 {fmt_number(preview_qty)} / 주문 {fmt_number(order_qty)} {unit} · {preview_state}')
 
         if st.button('이 주문품목의 실출고 저장', type='primary', key=f'save_linked_order_{order_id}'):
-            values = []
-            invalid_row = False
+            values: list[dict] = []
             for _, row in edited.iterrows():
                 actual_name = str(row.get('실제 제품명', '') or '').strip()
-                qty = float(row.get('출고수량', 0) or 0)
+                quantity = float(row.get('출고수량', 0) or 0)
                 has_any_value = any(
                     str(row.get(column, '') or '').strip()
                     for column in ['사업장', '실제 제품명', '제조번호', '유통기한']
-                ) or qty > 0
+                ) or quantity > 0
                 if not has_any_value:
                     continue
-                if not actual_name:
-                    invalid_row = True
-                    break
-                values.append((
-                    case_id,
-                    order_id,
-                    str(row.get('사업장', '') or '').strip(),
-                    '',
-                    actual_name,
-                    str(row.get('제조번호', '') or '').strip(),
-                    str(row.get('유통기한', '') or '').strip(),
-                    qty,
-                    None,
-                    db.now_text(),
-                    db.now_text(),
-                ))
+                values.append({
+                    'business_unit': row.get('사업장', ''),
+                    'product_name': actual_name,
+                    'lot_no': row.get('제조번호', ''),
+                    'expiry_date': row.get('유통기한', ''),
+                    'requested_qty': quantity,
+                })
 
-            if invalid_row:
-                st.error('입력된 행에는 실제 제품명이 필요합니다.')
+            try:
+                shipment_service.save_for_order(case_id, order_id, values)
+            except ValueError as exc:
+                st.error(str(exc))
             else:
-                db.execute('DELETE FROM shipment_items WHERE case_id=? AND order_item_id=?', (case_id, order_id))
-                if values:
-                    db.executemany(
-                        '''INSERT INTO shipment_items(
-                               case_id, order_item_id, business_unit, location, product_name,
-                               lot_no, expiry_date, requested_qty, box_no, created_at, updated_at
-                           ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-                        values,
-                    )
-                db.execute(
-                    "UPDATE export_cases SET stage='실출고 입력', updated_at=? WHERE id=?",
-                    (db.now_text(), case_id),
-                )
-                db.sync_case_folder(case_id)
-                db.add_history(
+                folder_service.sync_case_folder(case_id)
+                history_service.add(
                     case_id,
                     '주문품목별 실출고 저장',
                     f"{order['product_name']} · {fmt_number(preview_qty)} / {fmt_number(order_qty)} {unit}",
@@ -230,8 +143,4 @@ for order in orders:
                 st.rerun()
 
 st.divider()
-all_linked_qty = db.row(
-    'SELECT COALESCE(SUM(requested_qty),0) AS quantity FROM shipment_items WHERE case_id=? AND order_item_id IS NOT NULL',
-    (case_id,),
-)['quantity']
-st.caption(f'현재 주문품목에 연결된 전체 실출고 수량: {fmt_number(all_linked_qty)}')
+st.caption(f'현재 주문품목에 연결된 전체 실출고 수량: {fmt_number(shipment_service.total_linked_quantity(case_id))}')
