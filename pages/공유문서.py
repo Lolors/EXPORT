@@ -129,24 +129,23 @@ body{{padding:8px}}
 .wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:8px}} table{{border-collapse:collapse;width:100%;min-width:{'900px' if has_packing else '680px'};font-size:10.5px}} th{{background:#294f71;color:#fff;padding:8px 9px;text-align:left}} td{{padding:8px 9px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0;padding:24px}} .total-row td{{background:#eef3f8;font-weight:700}}
 .note-box{{margin-top:15px;padding:11px 13px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:10.5px}}
 @media print{{
-  html,body{{width:210mm;height:297mm;background:#fff;padding:0;overflow:hidden}}
+  html,body{{width:210mm;min-height:297mm;background:#fff;padding:0}}
   .toolbar{{display:none!important}}
-  .document{{width:198mm;height:285mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;display:flex;flex-direction:column;overflow:hidden}}
-  .header{{padding:25px 30px;flex:0 0 auto}}
+  .document{{width:198mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}}
+  .header{{padding:25px 30px}}
   .title{{font-size:25px}}
-  .body{{padding:22px 30px 24px;flex:1 1 auto;display:flex;flex-direction:column}}
+  .body{{padding:22px 30px 24px}}
   .grid{{margin-bottom:14px}}
   .cell{{padding:9px 11px}}
   .summary{{margin-bottom:15px}}
   .card{{padding:10px 12px}}
   .card b{{font-size:16px}}
   .section{{margin-bottom:6px}}
-  .wrap{{overflow:visible;flex:1 1 auto;display:flex}}
-  table{{min-width:0;width:100%;height:100%;font-size:9.5px;table-layout:auto}}
-  thead{{height:auto}}
-  tbody{{height:100%}}
-  tbody tr{{height:auto}}
-  th,td{{padding:6px 7px}}
+  .wrap{{overflow:visible}}
+  table{{min-width:0;width:100%;height:auto;font-size:9.5px;table-layout:auto}}
+  thead,tbody,tr{{height:auto}}
+  th{{padding:6px 7px}}
+  td{{padding:6px 7px;line-height:1.35}}
   .note-box{{margin-top:10px;padding:8px 10px}}
   .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 }}
