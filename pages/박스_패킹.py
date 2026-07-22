@@ -7,8 +7,8 @@ from services import export_service, folder_service, history_service, packing_se
 from utils.formatters import case_label, fmt_number
 
 
-st.title('박스 패킹')
-st.caption('실제 출고제품을 기준으로 제품·수량과 박스번호를 연결하고, 박스별 규격과 무게를 입력합니다.')
+st.title('CTN 패킹')
+st.caption('실제 출고제품을 기준으로 제품·수량과 CTN 번호를 연결하고, CTN별 규격과 무게를 입력합니다.')
 
 cases = export_service.active_cases()
 if not cases:
@@ -42,16 +42,16 @@ m1, m2, m3, m4 = st.columns(4)
 m1.metric('실제 출고 행', f'{len(items)}개')
 m2.metric('총 출고수량', fmt_number(total_qty))
 m3.metric('패킹 완료 행', f'{packed_count}개')
-m4.metric('사용 박스', f'{box_count}개')
+m4.metric('사용 CTN', f'{box_count}개')
 
 st.divider()
 st.markdown('#### 실제 출고제품 선택')
-st.caption('사업장·실제 제품명·제조번호·유통기한·출고수량을 확인한 뒤 박스번호를 배정하세요.')
+st.caption('사업장·실제 제품명·제조번호·유통기한·출고수량을 확인한 뒤 CTN 번호를 배정하세요.')
 
 header = st.columns([0.55, 1.15, 2.5, 1.35, 1.35, 0.9, 1.0])
 for column, title in zip(
     header,
-    ['선택', '사업장', '실제 제품명', '제조번호', '유통기한', '출고수량', '현재 박스'],
+    ['선택', '사업장', '실제 제품명', '제조번호', '유통기한', '출고수량', '현재 CTN'],
 ):
     column.markdown(f'**{title}**')
 
@@ -71,7 +71,7 @@ for item in items:
     cols[3].write(item['lot_no'] or '-')
     cols[4].write(item['expiry_date'] or '-')
     cols[5].write(fmt_number(item['requested_qty']))
-    cols[6].write(f"BOX {item['box_no']}" if item['box_no'] is not None else '미패킹')
+    cols[6].write(f"CTN {item['box_no']}" if item['box_no'] is not None else '미패킹')
 
 st.divider()
 next_box = packing_service.next_box_no(case_id)
@@ -83,7 +83,7 @@ elif box_number_key not in st.session_state:
     st.session_state[box_number_key] = next_box
 assign_col, full_col, partial_col = st.columns([1, 2, 2])
 box_no = assign_col.number_input(
-    '배정할 박스번호',
+    '배정할 CTN 번호',
     min_value=1,
     step=1,
     key=box_number_key,
@@ -92,30 +92,30 @@ box_no = assign_col.number_input(
 with full_col:
     st.write('')
     st.write('')
-    assign_clicked = st.button('선택 제품을 박스에 배정', type='primary', use_container_width=True)
+    assign_clicked = st.button('선택 제품을 CTN에 배정', type='primary', use_container_width=True)
 
 with partial_col:
     st.write('')
     st.write('')
-    partial_clicked = st.button('선택 제품의 일부만 박스에 배정', use_container_width=True)
+    partial_clicked = st.button('선택 제품의 일부만 CTN에 배정', use_container_width=True)
 
 if assign_clicked:
     if not selected_ids:
-        st.error('박스에 넣을 실제 출고제품을 선택하세요.')
+        st.error('CTN에 넣을 실제 출고제품을 선택하세요.')
     else:
         assigned_box_no = int(box_no)
         packing_service.assign_items(case_id, selected_ids, assigned_box_no)
         folder_service.sync_case_folder(case_id)
         history_service.add(
             case_id,
-            '박스 패킹',
-            f'{len(selected_ids)}개 실제 출고 행 → BOX {assigned_box_no}',
+            'CTN 패킹',
+            f'{len(selected_ids)}개 실제 출고 행 → CTN {assigned_box_no}',
         )
         st.session_state[pending_box_number_key] = assigned_box_no + 1
-        st.session_state[f'packing_box_detail_{case_id}'] = f'BOX {assigned_box_no}'
+        st.session_state[f'packing_box_detail_{case_id}'] = f'CTN {assigned_box_no}'
         for item_id in selected_ids:
             st.session_state[f'pack_select_{case_id}_{item_id}'] = False
-        st.success(f'{len(selected_ids)}개 실제 출고 행을 BOX {assigned_box_no}에 배정했습니다.')
+        st.success(f'{len(selected_ids)}개 실제 출고 행을 CTN {assigned_box_no}에 배정했습니다.')
         st.rerun()
 
 if partial_clicked:
@@ -142,10 +142,10 @@ if partial_item_id:
             st.write(f"**{partial_item['product_name']}**")
             st.caption(
                 f"남은 출고수량 {fmt_number(total_quantity)} {partial_item['unit'] if 'unit' in partial_item.keys() else ''} · "
-                f"배정 대상 BOX {target_box_no}"
+                f"배정 대상 CTN {target_box_no}"
             )
             quantity = st.number_input(
-                '박스에 배정할 수량',
+                'CTN에 배정할 수량',
                 min_value=0,
                 max_value=total_quantity,
                 value=total_quantity,
@@ -168,15 +168,15 @@ if partial_item_id:
                     folder_service.sync_case_folder(case_id)
                     history_service.add(
                         case_id,
-                        '박스 일부 수량 배정',
-                        f"{partial_item['product_name']} {fmt_number(quantity)} → BOX {target_box_no}",
+                        'CTN 일부 수량 배정',
+                        f"{partial_item['product_name']} {fmt_number(quantity)} → CTN {target_box_no}",
                     )
                     st.session_state.pop('partial_pack_item_id', None)
                     st.session_state.pop('partial_pack_box_no', None)
                     st.session_state[f'pack_select_{case_id}_{partial_item_id}'] = False
                     st.session_state[pending_box_number_key] = target_box_no + 1
-                    st.session_state[f'packing_box_detail_{case_id}'] = f'BOX {target_box_no}'
-                    st.success(f'{fmt_number(quantity)}개를 BOX {target_box_no}에 배정했습니다.')
+                    st.session_state[f'packing_box_detail_{case_id}'] = f'CTN {target_box_no}'
+                    st.success(f'{fmt_number(quantity)}개를 CTN {target_box_no}에 배정했습니다.')
                     st.rerun()
             if cancel_col.button('취소', use_container_width=True):
                 st.session_state.pop('partial_pack_item_id', None)
@@ -185,20 +185,20 @@ if partial_item_id:
 
         partial_assign_dialog()
 
-if selected_ids and st.button('선택 제품 박스 배정 해제'):
+if selected_ids and st.button('선택 제품 CTN 배정 해제'):
     packing_service.unassign_items(case_id, selected_ids)
     folder_service.sync_case_folder(case_id)
-    history_service.add(case_id, '박스 배정 해제', f'{len(selected_ids)}개 실제 출고 행')
-    st.success('선택한 제품의 박스 배정을 해제했습니다.')
+    history_service.add(case_id, 'CTN 배정 해제', f'{len(selected_ids)}개 실제 출고 행')
+    st.success('선택한 제품의 CTN 배정을 해제했습니다.')
     st.rerun()
 
 st.divider()
-st.markdown('#### 번호별 박스 정보')
+st.markdown('#### CTN 정보')
 boxes = packing_service.list_boxes(case_id)
 if not boxes:
-    st.info('아직 생성된 박스가 없습니다.')
+    st.info('아직 생성된 CTN이 없습니다.')
 else:
-    box_options = {f"BOX {int(box['box_no'])}": int(box['box_no']) for box in boxes}
+    box_options = {f"CTN {int(box['box_no'])}": int(box['box_no']) for box in boxes}
     box_labels = list(box_options)
     incomplete_labels = [
         label
@@ -214,7 +214,7 @@ else:
         st.session_state[selector_key] = default_box_label
 
     selected_box_label = st.selectbox(
-        '박스 선택',
+        'CTN 선택',
         box_labels,
         key=selector_key,
     )
@@ -240,7 +240,7 @@ else:
             use_container_width=True,
         )
     else:
-        st.caption('이 박스에 연결된 제품이 없습니다.')
+        st.caption('이 CTN에 연결된 제품이 없습니다.')
 
     with st.form(f'box_info_{case_id}_{box["id"]}'):
         c1, c2, c3, c4 = st.columns(4)
@@ -250,12 +250,12 @@ else:
         weight = c4.number_input('무게(kg)', min_value=0.0, value=float(box['weight_kg'] or 0), key=f'wei_{box["id"]}')
         left_button_col, center_button_col, right_button_col = st.columns([1, 1, 1])
         with center_button_col:
-            save_box = st.form_submit_button('박스 정보 저장', type='primary', use_container_width=True)
+            save_box = st.form_submit_button('CTN 정보 저장', type='primary', use_container_width=True)
 
     if save_box:
         packing_service.update_box(int(box['id']), length, width, height, weight)
         folder_service.sync_case_folder(case_id)
-        history_service.add(case_id, '박스 정보 수정', selected_box_label)
+        history_service.add(case_id, 'CTN 정보 수정', selected_box_label)
         notice = st.empty()
         notice.success(f'{selected_box_label} 정보가 저장됐습니다.')
         time.sleep(2)
