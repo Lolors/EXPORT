@@ -7,8 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-DB_PATH = Path('export.db')
-UPLOAD_DIR = Path('uploads')
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / 'export.db'
+UPLOAD_DIR = BASE_DIR / 'uploads'
 STAGES = ['주문 접수','제품 준비','실출고 입력','패킹','국내배송','선적 준비','선적 완료','완료','취소']
 TRANSPORT_MODES = ['AIR','SEA','HAND']
 INVALID_FOLDER_CHARS = '\\/:*?"<>|'
@@ -41,7 +42,7 @@ def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> None:
 
 
 def init_db() -> None:
-    UPLOAD_DIR.mkdir(exist_ok=True)
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
         conn.executescript('''
         CREATE TABLE IF NOT EXISTS export_cases (
@@ -342,10 +343,11 @@ def sync_case_folder(case_id: int) -> Path:
     current = Path(case['folder_path']) if case['folder_path'] else None
     target = unique_folder_path(base, case_folder_name(case), current)
 
-    if current and current.exists() and current.resolve() != target.resolve():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(current), str(target))
-        refresh_attachment_paths(case_id, current, target)
+    if current and current.exists():
+        if current.resolve() != target.resolve():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(current), str(target))
+            refresh_attachment_paths(case_id, current, target)
     else:
         target.mkdir(parents=True, exist_ok=True)
 
@@ -353,40 +355,24 @@ def sync_case_folder(case_id: int) -> Path:
     return target
 
 
-def cancel_case(case_id: int, reason: str) -> Path:
-    reason = reason.strip()
-    if not reason:
-        raise ValueError('취소사유를 입력하세요.')
-    case = row('SELECT * FROM export_cases WHERE id=?', (case_id,))
-    if not case:
-        raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
-    if case['status'] == '취소' or case['stage'] == '취소':
-        return sync_case_folder(case_id)
+def rebuild_all_case_folders() -> list[tuple[int, Path]]:
+    results: list[tuple[int, Path]] = []
+    for case in rows('SELECT id FROM export_cases ORDER BY id'):
+        results.append((int(case['id']), sync_case_folder(int(case['id']))))
+    return results
 
-    cancelled_at = now_text()
+
+def move_file_to_case(case_id: int, source: Path, category: str = '출고사진') -> Path:
+    folder = ensure_case_folder(case_id)
+    source = Path(source)
+    destination = folder / source.name
+    counter = 2
+    while destination.exists():
+        destination = folder / f'{source.stem}_{counter}{source.suffix}'
+        counter += 1
+    shutil.move(str(source), str(destination))
     execute(
-        '''UPDATE export_cases
-           SET previous_stage=?, stage='취소', status='취소', cancel_reason=?, cancelled_at=?, updated_at=?
-           WHERE id=?''',
-        (case['stage'], reason, cancelled_at, cancelled_at, case_id),
+        'INSERT INTO attachments(case_id,file_name,stored_path,category,uploaded_at) VALUES (?,?,?,?,?)',
+        (case_id, destination.name, str(destination), category, now_text()),
     )
-    folder = sync_case_folder(case_id)
-    add_history(case_id, '수출 취소', f'{reason} / 문서 및 사진 유지 / {folder}')
-    return folder
-
-
-def restore_cancelled_case(case_id: int) -> Path:
-    case = row('SELECT * FROM export_cases WHERE id=?', (case_id,))
-    if not case:
-        raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
-    restored_stage = case['previous_stage'] or '주문 접수'
-    restored_at = now_text()
-    execute(
-        '''UPDATE export_cases
-           SET stage=?, status='진행중', cancel_reason='', cancelled_at='', previous_stage='', updated_at=?
-           WHERE id=?''',
-        (restored_stage, restored_at, case_id),
-    )
-    folder = sync_case_folder(case_id)
-    add_history(case_id, '수출 취소 복원', f'{restored_stage} 단계로 복원 / {folder}')
-    return folder
+    return destination
