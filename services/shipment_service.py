@@ -23,6 +23,94 @@ def list_actual(case_id: int):
     )
 
 
+def list_linked(order_item_id: int):
+    return db.rows(
+        '''SELECT id, business_unit, product_name, lot_no, expiry_date,
+                  requested_qty, box_no
+           FROM shipment_items
+           WHERE order_item_id=?
+           ORDER BY id''',
+        (order_item_id,),
+    )
+
+
+def count_unlinked(case_id: int) -> int:
+    result = db.row(
+        'SELECT COUNT(*) AS count FROM shipment_items WHERE case_id=? AND order_item_id IS NULL',
+        (case_id,),
+    )
+    return int(result['count'] or 0) if result else 0
+
+
+def list_unlinked(case_id: int):
+    return db.rows(
+        '''SELECT id, business_unit, product_name, lot_no, expiry_date,
+                  requested_qty, box_no
+           FROM shipment_items
+           WHERE case_id=? AND order_item_id IS NULL
+           ORDER BY id''',
+        (case_id,),
+    )
+
+
+def delete_unlinked(case_id: int) -> None:
+    db.execute('DELETE FROM shipment_items WHERE case_id=? AND order_item_id IS NULL', (case_id,))
+    db.execute(
+        '''DELETE FROM boxes
+           WHERE case_id=?
+             AND NOT EXISTS(
+                 SELECT 1 FROM shipment_items s
+                 WHERE s.case_id=boxes.case_id AND s.box_no=boxes.box_no
+             )''',
+        (case_id,),
+    )
+
+
+def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
+    values = []
+    now = now_text()
+    total = 0.0
+    for item in rows:
+        product_name = str(item.get('product_name', '') or '').strip()
+        quantity = float(item.get('requested_qty', 0) or 0)
+        if not product_name:
+            raise ValueError('입력된 행에는 실제 제품명이 필요합니다.')
+        total += quantity
+        values.append((
+            case_id,
+            order_item_id,
+            str(item.get('business_unit', '') or '').strip(),
+            '',
+            product_name,
+            str(item.get('lot_no', '') or '').strip(),
+            str(item.get('expiry_date', '') or '').strip(),
+            quantity,
+            None,
+            now,
+            now,
+        ))
+
+    db.execute('DELETE FROM shipment_items WHERE case_id=? AND order_item_id=?', (case_id, order_item_id))
+    if values:
+        db.executemany(
+            '''INSERT INTO shipment_items(
+                   case_id, order_item_id, business_unit, location, product_name,
+                   lot_no, expiry_date, requested_qty, box_no, created_at, updated_at
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+            values,
+        )
+    db.execute("UPDATE export_cases SET stage='실출고 입력', updated_at=? WHERE id=?", (now, case_id))
+    return total
+
+
+def total_linked_quantity(case_id: int) -> float:
+    result = db.row(
+        'SELECT COALESCE(SUM(requested_qty),0) AS quantity FROM shipment_items WHERE case_id=? AND order_item_id IS NOT NULL',
+        (case_id,),
+    )
+    return float(result['quantity'] or 0) if result else 0.0
+
+
 def sync_historical(case_id: int) -> None:
     case = db.row('SELECT case_type FROM export_cases WHERE id=?', (case_id,))
     if not case or case['case_type'] != 'historical':
