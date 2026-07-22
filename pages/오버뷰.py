@@ -121,7 +121,7 @@ for country in sorted(country_groups):
                 received_qty = float(order['actual_qty'] or 0)
                 status_icon = order_status_icon(order_qty, received_qty)
                 st.markdown(
-                    f"{index}. {status_icon} **{order['product_name']}**  "
+                    f"{status_icon} {index}. **{order['product_name']}**  "
                     f"주문 {fmt_number(order_qty)} {order['unit']} · "
                     f"입고 {fmt_number(received_qty)} {order['unit']}"
                 )
