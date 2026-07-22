@@ -25,7 +25,7 @@ st.title('박스 패킹')
 st.caption('실제 출고제품을 기준으로 제품·수량과 박스번호를 연결하고, 박스별 규격과 무게를 입력합니다.')
 
 cases = db.rows(
-    "SELECT * FROM export_cases WHERE status='진행중' AND stage NOT IN ('완료','취소') ORDER BY expected_ship_date, created_at"
+    "SELECT * FROM export_cases WHERE status='진행중' AND stage NOT IN ('완료','취소') ORDER BY created_at"
 )
 if not cases:
     st.info('진행 중 수출 건이 없습니다.')
@@ -115,6 +115,7 @@ if assign_clicked:
             "UPDATE export_cases SET stage='패킹',updated_at=? WHERE id=?",
             (db.now_text(), case_id),
         )
+        db.sync_case_folder(case_id)
         db.add_history(case_id, '박스 패킹', f'{len(selected_ids)}개 실제 출고 행 → BOX {int(box_no)}')
         st.success(f'{len(selected_ids)}개 실제 출고 행을 BOX {int(box_no)}에 배정했습니다.')
         st.rerun()
@@ -125,6 +126,7 @@ if selected_ids and st.button('선택 제품 박스 배정 해제'):
             'UPDATE shipment_items SET box_no=NULL,updated_at=? WHERE id=? AND case_id=?',
             (db.now_text(), item_id, case_id),
         )
+    db.sync_case_folder(case_id)
     db.add_history(case_id, '박스 배정 해제', f'{len(selected_ids)}개 실제 출고 행')
     st.success('선택한 제품의 박스 배정을 해제했습니다.')
     st.rerun()
@@ -179,6 +181,7 @@ else:
                     'UPDATE boxes SET length_cm=?,width_cm=?,height_cm=?,weight_kg=?,updated_at=? WHERE id=?',
                     (length, width, height, weight, db.now_text(), box['id']),
                 )
+                db.sync_case_folder(case_id)
                 db.add_history(case_id, '박스 정보 수정', f"BOX {box['box_no']}")
                 st.success(f"BOX {box['box_no']} 정보를 저장했습니다.")
                 st.rerun()
