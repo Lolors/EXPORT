@@ -76,7 +76,10 @@ for item in items:
 st.divider()
 next_box = packing_service.next_box_no(case_id)
 box_number_key = f'packing_box_no_{case_id}'
-if box_number_key not in st.session_state:
+pending_box_number_key = f'pending_packing_box_no_{case_id}'
+if pending_box_number_key in st.session_state:
+    st.session_state[box_number_key] = int(st.session_state.pop(pending_box_number_key))
+elif box_number_key not in st.session_state:
     st.session_state[box_number_key] = next_box
 assign_col, full_col, partial_col = st.columns([1, 2, 2])
 box_no = assign_col.number_input(
@@ -108,7 +111,7 @@ if assign_clicked:
             '박스 패킹',
             f'{len(selected_ids)}개 실제 출고 행 → BOX {assigned_box_no}',
         )
-        st.session_state[box_number_key] = assigned_box_no + 1
+        st.session_state[pending_box_number_key] = assigned_box_no + 1
         st.session_state[f'packing_box_detail_{case_id}'] = f'BOX {assigned_box_no}'
         for item_id in selected_ids:
             st.session_state[f'pack_select_{case_id}_{item_id}'] = False
@@ -171,7 +174,7 @@ if partial_item_id:
                     st.session_state.pop('partial_pack_item_id', None)
                     st.session_state.pop('partial_pack_box_no', None)
                     st.session_state[f'pack_select_{case_id}_{partial_item_id}'] = False
-                    st.session_state[box_number_key] = target_box_no + 1
+                    st.session_state[pending_box_number_key] = target_box_no + 1
                     st.session_state[f'packing_box_detail_{case_id}'] = f'BOX {target_box_no}'
                     st.success(f'{fmt_number(quantity)}개를 BOX {target_box_no}에 배정했습니다.')
                     st.rerun()
