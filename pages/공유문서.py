@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -144,7 +143,7 @@ st.title('공유문서')
 st.caption('국내배송 정보와 실제 출고제품 또는 패킹 내역을 문서로 출력합니다.')
 
 cases = db.rows(
-    "SELECT * FROM export_cases WHERE status<>'취소' AND stage<>'취소' ORDER BY COALESCE(NULLIF(actual_ship_date,''),NULLIF(expected_ship_date,''),created_at) DESC"
+    "SELECT * FROM export_cases WHERE status<>'취소' AND stage<>'취소' ORDER BY COALESCE(NULLIF(actual_ship_date,''),created_at) DESC"
 )
 if not cases:
     st.info('표시할 수출 건이 없습니다.')
