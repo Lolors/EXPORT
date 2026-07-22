@@ -103,7 +103,7 @@ for country in sorted(country_groups):
             if transport_mode.casefold() == '미지정':
                 transport_mode = ''
 
-            header_parts = [part for part in [transport_mode, str(case['export_no']), buyer] if part]
+            header_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
             st.markdown(f"### {' · '.join(header_parts)}")
 
             render_progress_bar(progress)
