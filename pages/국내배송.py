@@ -41,7 +41,7 @@ st.title('국내배송')
 st.caption('국내배송 방식과 송장 또는 배송기사 정보를 입력합니다.')
 
 cases = db.rows(
-    "SELECT * FROM export_cases WHERE status<>'취소' AND stage<>'취소' ORDER BY COALESCE(NULLIF(actual_ship_date,''),NULLIF(expected_ship_date,''),created_at) DESC"
+    "SELECT * FROM export_cases WHERE status<>'취소' AND stage<>'취소' ORDER BY COALESCE(NULLIF(actual_ship_date,''),created_at) DESC"
 )
 if not cases:
     st.info('표시할 수출 건이 없습니다.')
