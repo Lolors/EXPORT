@@ -9,6 +9,29 @@ from services import document_service, export_service
 from utils.formatters import case_label, fmt_number
 
 
+STAGE_LABELS = {
+    '주문 접수': '주문 접수',
+    '주문 입력': '주문 접수',
+    '제품 준비': '제품 준비',
+    '실출고 입력': '출고 대기',
+    '출고 대기': '출고 대기',
+    '패킹': '패킹',
+    '박스 패킹': '패킹',
+    '패킹 완료': '패킹',
+    '국내배송': '국내배송',
+    '선적 준비': '선적 준비',
+    '선적 완료': '선적 완료',
+    '완료': '완료',
+    '취소': '주문 취소',
+    '주문 취소': '주문 취소',
+}
+
+
+def display_stage(value: object) -> str:
+    stage = str(value or '').strip()
+    return STAGE_LABELS.get(stage, stage or '-')
+
+
 def render_document(case, packed, actual_rows) -> None:
     has_packing = bool(packed)
 
@@ -22,7 +45,7 @@ def render_document(case, packed, actual_rows) -> None:
         detail_label = '배송 상세'
         detail_value = '-'
 
-    status_text = '배송 완료' if case['actual_ship_date'] and case['domestic_method'] else '작성 중'
+    status_text = display_stage(case['stage'])
     note_html = ''
     if case['note']:
         note_html = f'<div class="note-box"><b>특이사항</b><div>{html.escape(case["note"])}</div></div>'
@@ -91,13 +114,13 @@ body{{margin:0;padding:8px;background:#f4f7fa;color:#172033;font-family:-apple-s
 @media print{{body{{background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{border:0;border-radius:0;box-shadow:none;max-width:none}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} .wrap{{overflow:visible}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
-<div class="document"><div class="header"><div><div class="sub">EXPORT LOGISTICS DOCUMENT</div><div class="title">국내배송 및 패킹 내역서</div><div class="sub">Domestic Delivery & Packing Summary</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b><br>{status_text}</div></div>
+<div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b><br>{html.escape(status_text)}</div></div>
 <div class="body"><div class="section">EXPORT INFORMATION</div><div class="grid">
 <div class="cell"><div class="label">국가 / Country</div><div class="value">{html.escape(case['country'] or '-')}</div></div>
 <div class="cell"><div class="label">바이어 / Buyer</div><div class="value">{html.escape(case['buyer'] or '-')}</div></div>
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
 <div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
-<div class="section">DOMESTIC DELIVERY</div><div class="grid"><div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div><div class="cell" style="grid-column:span 2"><div class="label">{detail_label}</div><div class="value">{html.escape(detail_value)}</div></div><div class="cell"><div class="label">현재 단계</div><div class="value">{html.escape(case['stage'] or '-')}</div></div></div>
+<div class="section">DOMESTIC DELIVERY</div><div class="grid"><div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div><div class="cell" style="grid-column:span 2"><div class="label">{detail_label}</div><div class="value">{html.escape(detail_value)}</div></div><div class="cell"><div class="label">현재 단계</div><div class="value">{html.escape(status_text)}</div></div></div>
 <div class="section">{'PACKING SUMMARY' if has_packing else 'SHIPPING SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>실제 제품 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>실제 출고수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
 <div class="section">{section_title}</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}<div class="footer"><span>주식회사 노투스팜 · 수출관리 시스템</span><span>Generated from Export Management System</span></div></div></div></body></html>'''
 
