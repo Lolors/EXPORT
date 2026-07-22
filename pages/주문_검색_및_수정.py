@@ -41,24 +41,20 @@ st.markdown(
         padding: 1.25rem 1.35rem 1.35rem;
         margin-top: 0.5rem;
     }
-    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor),
     div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) {
-        align-items: flex-start !important;
+        align-items: center;
         justify-content: center;
     }
-    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) > div,
     div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) > div {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: center;
     }
-    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stButton"],
-    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stButton"] > button {
-        margin-top: 0 !important;
-        transform: none !important;
-    }
-    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stCheckbox"] {
-        margin-top: 0.2rem;
+    .basic-action-slot {
+        height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
@@ -176,11 +172,12 @@ with st.container():
     new_transport = info_cols[2].selectbox('운송방식', TRANSPORT_MODES, index=transport_index)
     new_note = info_cols[3].text_input('비고', value=case['note'])
 
-    save_col, cancel_col, confirm_col = st.columns([2, 2, 6], vertical_alignment='top')
+    save_col, cancel_col, confirm_col = st.columns([2, 2, 6])
     with save_col:
-        st.markdown('<span id="basic-action-row-anchor"></span>', unsafe_allow_html=True)
+        st.markdown('<div class="basic-action-slot"></div>', unsafe_allow_html=True)
         save_basic = st.button('기본 정보 저장', use_container_width=True, key=f'save_basic_{case_id}')
     with cancel_col:
+        st.markdown('<div class="basic-action-slot"></div>', unsafe_allow_html=True)
         cancel_order = st.button(
             '주문 취소',
             type='secondary',
@@ -189,6 +186,7 @@ with st.container():
             key=f'cancel_order_{case_id}',
         )
     with confirm_col:
+        st.markdown('<div class="basic-action-slot"></div>', unsafe_allow_html=True)
         cancel_confirmed = st.checkbox(
             f"{case['export_no']} 주문 취소를 확인합니다.",
             key=f'cancel_confirm_{case_id}',
