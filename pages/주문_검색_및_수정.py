@@ -36,8 +36,8 @@ st.markdown(
         max-width: 56vw;
     }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-results-anchor) {
-        width: 100vw;
-        max-width: 100vw;
+        width: 80vw;
+        max-width: 80vw;
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
