@@ -5,10 +5,6 @@ import streamlit as st
 import db
 
 
-st.set_page_config(page_title='실출고 입력', page_icon='📦', layout='wide')
-db.init_db()
-
-
 def ensure_order_item_link_column() -> None:
     columns = {row['name'] for row in db.rows('PRAGMA table_info(shipment_items)')}
     if 'order_item_id' not in columns:
@@ -53,7 +49,7 @@ st.title('실출고 입력')
 st.caption('주문품목별로 실제 출고제품의 사업장, 제품명, 제조번호, 유통기한과 수량을 연결합니다.')
 
 cases = db.rows(
-    "SELECT * FROM export_cases WHERE status<>'취소' AND stage NOT IN ('완료','취소') ORDER BY expected_ship_date, created_at"
+    "SELECT * FROM export_cases WHERE status<>'취소' AND stage NOT IN ('완료','취소') ORDER BY created_at"
 )
 if not cases:
     st.info('진행 중인 수출 건이 없습니다.')
@@ -87,26 +83,25 @@ if unlinked_count:
         st.dataframe(
             [
                 {
-                    '사업장': row['business_unit'] or '',
-                    '실제 제품명': row['product_name'] or '',
-                    '제조번호': row['lot_no'] or '',
-                    '유통기한': row['expiry_date'] or '',
-                    '출고수량': row['requested_qty'] or 0,
-                    '박스번호': row['box_no'] if row['box_no'] is not None else '',
+                    '사업장': row['business_unit'],
+                    '실제 제품명': row['product_name'],
+                    '제조번호': row['lot_no'],
+                    '유통기한': row['expiry_date'],
+                    '출고수량': row['requested_qty'],
+                    '박스번호': row['box_no'],
                 }
                 for row in legacy_rows
             ],
             hide_index=True,
             use_container_width=True,
         )
-        confirm_legacy_delete = st.checkbox(
-            f'주문품목에 연결되지 않은 구형 실출고 데이터 {unlinked_count}개를 삭제합니다.',
-            key=f'confirm_delete_legacy_{case_id}',
+        delete_confirmed = st.checkbox(
+            f'위 구형 미연결 데이터 {unlinked_count}개를 삭제합니다.',
+            key=f'delete_legacy_confirm_{case_id}',
         )
         if st.button(
             '구형 미연결 데이터 삭제',
-            type='primary',
-            disabled=not confirm_legacy_delete,
+            disabled=not delete_confirmed,
             key=f'delete_legacy_{case_id}',
         ):
             db.execute(
@@ -116,14 +111,15 @@ if unlinked_count:
             db.execute(
                 '''DELETE FROM boxes
                    WHERE case_id=?
-                     AND NOT EXISTS (
+                     AND NOT EXISTS(
                          SELECT 1 FROM shipment_items s
                          WHERE s.case_id=boxes.case_id AND s.box_no=boxes.box_no
                      )''',
                 (case_id,),
             )
+            db.sync_case_folder(case_id)
             db.add_history(case_id, '구형 미연결 실출고 삭제', f'{unlinked_count}개 행')
-            st.success(f'구형 미연결 실출고 데이터 {unlinked_count}개를 삭제했습니다.')
+            st.success('구형 미연결 실출고 데이터를 삭제했습니다.')
             st.rerun()
 
 for order in orders:
@@ -224,6 +220,7 @@ for order in orders:
                     "UPDATE export_cases SET stage='실출고 입력', updated_at=? WHERE id=?",
                     (db.now_text(), case_id),
                 )
+                db.sync_case_folder(case_id)
                 db.add_history(
                     case_id,
                     '주문품목별 실출고 저장',
