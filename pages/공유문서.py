@@ -74,7 +74,7 @@ def render_document(case, packed, actual_rows) -> None:
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{size}</td>')
                 rows_html.append('</tr>')
 
-        table_header = '<tr><th>CTN</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>무게</th><th>CTN 사이즈</th></tr>'
+        table_header = '<tr><th>CTN No.</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>GW (kg)</th><th>CTN 사이즈</th></tr>'
         section_title = 'PACKING DETAIL'
         first_summary = f'{len({row["box_no"] for row in packed})} CTN'
         first_label = '총 CTN 수'
