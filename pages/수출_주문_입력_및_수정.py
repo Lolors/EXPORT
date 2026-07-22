@@ -18,8 +18,8 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
-        width: 60vw;
-        max-width: 60vw;
+        width: 80vw;
+        max-width: 80vw;
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
