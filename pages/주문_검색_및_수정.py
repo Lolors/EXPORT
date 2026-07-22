@@ -52,9 +52,18 @@ st.markdown(
         align-items: center;
         justify-content: center;
     }
+    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stButton"] {
+        margin-top: 0 !important;
+        transform: translateY(0) !important;
+    }
     div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stCheckbox"] {
         display: flex;
+        align-items: center;
         justify-content: center;
+        min-height: 2.75rem;
+    }
+    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stCheckbox"] > label {
+        margin: 0 !important;
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
@@ -172,20 +181,23 @@ with st.container():
     new_transport = info_cols[2].selectbox('운송방식', TRANSPORT_MODES, index=transport_index)
     new_note = info_cols[3].text_input('비고', value=case['note'])
 
-    save_col, cancel_col, confirm_col = st.columns([2, 2, 6])
+    save_col, cancel_col, confirm_col = st.columns([2, 2, 6], vertical_alignment='center')
     save_col.markdown('<span id="basic-action-row-anchor"></span>', unsafe_allow_html=True)
-    save_basic = save_col.button('기본 정보 저장', use_container_width=True, key=f'save_basic_{case_id}')
-    cancel_order = cancel_col.button(
-        '주문 취소',
-        type='secondary',
-        disabled=not st.session_state.get(f'cancel_confirm_{case_id}', False),
-        use_container_width=True,
-        key=f'cancel_order_{case_id}',
-    )
-    cancel_confirmed = confirm_col.checkbox(
-        f"{case['export_no']} 주문 취소를 확인합니다.",
-        key=f'cancel_confirm_{case_id}',
-    )
+    with save_col:
+        save_basic = st.button('기본 정보 저장', use_container_width=True, key=f'save_basic_{case_id}')
+    with cancel_col:
+        cancel_order = st.button(
+            '주문 취소',
+            type='secondary',
+            disabled=not st.session_state.get(f'cancel_confirm_{case_id}', False),
+            use_container_width=True,
+            key=f'cancel_order_{case_id}',
+        )
+    with confirm_col:
+        cancel_confirmed = st.checkbox(
+            f"{case['export_no']} 주문 취소를 확인합니다.",
+            key=f'cancel_confirm_{case_id}',
+        )
 
     if save_basic:
         if not new_country.strip():
