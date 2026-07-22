@@ -43,6 +43,21 @@ st.markdown(
         padding: 1.25rem 1.35rem 1.35rem;
         margin-top: 0.5rem;
     }
+    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor),
+    div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) {
+        align-items: center;
+        justify-content: center;
+    }
+    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) > div,
+    div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) > div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stCheckbox"] {
+        display: flex;
+        justify-content: center;
+    }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-edit-panel-anchor) {
@@ -163,6 +178,7 @@ with st.container():
     new_note = info_cols[3].text_input('비고', value=case['note'])
 
     save_col, cancel_col, confirm_col = st.columns([2, 2, 6])
+    save_col.markdown('<span id="basic-action-row-anchor"></span>', unsafe_allow_html=True)
     save_basic = save_col.button('기본 정보 저장', use_container_width=True, key=f'save_basic_{case_id}')
     cancel_confirmed = confirm_col.checkbox(
         f"{case['export_no']} 주문 취소를 확인합니다.",
@@ -206,7 +222,15 @@ with st.container():
         st.caption('실출고가 연결된 행은 삭제할 수 없지만 제품명·수량·단위는 수정할 수 있습니다.')
 
     edited = order_editor(existing, key=f'orders_{case_id}')
-    if st.button('목록 저장' if historical_case else '주문 목록 저장', type='primary', key=f'save_orders_{case_id}'):
+    save_left, save_center, save_right = st.columns([4, 2, 4])
+    save_center.markdown('<span id="order-save-row-anchor"></span>', unsafe_allow_html=True)
+    save_orders = save_center.button(
+        '목록 저장' if historical_case else '주문 목록 저장',
+        type='primary',
+        use_container_width=True,
+        key=f'save_orders_{case_id}',
+    )
+    if save_orders:
         try:
             order_service.save_order_items(case_id, edited)
         except ValueError as exc:
