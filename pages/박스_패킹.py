@@ -36,7 +36,7 @@ case_id = options[st.selectbox('수출 건 선택', list(options), key='actual_p
 case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
 
 items = db.rows(
-    '''SELECT id, business_unit, location, product_name, lot_no, expiry_date,
+    '''SELECT id, business_unit, product_name, lot_no, expiry_date,
               requested_qty, box_no
        FROM shipment_items
        WHERE case_id=?
@@ -45,7 +45,7 @@ items = db.rows(
 )
 
 if not items:
-    st.warning('연결된 실제 출고제품이 없습니다. 먼저 실출고 연결 입력에서 실제 제품을 등록하세요.')
+    st.warning('연결된 실제 출고제품이 없습니다. 먼저 실출고 입력에서 실제 제품을 등록하세요.')
     st.stop()
 
 unpacked_count = sum(1 for item in items if item['box_no'] is None)
@@ -61,18 +61,18 @@ m4.metric('사용 박스', f'{box_count}개')
 
 st.divider()
 st.markdown('#### 실제 출고제품 선택')
-st.caption('사업장·로케이션·실제 제품명·제조번호·유통기한·출고수량을 확인한 뒤 박스번호를 배정하세요.')
+st.caption('사업장·실제 제품명·제조번호·유통기한·출고수량을 확인한 뒤 박스번호를 배정하세요.')
 
-header = st.columns([0.55, 1.15, 1.15, 2.5, 1.35, 1.35, 0.9, 1.0])
+header = st.columns([0.55, 1.15, 2.5, 1.35, 1.35, 0.9, 1.0])
 for column, title in zip(
     header,
-    ['선택', '사업장', '로케이션', '실제 제품명', '제조번호', '유통기한', '출고수량', '현재 박스'],
+    ['선택', '사업장', '실제 제품명', '제조번호', '유통기한', '출고수량', '현재 박스'],
 ):
     column.markdown(f'**{title}**')
 
 selected_ids: list[int] = []
 for item in items:
-    cols = st.columns([0.55, 1.15, 1.15, 2.5, 1.35, 1.35, 0.9, 1.0])
+    cols = st.columns([0.55, 1.15, 2.5, 1.35, 1.35, 0.9, 1.0])
     selected = cols[0].checkbox(
         '선택',
         key=f'pack_select_{case_id}_{item["id"]}',
@@ -81,12 +81,11 @@ for item in items:
     if selected:
         selected_ids.append(int(item['id']))
     cols[1].write(item['business_unit'] or '-')
-    cols[2].write(item['location'] or '-')
-    cols[3].write(item['product_name'] or '-')
-    cols[4].write(item['lot_no'] or '-')
-    cols[5].write(item['expiry_date'] or '-')
-    cols[6].write(fmt_number(item['requested_qty']))
-    cols[7].write(f"BOX {item['box_no']}" if item['box_no'] is not None else '미패킹')
+    cols[2].write(item['product_name'] or '-')
+    cols[3].write(item['lot_no'] or '-')
+    cols[4].write(item['expiry_date'] or '-')
+    cols[5].write(fmt_number(item['requested_qty']))
+    cols[6].write(f"BOX {item['box_no']}" if item['box_no'] is not None else '미패킹')
 
 st.divider()
 next_box_row = db.row('SELECT COALESCE(MAX(box_no),0)+1 AS n FROM boxes WHERE case_id=?', (case_id,))
@@ -138,7 +137,7 @@ if not boxes:
 else:
     for box in boxes:
         box_items = db.rows(
-            '''SELECT business_unit, location, product_name, lot_no, expiry_date, requested_qty
+            '''SELECT business_unit, product_name, lot_no, expiry_date, requested_qty
                FROM shipment_items
                WHERE case_id=? AND box_no=?
                ORDER BY id''',
@@ -154,7 +153,6 @@ else:
                     [
                         {
                             '사업장': item['business_unit'],
-                            '로케이션': item['location'],
                             '실제 제품명': item['product_name'],
                             '제조번호': item['lot_no'],
                             '유통기한': item['expiry_date'],
