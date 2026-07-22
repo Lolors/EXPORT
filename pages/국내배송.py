@@ -4,58 +4,49 @@ from datetime import date
 
 import streamlit as st
 
-import db
+from services import delivery_service, export_service, folder_service, history_service
+from utils.dates import parse_date
+from utils.formatters import case_label, fmt_number
 
 
 def date_value(value: str | None):
-    parsed = db.parse_date(value)
+    parsed = parse_date(value)
     return parsed.date() if parsed else date.today()
 
 
-def fmt_number(value) -> str:
-    try:
-        return f'{float(value):g}'
-    except (TypeError, ValueError):
-        return '0'
-
-
-def case_label(case) -> str:
-    buyer = f" · {case['buyer']}" if case['buyer'] else ''
-    return f"{case['export_no']} · {case['country']}{buyer} · {case['transport_mode']} · {case['stage']}"
-
-
-def order_rows(case_id: int):
-    return db.rows(
-        '''SELECT o.id, o.product_name, o.quantity, o.unit,
-                  COALESCE(SUM(s.requested_qty),0) AS linked_qty
-           FROM order_items o
-           LEFT JOIN shipment_items s ON s.order_item_id=o.id
-           WHERE o.case_id=?
-           GROUP BY o.id, o.product_name, o.quantity, o.unit
-           ORDER BY o.id''',
-        (case_id,),
-    )
+def order_state(ordered: float, linked: float) -> tuple[str, str]:
+    if ordered > 0 and linked >= ordered:
+        return '🟢', '확보 완료'
+    if linked > 0:
+        return '🟡', '일부 확보'
+    return '🔴', '미확보'
 
 
 st.title('국내배송')
 st.caption('국내배송 방식과 송장 또는 배송기사 정보를 입력합니다.')
 
-cases = db.rows(
-    "SELECT * FROM export_cases WHERE status<>'취소' AND stage<>'취소' ORDER BY COALESCE(NULLIF(actual_ship_date,''),created_at) DESC"
-)
+cases = export_service.list_cases()
 if not cases:
     st.info('표시할 수출 건이 없습니다.')
     st.stop()
 
-options = {case_label(case): int(case['id']) for case in cases}
+options = {
+    f"{case_label(case)} · {case['transport_mode']}": int(case['id'])
+    for case in cases
+}
 case_id = options[st.selectbox('수출 건 선택', list(options), key='delivery_case')]
-case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
-orders = order_rows(case_id)
+case = export_service.get_case(case_id)
+orders = export_service.get_order_items_with_actual(case_id)
 
-method = st.radio('배송 방식', ['로젠택배', '퀵배송'], index=1 if case['domestic_method']=='퀵배송' else 0, horizontal=True)
+method = st.radio(
+    '배송 방식',
+    ['로젠택배', '퀵배송'],
+    index=1 if case['domestic_method'] == '퀵배송' else 0,
+    horizontal=True,
+)
 with st.form(f'delivery_{case_id}_{method}'):
     actual_date = st.date_input('국내배송 일자', value=date_value(case['actual_ship_date']))
-    tracking = st.text_input('송장번호', value=case['tracking_no'] or '') if method=='로젠택배' else ''
+    tracking = st.text_input('송장번호', value=case['tracking_no'] or '') if method == '로젠택배' else ''
     if method == '퀵배송':
         c1, c2 = st.columns(2)
         driver = c1.text_input('배송기사 이름', value=case['driver_name'] or '')
@@ -65,23 +56,25 @@ with st.form(f'delivery_{case_id}_{method}'):
     submitted = st.form_submit_button('배송정보 저장 및 완료 처리', type='primary')
 
 if submitted:
-    db.execute(
-        "UPDATE export_cases SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,actual_ship_date=?,stage='국내배송',status='완료',updated_at=? WHERE id=?",
-        (method, tracking, driver, phone, str(actual_date), db.now_text(), case_id),
+    delivery_service.save_delivery(
+        case_id,
+        method=method,
+        actual_ship_date=str(actual_date),
+        tracking_no=tracking,
+        driver_name=driver,
+        driver_phone=phone,
     )
-    folder = db.sync_case_folder(case_id)
-    db.add_history(case_id, '국내배송 완료', f'{method} / {folder}')
+    folder = folder_service.sync_case_folder(case_id)
+    history_service.add(case_id, '국내배송 완료', f'{method} / {folder}')
     st.success('저장했습니다.')
     st.rerun()
 
 st.markdown('#### 주문품목별 확보 현황')
 for order in orders:
     ordered = float(order['quantity'] or 0)
-    linked = float(order['linked_qty'] or 0)
-    if ordered > 0 and linked >= ordered:
-        icon, label = '🟢', '확보 완료'
-    elif linked > 0:
-        icon, label = '🟡', '일부 확보'
-    else:
-        icon, label = '🔴', '미확보'
-    st.write(f"{icon} **{order['product_name']}** — {fmt_number(linked)} / {fmt_number(ordered)} {order['unit'] or 'EA'} · {label}")
+    linked = float(order['actual_qty'] or 0)
+    icon, label = order_state(ordered, linked)
+    st.write(
+        f"{icon} **{order['product_name']}** — "
+        f"{fmt_number(linked)} / {fmt_number(ordered)} {order['unit'] or 'EA'} · {label}"
+    )
