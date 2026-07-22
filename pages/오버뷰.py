@@ -67,6 +67,14 @@ def render_progress_bar(progress: float) -> None:
     )
 
 
+def order_status_icon(order_qty: float, received_qty: float) -> str:
+    if order_qty > 0 and received_qty >= order_qty:
+        return '🟢'
+    if received_qty > 0:
+        return '🟡'
+    return '🔴'
+
+
 cases = active_cases()
 if not cases:
     st.info('현재 진행 중인 주문이 없습니다.')
@@ -108,11 +116,12 @@ for country in sorted(country_groups):
                 st.caption('주문품목이 아직 입력되지 않았습니다.')
                 continue
 
-            for order in orders:
+            for index, order in enumerate(orders, start=1):
                 order_qty = float(order['quantity'] or 0)
                 received_qty = float(order['actual_qty'] or 0)
+                status_icon = order_status_icon(order_qty, received_qty)
                 st.markdown(
-                    f"**{order['product_name']}**  "
+                    f"{index}. {status_icon} **{order['product_name']}**  "
                     f"주문 {fmt_number(order_qty)} {order['unit']} · "
                     f"입고 {fmt_number(received_qty)} {order['unit']}"
                 )
