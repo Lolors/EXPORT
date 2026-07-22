@@ -16,7 +16,7 @@ def save_delivery(
     db.execute(
         """UPDATE export_cases
            SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,
-               actual_ship_date=?,stage='국내배송',status='완료',updated_at=?
+               actual_ship_date=?,stage='국내배송',status='진행중',updated_at=?
            WHERE id=?""",
         (
             method,
