@@ -8,12 +8,11 @@ import streamlit as st
 import db
 
 
-st.set_page_config(page_title='내 폴더 설정', page_icon='📁', layout='wide')
+st.set_page_config(page_title='내 폴더', page_icon='📁', layout='wide')
 db.init_db()
 
 
 def browse_folder() -> str:
-    """Streamlit이 실행되는 Windows PC에서 폴더 선택 창을 엽니다."""
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -30,13 +29,11 @@ def browse_folder() -> str:
 
 
 def check_folder_path(path_text: str) -> tuple[bool, str]:
-    """USB·외장 드라이브 연결 여부와 폴더 쓰기 가능 여부를 확인합니다."""
     path_text = path_text.strip()
     if not path_text:
         return False, '내 폴더 위치를 입력하거나 선택하세요.'
 
     path = Path(path_text).expanduser()
-
     if os.name == 'nt' and path.drive:
         drive_root = Path(f'{path.drive}\\')
         if not drive_root.exists():
@@ -48,12 +45,10 @@ def check_folder_path(path_text: str) -> tuple[bool, str]:
     return True, message
 
 
-st.title('내 폴더 설정')
-st.caption('수출 관련 문서와 출고사진을 저장할 최상위 폴더를 설정합니다.')
+st.title('내 폴더')
+st.caption('수출 관련 문서와 출고사진을 저장할 최상위 폴더를 설정하고 전체 수출 폴더를 정리합니다.')
 
 current_root = db.get_setting('shared_root').strip()
-
-# text_input이 만들어지기 전에만 값을 초기화하거나 교체합니다.
 if 'folder_path_input' not in st.session_state:
     st.session_state['folder_path_input'] = current_root
 if 'pending_folder_path' in st.session_state:
@@ -71,7 +66,6 @@ with c2:
     if st.button('폴더 찾아보기', use_container_width=True):
         selected = browse_folder()
         if selected:
-            # 다음 rerun 시작 시 text_input 생성 전에 반영합니다.
             st.session_state['pending_folder_path'] = selected
             st.rerun()
 
@@ -130,3 +124,33 @@ st.caption(
     '폴더 찾아보기는 Streamlit이 실행되는 컴퓨터에서만 동작합니다. '
     'USB를 분리하면 저장할 수 없으므로 작업 전에 현재 연결 상태를 확인하세요.'
 )
+
+st.divider()
+st.markdown('#### 수출 폴더 관리')
+st.caption('모든 수출 건의 폴더를 현재 국가 / 연도 / 폴더명 규칙에 맞게 다시 생성하거나 정리합니다.')
+folder_confirm = st.checkbox(
+    '기존 폴더를 현재 구조로 이동·정리하는 것에 동의합니다.',
+    key='folder_rebuild_confirm',
+)
+
+if st.button('모든 수출 폴더 재생성·정리', type='primary', disabled=not folder_confirm):
+    all_cases = db.rows('SELECT id, export_no FROM export_cases ORDER BY id')
+    successes: list[str] = []
+    failures: list[str] = []
+    progress = st.progress(0, text='수출 폴더를 확인하고 있습니다.')
+    total = max(len(all_cases), 1)
+
+    for index, case in enumerate(all_cases, start=1):
+        try:
+            folder = db.sync_case_folder(int(case['id']))
+            successes.append(f"{case['export_no']} → {folder}")
+        except Exception as exc:
+            failures.append(f"{case['export_no']}: {exc}")
+        progress.progress(index / total, text=f'{index}/{len(all_cases)} 처리 중')
+
+    progress.empty()
+    if successes:
+        db.add_history(None, '전체 수출 폴더 재정리', f'{len(successes)}건 완료 / {len(failures)}건 실패')
+        st.success(f'{len(successes)}건의 폴더를 생성·정리했습니다.')
+    if failures:
+        st.error('일부 폴더를 처리하지 못했습니다.\n\n' + '\n'.join(f'- {item}' for item in failures))
