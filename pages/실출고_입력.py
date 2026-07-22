@@ -72,7 +72,59 @@ unlinked_count = db.row(
     (case_id,),
 )['count']
 if unlinked_count:
-    st.warning(f'구형 실출고 데이터 중 주문품목에 연결되지 않은 행이 {unlinked_count}개 있습니다. 최신 입력 방식으로 다시 연결해 주세요.')
+    st.warning(
+        f'구형 실출고 데이터 중 주문품목에 연결되지 않은 행이 {unlinked_count}개 있습니다. '
+        '이 데이터는 현재 주문품목별 실출고 화면에 표시되지 않으며, 필요하지 않다면 아래에서 삭제할 수 있습니다.'
+    )
+    with st.expander('구형 미연결 실출고 데이터 정리', expanded=True):
+        legacy_rows = db.rows(
+            '''SELECT id, business_unit, product_name, lot_no, expiry_date, requested_qty, box_no
+               FROM shipment_items
+               WHERE case_id=? AND order_item_id IS NULL
+               ORDER BY id''',
+            (case_id,),
+        )
+        st.dataframe(
+            [
+                {
+                    '사업장': row['business_unit'] or '',
+                    '실제 제품명': row['product_name'] or '',
+                    '제조번호': row['lot_no'] or '',
+                    '유통기한': row['expiry_date'] or '',
+                    '출고수량': row['requested_qty'] or 0,
+                    '박스번호': row['box_no'] if row['box_no'] is not None else '',
+                }
+                for row in legacy_rows
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+        confirm_legacy_delete = st.checkbox(
+            f'주문품목에 연결되지 않은 구형 실출고 데이터 {unlinked_count}개를 삭제합니다.',
+            key=f'confirm_delete_legacy_{case_id}',
+        )
+        if st.button(
+            '구형 미연결 데이터 삭제',
+            type='primary',
+            disabled=not confirm_legacy_delete,
+            key=f'delete_legacy_{case_id}',
+        ):
+            db.execute(
+                'DELETE FROM shipment_items WHERE case_id=? AND order_item_id IS NULL',
+                (case_id,),
+            )
+            db.execute(
+                '''DELETE FROM boxes
+                   WHERE case_id=?
+                     AND NOT EXISTS (
+                         SELECT 1 FROM shipment_items s
+                         WHERE s.case_id=boxes.case_id AND s.box_no=boxes.box_no
+                     )''',
+                (case_id,),
+            )
+            db.add_history(case_id, '구형 미연결 실출고 삭제', f'{unlinked_count}개 행')
+            st.success(f'구형 미연결 실출고 데이터 {unlinked_count}개를 삭제했습니다.')
+            st.rerun()
 
 for order in orders:
     order_id = int(order['id'])
