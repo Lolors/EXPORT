@@ -37,7 +37,7 @@ def order_state(order_qty: float, linked_qty: float) -> tuple[str, str]:
 
 def linked_rows(order_item_id: int):
     return db.rows(
-        '''SELECT id, business_unit, location, product_name, lot_no, expiry_date,
+        '''SELECT id, business_unit, product_name, lot_no, expiry_date,
                   requested_qty, box_no
            FROM shipment_items
            WHERE order_item_id=?
@@ -50,7 +50,7 @@ ensure_order_item_link_column()
 pd = __import__('pandas')
 
 st.title('실출고 입력')
-st.caption('주문품목별로 실제 출고제품의 사업장, 로케이션, 제품명, 제조번호, 유통기한과 수량을 연결합니다.')
+st.caption('주문품목별로 실제 출고제품의 사업장, 제품명, 제조번호, 유통기한과 수량을 연결합니다.')
 
 cases = db.rows(
     "SELECT * FROM export_cases WHERE status<>'취소' AND stage NOT IN ('완료','취소') ORDER BY expected_ship_date, created_at"
@@ -92,7 +92,6 @@ for order in orders:
             source = pd.DataFrame([
                 {
                     '사업장': row['business_unit'] or '',
-                    '로케이션': row['location'] or '',
                     '실제 제품명': row['product_name'] or '',
                     '제조번호': row['lot_no'] or '',
                     '유통기한': row['expiry_date'] or '',
@@ -103,7 +102,6 @@ for order in orders:
         else:
             source = pd.DataFrame([{
                 '사업장': '',
-                '로케이션': '',
                 '실제 제품명': '',
                 '제조번호': '',
                 '유통기한': '',
@@ -118,7 +116,6 @@ for order in orders:
             key=f'linked_order_editor_{order_id}',
             column_config={
                 '사업장': st.column_config.TextColumn('사업장'),
-                '로케이션': st.column_config.TextColumn('로케이션'),
                 '실제 제품명': st.column_config.TextColumn('실제 제품명', required=True),
                 '제조번호': st.column_config.TextColumn('제조번호'),
                 '유통기한': st.column_config.TextColumn('유통기한', help='예: 2028-07-01'),
@@ -138,7 +135,7 @@ for order in orders:
                 qty = float(row.get('출고수량', 0) or 0)
                 has_any_value = any(
                     str(row.get(column, '') or '').strip()
-                    for column in ['사업장', '로케이션', '실제 제품명', '제조번호', '유통기한']
+                    for column in ['사업장', '실제 제품명', '제조번호', '유통기한']
                 ) or qty > 0
                 if not has_any_value:
                     continue
@@ -149,7 +146,7 @@ for order in orders:
                     case_id,
                     order_id,
                     str(row.get('사업장', '') or '').strip(),
-                    str(row.get('로케이션', '') or '').strip(),
+                    '',
                     actual_name,
                     str(row.get('제조번호', '') or '').strip(),
                     str(row.get('유통기한', '') or '').strip(),
