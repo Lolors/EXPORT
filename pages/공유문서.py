@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import html
+import re
 
+import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from services import document_service, export_service
-from utils.formatters import case_label, fmt_number
+from services import document_service, export_service, order_service
+from utils.formatters import fmt_number
 
 
 STAGE_LABELS = {
@@ -31,6 +33,17 @@ STAGE_LABELS = {
 def display_stage(value: object) -> str:
     stage = str(value or '').strip()
     return STAGE_LABELS.get(stage, stage or '-')
+
+
+def summarize_product_names(raw_names: object) -> str:
+    names = [
+        name.strip()
+        for name in re.split(r'[,\n]+', str(raw_names or ''))
+        if name.strip()
+    ]
+    if len(names) <= 2:
+        return ', '.join(names)
+    return f"{', '.join(names[:2])} ~ 외 {len(names) - 2}품목"
 
 
 def render_document(case, packed, actual_rows) -> None:
@@ -166,18 +179,124 @@ body{{padding:8px}}
 
 
 st.title('공유문서')
-st.caption('국내배송 정보와 실제 출고제품 또는 패킹 내역을 문서로 출력합니다.')
+st.caption('검색 결과에서 출력할 수출 건 한 건을 선택하세요.')
 
-cases = export_service.list_cases()
+cases = order_service.list_editable_cases()
 if not cases:
     st.info('표시할 수출 건이 없습니다.')
     st.stop()
 
-options = {
-    f"{case['transport_mode']} · {case_label(case)}": int(case['id'])
-    for case in cases
-}
-case_id = options[st.selectbox('수출 건 선택', list(options), key='document_case')]
+st.markdown(
+    '''
+    <style>
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#document-case-filter-anchor) {
+        width: 56vw;
+        max-width: 56vw;
+    }
+    @media (max-width: 900px) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#document-case-filter-anchor) {
+            width: 100%;
+            max-width: 100%;
+        }
+    }
+    </style>
+    ''',
+    unsafe_allow_html=True,
+)
+
+with st.container():
+    st.markdown('<span id="document-case-filter-anchor"></span>', unsafe_allow_html=True)
+
+    years = sorted({
+        int(str(case['actual_ship_date'] or case['created_at'])[:4])
+        for case in cases
+        if str(case['actual_ship_date'] or case['created_at'])[:4].isdigit()
+    }, reverse=True)
+
+    filter_cols = st.columns([1.5, 1.5, 3, 4])
+    selected_year = filter_cols[0].selectbox('연도', ['전체'] + years, key='document_case_year')
+
+    if selected_year == '전체':
+        month_options: list[str | int] = ['전체']
+    else:
+        month_values = sorted({
+            int(str(case['actual_ship_date'] or case['created_at'])[5:7])
+            for case in cases
+            if str(case['actual_ship_date'] or case['created_at']).startswith(str(selected_year))
+            and str(case['actual_ship_date'] or case['created_at'])[5:7].isdigit()
+        })
+        month_options = ['전체'] + month_values
+
+    selected_month = filter_cols[1].selectbox('월', month_options, key='document_case_month')
+    countries = sorted({str(case['country']).strip() for case in cases if str(case['country']).strip()})
+    selected_country = filter_cols[2].selectbox('국가', ['전체'] + countries, key='document_case_country')
+    product_query = filter_cols[3].text_input('제품명 검색', key='document_case_product_search').strip().casefold()
+
+filtered_cases = []
+for case in cases:
+    raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
+    case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
+    case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
+
+    if selected_year != '전체' and case_year != selected_year:
+        continue
+    if selected_month != '전체' and case_month != selected_month:
+        continue
+    if selected_country != '전체' and str(case['country']).strip() != selected_country:
+        continue
+    if product_query and product_query not in str(case['product_names'] or '').casefold():
+        continue
+    filtered_cases.append(case)
+
+if not filtered_cases:
+    st.warning('조건에 맞는 수출 건이 없습니다.')
+    st.stop()
+
+selected_case_id = st.session_state.get('document_case_id')
+selection_rows = []
+for case in filtered_cases:
+    raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
+    selection_rows.append({
+        '선택': int(case['id']) == selected_case_id,
+        '_case_id': int(case['id']),
+        '등록일자': raw_date[:10],
+        '수출번호': case['export_no'],
+        '국가': case['country'],
+        '바이어': case['buyer'] or '',
+        '운송방식': case['transport_mode'],
+        '단계': case['stage'],
+        '주문제품': summarize_product_names(case['product_names']),
+    })
+
+selection_df = pd.DataFrame(selection_rows)
+edited_selection = st.data_editor(
+    selection_df,
+    hide_index=True,
+    disabled=['_case_id', '등록일자', '수출번호', '국가', '바이어', '운송방식', '단계', '주문제품'],
+    column_config={
+        '선택': st.column_config.CheckboxColumn('선택', help='공유문서를 출력할 수출 건 한 건만 체크하세요.'),
+        '_case_id': None,
+        '등록일자': st.column_config.TextColumn('등록일자'),
+        '수출번호': st.column_config.TextColumn('수출번호'),
+        '국가': st.column_config.TextColumn('국가'),
+        '바이어': st.column_config.TextColumn('바이어'),
+        '운송방식': st.column_config.TextColumn('운송방식'),
+        '단계': st.column_config.TextColumn('단계'),
+        '주문제품': st.column_config.TextColumn('주문제품'),
+    },
+    key='document_case_table',
+)
+
+checked_rows = edited_selection[edited_selection['선택'] == True]
+if checked_rows.empty:
+    st.info('공유문서를 출력할 수출 건의 선택 칸을 체크하세요.')
+    st.stop()
+if len(checked_rows) > 1:
+    st.warning('공유문서를 출력할 수출 건은 한 건만 체크할 수 있습니다.')
+    st.stop()
+
+case_id = int(checked_rows.iloc[0]['_case_id'])
+st.session_state['document_case_id'] = case_id
 case = export_service.get_case(case_id)
 packed, actual_rows = document_service.get_document_data(case_id)
 render_document(case, packed, actual_rows)
