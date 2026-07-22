@@ -117,12 +117,10 @@ if not filtered_cases:
     st.stop()
 
 with st.container():
-    selected_case_id = st.session_state.get('order_case_id')
     selection_rows = []
     for case in filtered_cases:
         raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
         selection_rows.append({
-            '선택': int(case['id']) == selected_case_id,
             '_case_id': int(case['id']),
             '등록일자': raw_date[:10],
             '수출번호': case['export_no'],
@@ -134,12 +132,13 @@ with st.container():
         })
 
     selection_df = pd.DataFrame(selection_rows)
-    edited_selection = st.data_editor(
+    selection_event = st.dataframe(
         selection_df,
         hide_index=True,
-        disabled=['_case_id', '등록일자', '수출번호', '국가', '바이어', '운송방식', '단계', '주문제품'],
+        use_container_width=True,
+        on_select='rerun',
+        selection_mode='single-row',
         column_config={
-            '선택': st.column_config.CheckboxColumn('선택', help='수정할 주문 한 건만 체크하세요.'),
             '_case_id': None,
             '등록일자': st.column_config.TextColumn('등록일자'),
             '수출번호': st.column_config.TextColumn('수출번호'),
@@ -152,15 +151,13 @@ with st.container():
         key='editable_case_table',
     )
 
-checked_rows = edited_selection[edited_selection['선택'] == True]
-if checked_rows.empty:
-    st.info('수정할 수출 건의 선택 칸을 체크하세요.')
-    st.stop()
-if len(checked_rows) > 1:
-    st.warning('수정할 수출 건은 한 건만 체크할 수 있습니다.')
+selected_rows = selection_event.selection.rows
+if not selected_rows:
+    st.info('수정할 수출 건의 행을 선택하세요.')
     st.stop()
 
-case_id = int(checked_rows.iloc[0]['_case_id'])
+selected_index = int(selected_rows[0])
+case_id = int(selection_df.iloc[selected_index]['_case_id'])
 st.session_state['order_case_id'] = case_id
 case_map = {int(row['id']): row for row in filtered_cases}
 case = case_map[case_id]
