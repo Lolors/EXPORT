@@ -22,8 +22,8 @@ st.markdown(
         margin: 0.25rem 0 0.65rem 0;
     }
     .overview-progress-track {
-        width: 40vw;
-        max-width: 40vw;
+        width: 30vw;
+        max-width: 30vw;
         height: 0.8rem;
         background: rgba(49, 51, 63, 0.14);
         border-radius: 999px;
@@ -106,12 +106,10 @@ for country in sorted(country_groups):
             for order in orders:
                 order_qty = float(order['quantity'] or 0)
                 received_qty = float(order['actual_qty'] or 0)
-                item_progress = received_qty / order_qty if order_qty > 0 else 0.0
                 st.markdown(
                     f"**{order['product_name']}**  "
                     f"주문 {fmt_number(order_qty)} {order['unit']} · "
                     f"입고 {fmt_number(received_qty)} {order['unit']}"
                 )
-                render_progress_bar(item_progress)
 
     st.divider()
