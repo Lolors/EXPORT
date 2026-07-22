@@ -6,20 +6,12 @@ import streamlit as st
 
 from services import delivery_service, export_service, folder_service, history_service
 from utils.dates import parse_date
-from utils.formatters import case_label, fmt_number
+from utils.formatters import case_label
 
 
 def date_value(value: str | None):
     parsed = parse_date(value)
     return parsed.date() if parsed else date.today()
-
-
-def order_state(ordered: float, linked: float) -> tuple[str, str]:
-    if ordered > 0 and linked >= ordered:
-        return '🟢', '확보 완료'
-    if linked > 0:
-        return '🟡', '일부 확보'
-    return '🔴', '미확보'
 
 
 st.title('국내배송')
@@ -36,7 +28,6 @@ options = {
 }
 case_id = options[st.selectbox('수출 건 선택', list(options), key='delivery_case')]
 case = export_service.get_case(case_id)
-orders = export_service.get_order_items_with_actual(case_id)
 
 method = st.radio(
     '배송 방식',
@@ -68,13 +59,3 @@ if submitted:
     history_service.add(case_id, '국내배송 완료', f'{method} / {folder}')
     st.success('저장했습니다.')
     st.rerun()
-
-st.markdown('#### 주문품목별 확보 현황')
-for order in orders:
-    ordered = float(order['quantity'] or 0)
-    linked = float(order['actual_qty'] or 0)
-    icon, label = order_state(ordered, linked)
-    st.write(
-        f"{icon} **{order['product_name']}** — "
-        f"{fmt_number(linked)} / {fmt_number(ordered)} {order['unit'] or 'EA'} · {label}"
-    )
