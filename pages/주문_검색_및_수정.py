@@ -150,6 +150,24 @@ if save_basic:
         st.success('기본 정보를 저장했습니다.')
         st.rerun()
 
+st.markdown('#### 주문 취소')
+st.warning('주문을 취소하면 오버뷰와 진행 중 업무 목록에서 제외됩니다. 취소된 주문의 데이터는 삭제되지 않습니다.')
+cancel_confirmed = st.checkbox(
+    f"{case['export_no']} 주문 취소를 확인합니다.",
+    key=f'cancel_confirm_{case_id}',
+)
+if st.button(
+    '주문 취소',
+    type='secondary',
+    disabled=not cancel_confirmed,
+    key=f'cancel_order_{case_id}',
+):
+    export_service.cancel_case(case_id)
+    history_service.add_history(case_id, '주문 취소', case['export_no'])
+    st.session_state.pop('order_case_id', None)
+    st.success(f"{case['export_no']} 주문을 취소했습니다.")
+    st.rerun()
+
 existing = order_service.get_order_items_dataframe(case_id)
 if existing.empty:
     existing = pd.DataFrame([{'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA'}])
