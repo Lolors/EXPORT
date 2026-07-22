@@ -138,7 +138,19 @@ with st.form(f'case_edit_{case_id}'):
     transport_index = TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in TRANSPORT_MODES else 0
     new_transport = c1.selectbox('운송방식', TRANSPORT_MODES, index=transport_index)
     new_note = c2.text_input('비고', value=case['note'])
-    save_basic = st.form_submit_button('기본 정보 저장')
+
+    action_col, cancel_col = st.columns(2)
+    save_basic = action_col.form_submit_button('기본 정보 저장', use_container_width=True)
+    cancel_confirmed = cancel_col.checkbox(
+        f"{case['export_no']} 주문 취소를 확인합니다.",
+        key=f'cancel_confirm_{case_id}',
+    )
+    cancel_order = cancel_col.form_submit_button(
+        '주문 취소',
+        type='secondary',
+        disabled=not cancel_confirmed,
+        use_container_width=True,
+    )
 
 if save_basic:
     if not new_country.strip():
@@ -150,18 +162,7 @@ if save_basic:
         st.success('기본 정보를 저장했습니다.')
         st.rerun()
 
-st.markdown('#### 주문 취소')
-st.warning('주문을 취소하면 오버뷰와 진행 중 업무 목록에서 제외됩니다. 취소된 주문의 데이터는 삭제되지 않습니다.')
-cancel_confirmed = st.checkbox(
-    f"{case['export_no']} 주문 취소를 확인합니다.",
-    key=f'cancel_confirm_{case_id}',
-)
-if st.button(
-    '주문 취소',
-    type='secondary',
-    disabled=not cancel_confirmed,
-    key=f'cancel_order_{case_id}',
-):
+if cancel_order:
     export_service.cancel_case(case_id)
     history_service.add_history(case_id, '주문 취소', case['export_no'])
     st.session_state.pop('order_case_id', None)
