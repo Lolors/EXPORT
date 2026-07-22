@@ -63,7 +63,66 @@ def assign_items(case_id: int, item_ids: list[int], box_no: int) -> None:
         (case_id, box_no, now),
     )
     db.execute(
-        "UPDATE export_cases SET stage='패킹',updated_at=? WHERE id=?",
+        "UPDATE export_cases SET stage='패킹 완료',updated_at=? WHERE id=?",
+        (now, case_id),
+    )
+
+
+def assign_partial_item(case_id: int, item_id: int, box_no: int, quantity: float) -> None:
+    item = db.row(
+        '''SELECT id, case_id, order_item_id, business_unit, location, product_name,
+                  lot_no, expiry_date, requested_qty, box_no, created_at
+           FROM shipment_items
+           WHERE id=? AND case_id=?''',
+        (item_id, case_id),
+    )
+    if item is None:
+        raise ValueError('선택한 실제 출고제품을 찾을 수 없습니다.')
+
+    current_qty = float(item['requested_qty'] or 0)
+    if item['box_no'] is not None:
+        raise ValueError('이미 박스에 배정된 제품은 일부 배정할 수 없습니다.')
+    if quantity <= 0:
+        raise ValueError('배정 수량은 0보다 커야 합니다.')
+    if quantity > current_qty:
+        raise ValueError('배정 수량은 남은 출고수량보다 클 수 없습니다.')
+
+    if quantity == current_qty:
+        assign_items(case_id, [item_id], box_no)
+        return
+
+    now = now_text()
+    remaining_qty = current_qty - quantity
+    db.execute(
+        '''UPDATE shipment_items
+           SET requested_qty=?, box_no=?, updated_at=?
+           WHERE id=? AND case_id=?''',
+        (quantity, box_no, now, item_id, case_id),
+    )
+    db.execute(
+        '''INSERT INTO shipment_items(
+               case_id, order_item_id, business_unit, location, product_name,
+               lot_no, expiry_date, requested_qty, box_no, created_at, updated_at
+           ) VALUES (?,?,?,?,?,?,?,?,NULL,?,?)''',
+        (
+            case_id,
+            item['order_item_id'],
+            item['business_unit'],
+            item['location'],
+            item['product_name'],
+            item['lot_no'],
+            item['expiry_date'],
+            remaining_qty,
+            item['created_at'] or now,
+            now,
+        ),
+    )
+    db.execute(
+        'INSERT OR IGNORE INTO boxes(case_id,box_no,updated_at) VALUES (?,?,?)',
+        (case_id, box_no, now),
+    )
+    db.execute(
+        "UPDATE export_cases SET stage='패킹 완료',updated_at=? WHERE id=?",
         (now, case_id),
     )
 
