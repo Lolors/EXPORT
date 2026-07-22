@@ -22,8 +22,13 @@ st.markdown(
         width: 56vw;
         max-width: 56vw;
     }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-results-anchor) {
+        width: 100vw;
+        max-width: 100vw;
+    }
     @media (max-width: 900px) {
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-results-anchor) {
             width: 100%;
             max-width: 100%;
         }
@@ -61,25 +66,28 @@ with st.container():
     selected_country = filter_cols[2].selectbox('국가', ['전체'] + countries, key='edit_case_country')
     product_query = filter_cols[3].text_input('제품명 검색', key='edit_case_product_search').strip().casefold()
 
-    filtered_cases = []
-    for case in cases:
-        raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
-        case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
-        case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
+filtered_cases = []
+for case in cases:
+    raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
+    case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
+    case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
 
-        if selected_year != '전체' and case_year != selected_year:
-            continue
-        if selected_month != '전체' and case_month != selected_month:
-            continue
-        if selected_country != '전체' and str(case['country']).strip() != selected_country:
-            continue
-        if product_query and product_query not in str(case['product_names'] or '').casefold():
-            continue
-        filtered_cases.append(case)
+    if selected_year != '전체' and case_year != selected_year:
+        continue
+    if selected_month != '전체' and case_month != selected_month:
+        continue
+    if selected_country != '전체' and str(case['country']).strip() != selected_country:
+        continue
+    if product_query and product_query not in str(case['product_names'] or '').casefold():
+        continue
+    filtered_cases.append(case)
 
-    if not filtered_cases:
-        st.warning('조건에 맞는 수출 건이 없습니다.')
-        st.stop()
+if not filtered_cases:
+    st.warning('조건에 맞는 수출 건이 없습니다.')
+    st.stop()
+
+with st.container():
+    st.markdown('<span id="editable-case-results-anchor"></span>', unsafe_allow_html=True)
 
     selected_case_id = st.session_state.get('order_case_id')
     selection_rows = []
@@ -88,13 +96,13 @@ with st.container():
         selection_rows.append({
             '선택': int(case['id']) == selected_case_id,
             '_case_id': int(case['id']),
+            '등록일자': raw_date[:10],
             '수출번호': case['export_no'],
-            '일자': raw_date[:10],
             '국가': case['country'],
             '바이어': case['buyer'] or '',
-            '운송': case['transport_mode'],
+            '운송방식': case['transport_mode'],
             '단계': case['stage'],
-            '제품명': case['product_names'] or '',
+            '주문제품': case['product_names'] or '',
         })
 
     selection_df = pd.DataFrame(selection_rows)
@@ -102,17 +110,17 @@ with st.container():
         selection_df,
         hide_index=True,
         use_container_width=True,
-        disabled=['_case_id', '수출번호', '일자', '국가', '바이어', '운송', '단계', '제품명'],
+        disabled=['_case_id', '등록일자', '수출번호', '국가', '바이어', '운송방식', '단계', '주문제품'],
         column_config={
-            '선택': st.column_config.CheckboxColumn('선택', help='수정할 주문 한 건만 체크하세요.'),
+            '선택': st.column_config.CheckboxColumn('선택', help='수정할 주문 한 건만 체크하세요.', width='small'),
             '_case_id': None,
+            '등록일자': st.column_config.TextColumn('등록일자', width='small'),
             '수출번호': st.column_config.TextColumn('수출번호', width='medium'),
-            '일자': st.column_config.TextColumn('일자', width='small'),
             '국가': st.column_config.TextColumn('국가', width='small'),
             '바이어': st.column_config.TextColumn('바이어', width='medium'),
-            '운송': st.column_config.TextColumn('운송', width='small'),
+            '운송방식': st.column_config.TextColumn('운송방식', width='small'),
             '단계': st.column_config.TextColumn('단계', width='small'),
-            '제품명': st.column_config.TextColumn('제품명', width='large'),
+            '주문제품': st.column_config.TextColumn('주문제품', width='large'),
         },
         key='editable_case_table',
     )
