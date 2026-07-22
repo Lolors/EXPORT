@@ -229,7 +229,14 @@ if st.button('수출 건 생성', type='primary', key='create_case'):
         st.success(f'{export_no} 생성 완료')
         st.rerun()
 
-cases = db.rows("SELECT * FROM export_cases WHERE stage<>'취소' ORDER BY created_at DESC")
+# 수정 영역은 사용자가 수출 건을 선택한 뒤에만 주문품목까지 조회한다.
+cases = db.rows(
+    '''SELECT id, export_no, buyer, country, transport_mode, stage, status,
+              note, actual_ship_date, case_type, created_at
+       FROM export_cases
+       WHERE stage<>'취소'
+       ORDER BY created_at DESC'''
+)
 if not cases:
     st.info('수정할 수출 건이 없습니다.')
     st.stop()
@@ -241,7 +248,9 @@ default_index = 0
 if selected_case_id in options.values():
     default_index = list(options.values()).index(selected_case_id)
 case_id = options[st.selectbox('주문을 수정할 수출 건', labels, index=default_index)]
-case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
+
+case_map = {int(row['id']): row for row in cases}
+case = case_map[case_id]
 
 with st.form(f'case_edit_{case_id}'):
     st.markdown('#### 기본 정보 수정')
