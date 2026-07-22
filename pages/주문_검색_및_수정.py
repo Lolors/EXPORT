@@ -43,27 +43,22 @@ st.markdown(
     }
     div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor),
     div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) {
-        align-items: center;
+        align-items: flex-start !important;
         justify-content: center;
     }
     div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) > div,
     div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) > div {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
     }
-    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stButton"] {
+    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stButton"],
+    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stButton"] > button {
         margin-top: 0 !important;
-        transform: translateY(0) !important;
+        transform: none !important;
     }
     div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stCheckbox"] {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 2.75rem;
-    }
-    div[data-testid="stHorizontalBlock"]:has(#basic-action-row-anchor) div[data-testid="stCheckbox"] > label {
-        margin: 0 !important;
+        margin-top: 0.2rem;
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
@@ -181,9 +176,9 @@ with st.container():
     new_transport = info_cols[2].selectbox('운송방식', TRANSPORT_MODES, index=transport_index)
     new_note = info_cols[3].text_input('비고', value=case['note'])
 
-    save_col, cancel_col, confirm_col = st.columns([2, 2, 6], vertical_alignment='center')
-    save_col.markdown('<span id="basic-action-row-anchor"></span>', unsafe_allow_html=True)
+    save_col, cancel_col, confirm_col = st.columns([2, 2, 6], vertical_alignment='top')
     with save_col:
+        st.markdown('<span id="basic-action-row-anchor"></span>', unsafe_allow_html=True)
         save_basic = st.button('기본 정보 저장', use_container_width=True, key=f'save_basic_{case_id}')
     with cancel_col:
         cancel_order = st.button(
