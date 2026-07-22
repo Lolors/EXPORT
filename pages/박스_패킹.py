@@ -190,10 +190,24 @@ if not boxes:
     st.info('아직 생성된 박스가 없습니다.')
 else:
     box_options = {f"BOX {int(box['box_no'])}": int(box['box_no']) for box in boxes}
+    box_labels = list(box_options)
+    incomplete_labels = [
+        label
+        for label, box_number in box_options.items()
+        if not all(
+            float(next(box for box in boxes if int(box['box_no']) == box_number)[field] or 0) > 0
+            for field in ['length_cm', 'width_cm', 'height_cm', 'weight_kg']
+        )
+    ]
+    default_box_label = incomplete_labels[0] if incomplete_labels else box_labels[0]
+    selector_key = f'packing_box_detail_{case_id}'
+    if st.session_state.get(selector_key) not in box_labels:
+        st.session_state[selector_key] = default_box_label
+
     selected_box_label = st.selectbox(
         '박스 선택',
-        list(box_options),
-        key=f'packing_box_detail_{case_id}',
+        box_labels,
+        key=selector_key,
     )
     selected_box_no = box_options[selected_box_label]
     box = next(box for box in boxes if int(box['box_no']) == selected_box_no)
