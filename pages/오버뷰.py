@@ -1,45 +1,27 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
-import db
-
-
-def get_pandas():
-    import pandas as pd
-    return pd
-
-
-def case_label(case) -> str:
-    buyer = f" · {case['buyer']}" if case['buyer'] else ''
-    return f"{case['export_no']} · {case['country']}{buyer} · {case['stage']}"
+from services.export_service import active_cases, get_order_items_with_actual
+from utils.formatters import case_label
 
 
 st.title('오버뷰')
 st.caption('수출 진행 현황을 확인합니다.')
 
-cases = db.active_cases()
+cases = active_cases()
 if not cases:
     st.info('현재 진행 중인 수출 건이 없습니다.')
 
 for case in cases:
-    orders = db.rows(
-        '''SELECT o.id, o.product_name, o.quantity, o.unit,
-                  COALESCE(SUM(s.requested_qty),0) AS actual_qty
-           FROM order_items o
-           LEFT JOIN shipment_items s ON s.order_item_id=o.id
-           WHERE o.case_id=?
-           GROUP BY o.id, o.product_name, o.quantity, o.unit
-           ORDER BY o.id''',
-        (case['id'],),
-    )
+    orders = get_order_items_with_actual(int(case['id']))
     title = case_label(case)
     if case['note']:
         title += f" · {case['note']}"
 
     with st.expander(title):
         if orders:
-            pd = get_pandas()
             st.dataframe(
                 pd.DataFrame([
                     {
