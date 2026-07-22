@@ -84,7 +84,7 @@ def render_document(case, packed, actual_rows) -> None:
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{size}</td>')
                 rows_html.append('</tr>')
 
-        table_header = '<tr><th>박스</th><th>출고처</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr>'
+        table_header = '<tr><th>박스</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr>'
         section_title = 'PACKING DETAIL'
         first_summary = f'{len({row["box_no"] for row in packed})} BOX'
         first_label = '총 박스 수'
@@ -100,8 +100,8 @@ def render_document(case, packed, actual_rows) -> None:
         if not rows_html:
             rows_html.append('<tr><td colspan="5" class="empty">입력된 실제 출고제품이 없습니다.</td></tr>')
 
-        table_header = '<tr><th>출고처</th><th>실제 제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr>'
-        section_title = 'ACTUAL SHIPMENT DETAIL'
+        table_header = '<tr><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr>'
+        section_title = 'PACKING LIST'
         first_summary = '패킹 전'
         first_label = '진행 상태'
         display_rows = actual_rows
@@ -132,7 +132,7 @@ body{{margin:0;padding:8px;background:#f4f7fa;color:#172033;font-family:-apple-s
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
 <div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
 <div class="section">DOMESTIC DELIVERY</div><div class="grid"><div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div><div class="cell" style="grid-column:span 2"><div class="label">{detail_label}</div><div class="value">{html.escape(detail_value)}</div></div><div class="cell"><div class="label">현재 단계</div><div class="value">{html.escape(case['stage'] or '-')}</div></div></div>
-<div class="section">{'PACKING SUMMARY' if has_packing else 'ACTUAL SHIPMENT SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>실제 제품 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>실제 출고수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
+<div class="section">{'PACKING SUMMARY' if has_packing else 'SHIPPING SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>실제 제품 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>실제 출고수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
 <div class="section">{section_title}</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}<div class="footer"><span>주식회사 노투스팜 · 수출관리 시스템</span><span>Generated from Export Management System</span></div></div></div></body></html>'''
 
     visible_rows = len(display_rows)
