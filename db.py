@@ -41,6 +41,51 @@ def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> None:
         conn.execute(f'ALTER TABLE {table} ADD COLUMN {definition}')
 
 
+def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
+    columns = _columns(conn, 'export_cases')
+    if 'expected_ship_date' not in columns:
+        return
+    conn.executescript('''
+    PRAGMA foreign_keys = OFF;
+    CREATE TABLE export_cases_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        export_no TEXT NOT NULL UNIQUE,
+        buyer TEXT DEFAULT '',
+        country TEXT NOT NULL DEFAULT '',
+        transport_mode TEXT DEFAULT 'AIR',
+        stage TEXT NOT NULL DEFAULT '주문 접수',
+        status TEXT NOT NULL DEFAULT '진행중',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        domestic_method TEXT DEFAULT '',
+        tracking_no TEXT DEFAULT '',
+        driver_name TEXT DEFAULT '',
+        driver_phone TEXT DEFAULT '',
+        note TEXT DEFAULT '',
+        actual_ship_date TEXT DEFAULT '',
+        folder_path TEXT DEFAULT '',
+        cancel_reason TEXT DEFAULT '',
+        cancelled_at TEXT DEFAULT '',
+        previous_stage TEXT DEFAULT ''
+    );
+    INSERT INTO export_cases_new(
+        id,export_no,buyer,country,transport_mode,stage,status,created_at,updated_at,
+        domestic_method,tracking_no,driver_name,driver_phone,note,actual_ship_date,
+        folder_path,cancel_reason,cancelled_at,previous_stage
+    )
+    SELECT
+        id,export_no,buyer,country,transport_mode,stage,status,created_at,updated_at,
+        COALESCE(domestic_method,''),COALESCE(tracking_no,''),COALESCE(driver_name,''),
+        COALESCE(driver_phone,''),COALESCE(note,''),COALESCE(actual_ship_date,''),
+        COALESCE(folder_path,''),COALESCE(cancel_reason,''),COALESCE(cancelled_at,''),
+        COALESCE(previous_stage,'')
+    FROM export_cases;
+    DROP TABLE export_cases;
+    ALTER TABLE export_cases_new RENAME TO export_cases;
+    PRAGMA foreign_keys = ON;
+    ''')
+
+
 def init_db() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
@@ -50,7 +95,6 @@ def init_db() -> None:
             export_no TEXT NOT NULL UNIQUE,
             buyer TEXT DEFAULT '',
             country TEXT NOT NULL DEFAULT '',
-            expected_ship_date TEXT DEFAULT '',
             transport_mode TEXT DEFAULT 'AIR',
             stage TEXT NOT NULL DEFAULT '주문 접수',
             status TEXT NOT NULL DEFAULT '진행중',
@@ -123,6 +167,7 @@ def init_db() -> None:
             "previous_stage TEXT DEFAULT ''",
         ]:
             _add_column(conn, 'export_cases', definition)
+        _remove_expected_ship_date_column(conn)
 
 
 def rows(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
@@ -208,7 +253,7 @@ def active_cases(country: str | None = None) -> list[sqlite3.Row]:
     if country:
         sql += ' AND country=?'
         params = (country,)
-    return rows(sql + ' ORDER BY expected_ship_date, created_at', params)
+    return rows(sql + ' ORDER BY created_at', params)
 
 
 def parse_date(value: str | None) -> datetime | None:
@@ -284,8 +329,7 @@ def case_folder_name(case: sqlite3.Row | dict[str, Any]) -> str:
 
 def case_folder_base(case: sqlite3.Row | dict[str, Any]) -> Path:
     actual = parse_date(case['actual_ship_date'] if 'actual_ship_date' in case.keys() else '')
-    expected = parse_date(case['expected_ship_date'] if case['expected_ship_date'] else '')
-    year = (actual or expected or datetime.now()).strftime('%Y')
+    year = (actual or datetime.now()).strftime('%Y')
     country = sanitize_folder_part(case['country'], '국가미입력')
     return storage_root() / country / year
 
@@ -369,18 +413,17 @@ def write_case_workbook(case_id: int, folder: Path | None = None) -> Path:
     ws1.title = '주문 접수 내역'
     ws1.append(['주문 접수 내역'])
     ws1.append(['기본 정보'])
-    ws1.append(['수출번호', '국가', '바이어', '예상출고일', '운송방식', '진행단계', '상태', '비고', '생성일', '수정일'])
+    ws1.append(['수출번호', '국가', '바이어', '운송방식', '진행단계', '상태', '비고', '생성일', '수정일'])
     ws1.append([
-        case['export_no'], case['country'], case['buyer'], case['expected_ship_date'],
-        case['transport_mode'], case['stage'], case['status'], case['note'],
-        case['created_at'], case['updated_at'],
+        case['export_no'], case['country'], case['buyer'], case['transport_mode'],
+        case['stage'], case['status'], case['note'], case['created_at'], case['updated_at'],
     ])
     ws1.append([])
     ws1.append(['주문 목록'])
     ws1.append(['제품명', '수량', '단위', '등록일'])
     for item in orders:
         ws1.append([item['product_name'], item['quantity'], item['unit'], item['created_at']])
-    _style_sheet(ws1, {'A': 28, 'B': 14, 'C': 18, 'D': 16, 'E': 14, 'F': 16, 'G': 12, 'H': 30, 'I': 20, 'J': 20})
+    _style_sheet(ws1, {'A': 28, 'B': 14, 'C': 18, 'D': 14, 'E': 16, 'F': 12, 'G': 30, 'H': 20, 'I': 20})
 
     ws2 = wb.create_sheet('실출고 진행 상황')
     ws2.append(['실출고 진행 상황'])
