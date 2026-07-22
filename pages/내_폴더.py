@@ -6,10 +6,7 @@ from pathlib import Path
 import streamlit as st
 
 import db
-
-
-st.set_page_config(page_title='내 폴더', page_icon='📁', layout='wide')
-db.init_db()
+from services import export_service, folder_service, history_service
 
 
 def browse_folder() -> str:
@@ -39,7 +36,7 @@ def check_folder_path(path_text: str) -> tuple[bool, str]:
         if not drive_root.exists():
             return False, f'{path.drive} 드라이브를 찾을 수 없습니다. USB가 연결되어 있는지 확인하세요.'
 
-    ok, message = db.test_storage_root(path_text)
+    ok, message = folder_service.test_storage_root(path_text)
     if not ok:
         return False, f'선택한 폴더에 저장할 수 없습니다.\n\n원인: {message}'
     return True, message
@@ -101,7 +98,7 @@ if b3.button('기본 uploads 사용', use_container_width=True):
 st.divider()
 st.markdown('#### 현재 저장 위치')
 saved_root = db.get_setting('shared_root').strip()
-st.code(saved_root or str(db.UPLOAD_DIR.resolve()))
+st.code(saved_root or str(folder_service.storage_root().resolve()))
 
 if saved_root:
     saved_ok, saved_message = check_folder_path(saved_root)
@@ -115,9 +112,9 @@ st.code(
     '''내 폴더
 └─ 미국
    └─ 2026
-      ├─ EXP-2026-001_비고
-      ├─ 0715_바이어_AIR_비고
-      └─ [취소]0715_바이어_AIR_비고'''
+      ├─ 미국_AIR_제품A
+      ├─ 0715_미국_바이어_AIR_제품A, 제품B 외 1품목
+      └─ [취소]0715_미국_AIR_제품A'''
 )
 
 st.caption(
@@ -134,7 +131,7 @@ folder_confirm = st.checkbox(
 )
 
 if st.button('모든 수출 폴더 재생성·정리', type='primary', disabled=not folder_confirm):
-    all_cases = db.rows('SELECT id, export_no FROM export_cases ORDER BY id')
+    all_cases = export_service.list_cases(include_cancelled=True)
     successes: list[str] = []
     failures: list[str] = []
     progress = st.progress(0, text='수출 폴더를 확인하고 있습니다.')
@@ -142,7 +139,7 @@ if st.button('모든 수출 폴더 재생성·정리', type='primary', disabled=
 
     for index, case in enumerate(all_cases, start=1):
         try:
-            folder = db.sync_case_folder(int(case['id']))
+            folder = folder_service.sync_case_folder(int(case['id']))
             successes.append(f"{case['export_no']} → {folder}")
         except Exception as exc:
             failures.append(f"{case['export_no']}: {exc}")
@@ -150,7 +147,7 @@ if st.button('모든 수출 폴더 재생성·정리', type='primary', disabled=
 
     progress.empty()
     if successes:
-        db.add_history(None, '전체 수출 폴더 재정리', f'{len(successes)}건 완료 / {len(failures)}건 실패')
+        history_service.add_history(None, '전체 수출 폴더 재정리', f'{len(successes)}건 완료 / {len(failures)}건 실패')
         st.success(f'{len(successes)}건의 폴더를 생성·정리했습니다.')
     if failures:
         st.error('일부 폴더를 처리하지 못했습니다.\n\n' + '\n'.join(f'- {item}' for item in failures))
