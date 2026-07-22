@@ -88,6 +88,9 @@ for country in sorted(country_groups):
 
         with st.container(border=True):
             buyer = str(case['buyer'] or '').strip()
+            if buyer.casefold() == '미지정':
+                buyer = ''
+
             header = f"### {case['transport_mode']} · {case['export_no']}"
             if buyer:
                 header += f" · {buyer}"
