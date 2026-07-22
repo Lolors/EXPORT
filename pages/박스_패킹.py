@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import streamlit as st
+import time
 
+import streamlit as st
 from services import export_service, folder_service, history_service, packing_service
 from utils.formatters import case_label, fmt_number
 
@@ -219,13 +220,17 @@ else:
                 width = c2.number_input('세로(cm)', min_value=0.0, value=float(box['width_cm'] or 0), key=f'wid_{box["id"]}')
                 height = c3.number_input('높이(cm)', min_value=0.0, value=float(box['height_cm'] or 0), key=f'hei_{box["id"]}')
                 weight = c4.number_input('무게(kg)', min_value=0.0, value=float(box['weight_kg'] or 0), key=f'wei_{box["id"]}')
-                save_box = st.form_submit_button('박스 정보 저장', type='primary')
+                left_button_col, center_button_col, right_button_col = st.columns([1, 1, 1])
+                with center_button_col:
+                    save_box = st.form_submit_button('박스 정보 저장', type='primary', use_container_width=True)
 
             if save_box:
                 packing_service.update_box(int(box['id']), length, width, height, weight)
                 folder_service.sync_case_folder(case_id)
                 history_service.add(case_id, '박스 정보 수정', f"BOX {box['box_no']}")
-                st.success(f"BOX {box['box_no']} 정보를 저장했습니다.")
-                st.rerun()
+                notice = st.empty()
+                notice.success(f"BOX {box['box_no']} 정보가 저장됐습니다.")
+                time.sleep(2)
+                notice.empty()
 
 st.caption(f'현재 미패킹 실제 출고 행: {unpacked_count}개')
