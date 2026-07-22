@@ -56,10 +56,9 @@ for case in cases:
         else:
             st.caption('주문품목이 아직 입력되지 않았습니다.')
 
-        cols = st.columns(5)
+        cols = st.columns(4)
         cols[0].metric('국가', case['country'])
         cols[1].metric('운송', case['transport_mode'])
-        cols[2].metric('예상 출고일', case['expected_ship_date'] or '-')
-        cols[3].metric('단계', case['stage'])
-        cols[4].metric('비고', case['note'] or '-')
+        cols[2].metric('단계', case['stage'])
+        cols[3].metric('비고', case['note'] or '-')
         st.caption(f"폴더: {case['folder_path'] or '아직 생성되지 않음'}")
