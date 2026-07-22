@@ -7,7 +7,7 @@ import streamlit as st
 import db
 
 
-st.set_page_config(page_title='수출관리', page_icon='🌏', layout='wide')
+st.set_page_config(page_title='메인', page_icon='🌏', layout='wide')
 
 
 @st.cache_resource
@@ -70,19 +70,8 @@ def replace_order_items(case_id: int, edited) -> None:
         )
 
 
-st.title('수출관리')
-st.caption('중복된 구형 작업 화면을 제거하고 최신 작업 흐름으로 통합했습니다.')
-
-st.markdown('### 작업 메뉴')
-menu_cols = st.columns(3)
-with menu_cols[0]:
-    st.page_link('pages/실출고_입력.py', label='📦 실출고 입력', use_container_width=True)
-with menu_cols[1]:
-    st.page_link('pages/박스_패킹.py', label='📦 박스 패킹', use_container_width=True)
-with menu_cols[2]:
-    st.page_link('pages/국내배송_공유문서.py', label='📄 국내배송 공유문서', use_container_width=True)
-
-st.divider()
+st.title('메인')
+st.caption('수출 진행 현황과 주문 정보를 관리합니다.')
 
 overview_tab, order_tab = st.tabs(['오버뷰', '수출 주문 입력'])
 
