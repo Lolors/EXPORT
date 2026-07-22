@@ -175,16 +175,16 @@ with st.container():
     save_col, cancel_col, confirm_col = st.columns([2, 2, 6])
     save_col.markdown('<span id="basic-action-row-anchor"></span>', unsafe_allow_html=True)
     save_basic = save_col.button('기본 정보 저장', use_container_width=True, key=f'save_basic_{case_id}')
-    cancel_confirmed = confirm_col.checkbox(
-        f"{case['export_no']} 주문 취소를 확인합니다.",
-        key=f'cancel_confirm_{case_id}',
-    )
     cancel_order = cancel_col.button(
         '주문 취소',
         type='secondary',
-        disabled=not cancel_confirmed,
+        disabled=not st.session_state.get(f'cancel_confirm_{case_id}', False),
         use_container_width=True,
         key=f'cancel_order_{case_id}',
+    )
+    cancel_confirmed = confirm_col.checkbox(
+        f"{case['export_no']} 주문 취소를 확인합니다.",
+        key=f'cancel_confirm_{case_id}',
     )
 
     if save_basic:
