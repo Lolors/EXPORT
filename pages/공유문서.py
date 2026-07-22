@@ -17,7 +17,8 @@ STAGE_LABELS = {
     '출고 대기': '출고 대기',
     '패킹': '패킹',
     '박스 패킹': '패킹',
-    '패킹 완료': '패킹',
+    '패킹 진행': '패킹 진행',
+    '패킹 완료': '패킹 완료',
     '국내배송': '국내배송',
     '선적 준비': '선적 준비',
     '선적 완료': '선적 완료',
@@ -61,7 +62,7 @@ def render_document(case, packed, actual_rows) -> None:
             for index, row in enumerate(group):
                 rows_html.append('<tr>')
                 if index == 0:
-                    rows_html.append(f'<td rowspan="{rowspan}" class="center merged">BOX {box_no}</td>')
+                    rows_html.append(f'<td rowspan="{rowspan}" class="center merged">CTN {box_no}</td>')
                 for value in [row['business_unit'], row['product_name'], row['lot_no'], row['expiry_date']]:
                     rows_html.append(f'<td>{html.escape(str(value or ""))}</td>')
                 rows_html.append(f'<td class="right">{fmt_number(row["requested_qty"])}</td>')
@@ -73,10 +74,10 @@ def render_document(case, packed, actual_rows) -> None:
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{size}</td>')
                 rows_html.append('</tr>')
 
-        table_header = '<tr><th>박스</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>무게</th><th>박스사이즈</th></tr>'
+        table_header = '<tr><th>CTN</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>무게</th><th>CTN 사이즈</th></tr>'
         section_title = 'PACKING DETAIL'
-        first_summary = f'{len({row["box_no"] for row in packed})} BOX'
-        first_label = '총 박스 수'
+        first_summary = f'{len({row["box_no"] for row in packed})} CTN'
+        first_label = '총 CTN 수'
         display_rows = packed
     else:
         for row in actual_rows:
