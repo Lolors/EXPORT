@@ -1,46 +1,12 @@
 from __future__ import annotations
 
 import html
+
 import streamlit as st
 import streamlit.components.v1 as components
 
-import db
-
-
-def fmt_number(value) -> str:
-    try:
-        return f'{float(value):g}'
-    except (TypeError, ValueError):
-        return '0'
-
-
-def case_label(case) -> str:
-    buyer = f" · {case['buyer']}" if case['buyer'] else ''
-    return f"{case['export_no']} · {case['country']}{buyer} · {case['transport_mode']} · {case['stage']}"
-
-
-def packing_rows(case_id: int):
-    return db.rows(
-        '''SELECT s.box_no, s.business_unit, s.product_name, s.lot_no,
-                  s.expiry_date, s.requested_qty, b.weight_kg, b.length_cm,
-                  b.width_cm, b.height_cm
-           FROM shipment_items s
-           LEFT JOIN boxes b ON b.case_id=s.case_id AND b.box_no=s.box_no
-           WHERE s.case_id=? AND s.box_no IS NOT NULL
-           ORDER BY s.box_no, s.id''',
-        (case_id,),
-    )
-
-
-def actual_shipment_rows(case_id: int):
-    return db.rows(
-        '''SELECT s.business_unit, s.product_name, s.lot_no,
-                  s.expiry_date, s.requested_qty
-           FROM shipment_items s
-           WHERE s.case_id=? AND s.order_item_id IS NOT NULL
-           ORDER BY s.id''',
-        (case_id,),
-    )
+from services import document_service, export_service
+from utils.formatters import case_label, fmt_number
 
 
 def render_document(case, packed, actual_rows) -> None:
@@ -79,7 +45,7 @@ def render_document(case, packed, actual_rows) -> None:
                 if index == 0:
                     weight = f'{fmt_number(row["weight_kg"])} kg' if row['weight_kg'] else '-'
                     size_values = [row['length_cm'], row['width_cm'], row['height_cm']]
-                    size = ' × '.join(fmt_number(v) for v in size_values) + ' cm' if all(size_values) else '-'
+                    size = ' × '.join(fmt_number(value) for value in size_values) + ' cm' if all(size_values) else '-'
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{weight}</td>')
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{size}</td>')
                 rows_html.append('</tr>')
@@ -142,16 +108,13 @@ body{{margin:0;padding:8px;background:#f4f7fa;color:#172033;font-family:-apple-s
 st.title('공유문서')
 st.caption('국내배송 정보와 실제 출고제품 또는 패킹 내역을 문서로 출력합니다.')
 
-cases = db.rows(
-    "SELECT * FROM export_cases WHERE status<>'취소' AND stage<>'취소' ORDER BY COALESCE(NULLIF(actual_ship_date,''),created_at) DESC"
-)
+cases = export_service.list_cases()
 if not cases:
     st.info('표시할 수출 건이 없습니다.')
     st.stop()
 
-options = {case_label(case): int(case['id']) for case in cases}
+options = {case_label(case, include_transport=True): int(case['id']) for case in cases}
 case_id = options[st.selectbox('수출 건 선택', list(options), key='document_case')]
-case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
-packed = packing_rows(case_id)
-actual_rows = actual_shipment_rows(case_id)
+case = export_service.get_case(case_id)
+packed, actual_rows = document_service.get_document_data(case_id)
 render_document(case, packed, actual_rows)
