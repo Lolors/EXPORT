@@ -6,11 +6,15 @@ from utils.dates import now_text
 
 def list_editable_cases():
     return db.rows(
-        '''SELECT id, export_no, buyer, country, transport_mode, stage, status,
-                  note, actual_ship_date, case_type, created_at
-           FROM export_cases
-           WHERE stage<>'취소'
-           ORDER BY created_at DESC'''
+        '''SELECT c.id, c.export_no, c.buyer, c.country, c.transport_mode, c.stage,
+                  c.status, c.note, c.actual_ship_date, c.case_type, c.created_at,
+                  COALESCE(GROUP_CONCAT(o.product_name, ' '), '') AS product_names
+           FROM export_cases c
+           LEFT JOIN order_items o ON o.case_id=c.id
+           WHERE c.stage<>'취소'
+           GROUP BY c.id, c.export_no, c.buyer, c.country, c.transport_mode, c.stage,
+                    c.status, c.note, c.actual_ship_date, c.case_type, c.created_at
+           ORDER BY COALESCE(NULLIF(c.actual_ship_date,''), c.created_at) DESC'''
     )
 
 
