@@ -18,6 +18,16 @@ def list_editable_cases():
     )
 
 
+def list_for_case(case_id: int):
+    return db.rows(
+        '''SELECT id, product_name, quantity, unit, created_at
+           FROM order_items
+           WHERE case_id=?
+           ORDER BY id''',
+        (case_id,),
+    )
+
+
 def get_order_items_dataframe(case_id: int):
     import pandas as pd
 
