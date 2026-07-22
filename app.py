@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import streamlit as st
 
+import db
+
+
 PAGES = {
     '': [
         st.Page('pages/오버뷰.py', title='오버뷰', icon='📊', default=True),
@@ -14,5 +17,12 @@ PAGES = {
     ]
 }
 
-st.set_page_config(page_title='수출관리', page_icon='🌏', layout='wide')
-st.navigation(PAGES, position='sidebar').run()
+
+def main() -> None:
+    st.set_page_config(page_title='수출관리', page_icon='🌏', layout='wide')
+    db.init_db()
+    st.navigation(PAGES, position='sidebar').run()
+
+
+if __name__ == '__main__':
+    main()
