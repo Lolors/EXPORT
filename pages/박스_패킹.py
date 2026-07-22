@@ -19,7 +19,7 @@ case_id = options[st.selectbox('수출 건 선택', list(options), key='actual_p
 
 items = packing_service.list_items(case_id)
 if not items:
-    st.warning('연결된 실제 출고제품이 없습니다. 먼저 실출고 입력에서 실제 제품을 등록하세요.')
+    st.warning('연결된 입고 제품이 없습니다. 먼저 수출대기 입고에서 제품을 입력하세요.')
     st.stop()
 
 unpacked_count = sum(1 for item in items if item['box_no'] is None)
