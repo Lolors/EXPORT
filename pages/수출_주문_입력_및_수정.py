@@ -43,7 +43,7 @@ def save_order_items(case_id: int, edited) -> None:
     now = db.now_text()
 
     for _, row in edited.iterrows():
-        raw_id = row.get('ID')
+        raw_id = row.get('_id')
         order_id = int(raw_id) if raw_id not in (None, '', 0) else None
         product_name = str(row.get('제품명', '') or '').strip()
         quantity = float(row.get('수량', 0) or 0)
@@ -77,19 +77,45 @@ st.caption('수출 건을 생성하고 주문품목을 수정합니다. 실출�
 
 pd = get_pandas()
 
-with st.form('new_case'):
-    st.text_input('수출번호', value=db.next_export_no(), disabled=True)
-    c1, c2, c3 = st.columns(3)
-    country = c1.text_input('국가 *')
-    buyer = c2.text_input('바이어 (선택)')
-    expected = c3.date_input('예상출고일')
-    transport = c1.selectbox('운송방식', db.TRANSPORT_MODES)
-    note = c2.text_input('비고')
-    submitted = st.form_submit_button('수출 건 생성', type='primary')
+st.markdown('#### 수출 주문 등록')
+country = st.text_input('국가 *', key='new_country')
+buyer = st.text_input('바이어 (선택)', key='new_buyer')
+expected = st.date_input('예상출고일', key='new_expected')
+transport = st.selectbox('운송방식', db.TRANSPORT_MODES, key='new_transport')
+note = st.text_input('비고', key='new_note')
+st.text_input('수출번호', value=db.next_export_no(), disabled=True, key='new_export_no')
 
-if submitted:
+st.markdown('#### 주문 목록')
+new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA'}])
+new_orders = st.data_editor(
+    new_order_source,
+    num_rows='dynamic',
+    hide_index=True,
+    use_container_width=True,
+    key='new_order_items',
+    column_config={
+        '제품명': st.column_config.TextColumn('제품명', required=True),
+        '수량': st.column_config.NumberColumn('수량', min_value=0.0, step=1.0),
+        '단위': st.column_config.TextColumn('단위'),
+    },
+)
+
+if st.button('수출 건 생성', type='primary', key='create_case'):
+    valid_orders = []
+    for _, row in new_orders.iterrows():
+        product_name = str(row.get('제품명', '') or '').strip()
+        if not product_name:
+            continue
+        valid_orders.append((
+            product_name,
+            float(row.get('수량', 0) or 0),
+            str(row.get('단위', 'EA') or 'EA').strip() or 'EA',
+        ))
+
     if not country.strip():
         st.error('국가는 필수입니다.')
+    elif not valid_orders:
+        st.error('주문 목록에 제품을 한 개 이상 입력하세요.')
     else:
         export_no = db.next_export_no()
         now = db.now_text()
@@ -101,8 +127,12 @@ if submitted:
             (export_no, buyer.strip(), country.strip(), str(expected), transport,
              '주문 접수', '진행중', note.strip(), now, now),
         )
-        db.ensure_case_folder(case_id)
-        db.add_history(case_id, '수출 건 생성', export_no)
+        db.executemany(
+            'INSERT INTO order_items(case_id,product_name,quantity,unit,created_at) VALUES (?,?,?,?,?)',
+            [(case_id, product_name, quantity, unit, now) for product_name, quantity, unit in valid_orders],
+        )
+        db.sync_case_folder(case_id)
+        db.add_history(case_id, '수출 건 생성', f'{export_no} / 주문품목 {len(valid_orders)}개')
         st.session_state['order_case_id'] = case_id
         st.success(f'{export_no} 생성 완료')
         st.rerun()
@@ -149,16 +179,14 @@ if save_basic:
         st.rerun()
 
 existing = dataframe(
-    '''SELECT o.id AS ID, o.product_name AS 제품명, o.quantity AS 수량, o.unit AS 단위,
-              CASE WHEN EXISTS(SELECT 1 FROM shipment_items s WHERE s.order_item_id=o.id)
-                   THEN '연결됨' ELSE '' END AS 실출고연결
+    '''SELECT o.id AS _id, o.product_name AS 제품명, o.quantity AS 수량, o.unit AS 단위
        FROM order_items o
        WHERE o.case_id=?
        ORDER BY o.id''',
     (case_id,),
 )
 if existing.empty:
-    existing = pd.DataFrame([{'ID': None, '제품명': '', '수량': 0.0, '단위': 'EA', '실출고연결': ''}])
+    existing = pd.DataFrame([{'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA'}])
 
 st.markdown('#### 주문품목 수정')
 st.caption('실출고가 연결된 행은 삭제할 수 없지만 제품명·수량·단위는 수정할 수 있습니다.')
@@ -168,13 +196,12 @@ edited = st.data_editor(
     hide_index=True,
     use_container_width=True,
     key=f'orders_{case_id}',
-    disabled=['ID', '실출고연결'],
+    column_order=['제품명', '수량', '단위'],
     column_config={
-        'ID': st.column_config.NumberColumn('ID'),
+        '_id': None,
         '제품명': st.column_config.TextColumn('제품명', required=True),
         '수량': st.column_config.NumberColumn('수량', min_value=0.0, step=1.0),
         '단위': st.column_config.TextColumn('단위'),
-        '실출고연결': st.column_config.TextColumn('실출고 연결'),
     },
 )
 if st.button('주문 목록 저장', type='primary', key=f'save_orders_{case_id}'):
