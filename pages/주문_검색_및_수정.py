@@ -35,8 +35,13 @@ st.markdown(
         width: 56vw;
         max-width: 56vw;
     }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-item-editor-anchor) {
+        width: 50vw;
+        max-width: 50vw;
+    }
     @media (max-width: 900px) {
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-item-editor-anchor) {
             width: 100%;
             max-width: 100%;
         }
@@ -157,7 +162,6 @@ with st.form(f'case_edit_{case_id}'):
     cancel_order = cancel_col.form_submit_button(
         '주문 취소',
         type='secondary',
-        disabled=not st.session_state.get(f'cancel_confirm_{case_id}', False),
         use_container_width=True,
     )
     cancel_confirmed = confirm_col.checkbox(
@@ -175,13 +179,16 @@ if save_basic:
         st.success('기본 정보를 저장했습니다.')
         st.rerun()
 
-if cancel_order and cancel_confirmed:
-    export_service.cancel_case(case_id)
-    history_service.add_history(case_id, '주문 취소', case['export_no'])
-    st.session_state.pop('order_case_id', None)
-    st.session_state.pop(f'cancel_confirm_{case_id}', None)
-    st.success(f"{case['export_no']} 주문을 취소했습니다.")
-    st.rerun()
+if cancel_order:
+    if not cancel_confirmed:
+        st.error('먼저 주문 취소 확인에 체크하세요.')
+    else:
+        export_service.cancel_case(case_id)
+        history_service.add_history(case_id, '주문 취소', case['export_no'])
+        st.session_state.pop('order_case_id', None)
+        st.session_state.pop(f'cancel_confirm_{case_id}', None)
+        st.success(f"{case['export_no']} 주문을 취소했습니다.")
+        st.rerun()
 
 existing = order_service.get_order_items_dataframe(case_id)
 if existing.empty:
@@ -194,15 +201,17 @@ if historical_case:
 else:
     st.caption('실출고가 연결된 행은 삭제할 수 없지만 제품명·수량·단위는 수정할 수 있습니다.')
 
-edited = order_editor(existing, key=f'orders_{case_id}')
-if st.button('목록 저장' if historical_case else '주문 목록 저장', type='primary', key=f'save_orders_{case_id}'):
-    try:
-        order_service.save_order_items(case_id, edited)
-    except ValueError as exc:
-        st.error(str(exc))
-    else:
-        folder_service.sync_case_folder(case_id)
-        action = '과거 실출고 목록 저장' if historical_case else '주문 목록 저장'
-        history_service.add_history(case_id, action, f'{len(edited)}행')
-        st.success('목록을 저장했습니다.')
-        st.rerun()
+with st.container():
+    st.markdown('<span id="order-item-editor-anchor"></span>', unsafe_allow_html=True)
+    edited = order_editor(existing, key=f'orders_{case_id}')
+    if st.button('목록 저장' if historical_case else '주문 목록 저장', type='primary', key=f'save_orders_{case_id}'):
+        try:
+            order_service.save_order_items(case_id, edited)
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            folder_service.sync_case_folder(case_id)
+            action = '과거 실출고 목록 저장' if historical_case else '주문 목록 저장'
+            history_service.add_history(case_id, action, f'{len(edited)}행')
+            st.success('목록을 저장했습니다.')
+            st.rerun()
