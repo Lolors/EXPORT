@@ -91,10 +91,12 @@ for country in sorted(country_groups):
             if buyer.casefold() == '미지정':
                 buyer = ''
 
-            header = f"### {case['transport_mode']} · {case['export_no']}"
-            if buyer:
-                header += f" · {buyer}"
-            st.markdown(header)
+            transport_mode = str(case['transport_mode'] or '').strip()
+            if transport_mode.casefold() == '미지정':
+                transport_mode = ''
+
+            header_parts = [part for part in [transport_mode, str(case['export_no']), buyer] if part]
+            st.markdown(f"### {' · '.join(header_parts)}")
 
             render_progress_bar(progress)
             st.caption(
