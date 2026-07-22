@@ -15,7 +15,17 @@ if not cases:
     st.stop()
 
 options = {case_label(case): int(case['id']) for case in cases}
-case_id = options[st.selectbox('수출 건 선택', list(options), key='actual_packing_case')]
+option_labels = list(options)
+saved_case_id = st.session_state.get('actual_packing_case_id')
+default_index = 0
+if saved_case_id is not None:
+    for index, label in enumerate(option_labels):
+        if options[label] == int(saved_case_id):
+            default_index = index
+            break
+selected_case_label = st.selectbox('수출 건 선택', option_labels, index=default_index, key='actual_packing_case')
+case_id = options[selected_case_label]
+st.session_state['actual_packing_case_id'] = case_id
 
 items = packing_service.list_items(case_id)
 if not items:
@@ -46,10 +56,11 @@ for column, title in zip(
 
 selected_ids: list[int] = []
 for item in items:
+    checkbox_key = f'pack_select_{case_id}_{item["id"]}'
     cols = st.columns([0.55, 1.15, 2.5, 1.35, 1.35, 0.9, 1.0])
     selected = cols[0].checkbox(
         '선택',
-        key=f'pack_select_{case_id}_{item["id"]}',
+        key=checkbox_key,
         label_visibility='collapsed',
     )
     if selected:
@@ -63,8 +74,16 @@ for item in items:
 
 st.divider()
 next_box = packing_service.next_box_no(case_id)
+box_number_key = f'packing_box_no_{case_id}'
+if box_number_key not in st.session_state:
+    st.session_state[box_number_key] = next_box
 assign_col, full_col, partial_col = st.columns([1, 2, 2])
-box_no = assign_col.number_input('배정할 박스번호', min_value=1, value=next_box, step=1)
+box_no = assign_col.number_input(
+    '배정할 박스번호',
+    min_value=1,
+    step=1,
+    key=box_number_key,
+)
 
 with full_col:
     st.write('')
@@ -109,7 +128,7 @@ if partial_item_id:
     else:
         @st.dialog('선택 제품 일부 수량 배정')
         def partial_assign_dialog() -> None:
-            total_quantity = float(partial_item['requested_qty'] or 0)
+            total_quantity = int(float(partial_item['requested_qty'] or 0))
             target_box_no = int(st.session_state.get('partial_pack_box_no', next_box))
             st.write(f"**{partial_item['product_name']}**")
             st.caption(
@@ -118,10 +137,11 @@ if partial_item_id:
             )
             quantity = st.number_input(
                 '박스에 배정할 수량',
-                min_value=0.0,
+                min_value=0,
                 max_value=total_quantity,
                 value=total_quantity,
-                step=1.0,
+                step=1,
+                format='%d',
                 key=f'partial_pack_qty_{case_id}_{partial_item_id}',
             )
             confirm_col, cancel_col = st.columns(2)
@@ -131,7 +151,7 @@ if partial_item_id:
                         case_id,
                         int(partial_item_id),
                         target_box_no,
-                        float(quantity),
+                        int(quantity),
                     )
                 except ValueError as exc:
                     st.error(str(exc))
@@ -144,6 +164,8 @@ if partial_item_id:
                     )
                     st.session_state.pop('partial_pack_item_id', None)
                     st.session_state.pop('partial_pack_box_no', None)
+                    st.session_state[f'pack_select_{case_id}_{partial_item_id}'] = False
+                    st.session_state[box_number_key] = target_box_no
                     st.success(f'{fmt_number(quantity)}개를 BOX {target_box_no}에 배정했습니다.')
                     st.rerun()
             if cancel_col.button('취소', use_container_width=True):
