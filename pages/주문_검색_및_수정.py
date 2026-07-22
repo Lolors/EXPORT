@@ -35,13 +35,8 @@ st.markdown(
         width: 56vw;
         max-width: 56vw;
     }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-results-anchor) {
-        width: 80vw;
-        max-width: 80vw;
-    }
     @media (max-width: 900px) {
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-results-anchor) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor) {
             width: 100%;
             max-width: 100%;
         }
@@ -100,8 +95,6 @@ if not filtered_cases:
     st.stop()
 
 with st.container():
-    st.markdown('<span id="editable-case-results-anchor"></span>', unsafe_allow_html=True)
-
     selected_case_id = st.session_state.get('order_case_id')
     selection_rows = []
     for case in filtered_cases:
@@ -122,18 +115,17 @@ with st.container():
     edited_selection = st.data_editor(
         selection_df,
         hide_index=True,
-        use_container_width=True,
         disabled=['_case_id', '등록일자', '수출번호', '국가', '바이어', '운송방식', '단계', '주문제품'],
         column_config={
-            '선택': st.column_config.CheckboxColumn('선택', help='수정할 주문 한 건만 체크하세요.', width='small'),
+            '선택': st.column_config.CheckboxColumn('선택', help='수정할 주문 한 건만 체크하세요.'),
             '_case_id': None,
-            '등록일자': st.column_config.TextColumn('등록일자', width='small'),
-            '수출번호': st.column_config.TextColumn('수출번호', width='medium'),
-            '국가': st.column_config.TextColumn('국가', width='medium'),
-            '바이어': st.column_config.TextColumn('바이어', width='medium'),
-            '운송방식': st.column_config.TextColumn('운송방식', width='small'),
-            '단계': st.column_config.TextColumn('단계', width='small'),
-            '주문제품': st.column_config.TextColumn('주문제품', width='large'),
+            '등록일자': st.column_config.TextColumn('등록일자'),
+            '수출번호': st.column_config.TextColumn('수출번호'),
+            '국가': st.column_config.TextColumn('국가'),
+            '바이어': st.column_config.TextColumn('바이어'),
+            '운송방식': st.column_config.TextColumn('운송방식'),
+            '단계': st.column_config.TextColumn('단계'),
+            '주문제품': st.column_config.TextColumn('주문제품'),
         },
         key='editable_case_table',
     )
