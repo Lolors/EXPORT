@@ -51,6 +51,22 @@ def next_box_no(case_id: int) -> int:
     return int(result['n'] or 1)
 
 
+def _sync_packing_stage(case_id: int, now: str | None = None) -> None:
+    timestamp = now or now_text()
+    result = db.row(
+        '''SELECT COALESCE(SUM(CASE WHEN box_no IS NULL THEN requested_qty ELSE 0 END), 0) AS remaining_qty
+           FROM shipment_items
+           WHERE case_id=?''',
+        (case_id,),
+    )
+    remaining_qty = float(result['remaining_qty'] or 0) if result else 0.0
+    stage = '패킹 완료' if remaining_qty <= 0 else '패킹 진행'
+    db.execute(
+        'UPDATE export_cases SET stage=?, updated_at=? WHERE id=?',
+        (stage, timestamp, case_id),
+    )
+
+
 def assign_items(case_id: int, item_ids: list[int], box_no: int) -> None:
     now = now_text()
     for item_id in item_ids:
@@ -62,10 +78,7 @@ def assign_items(case_id: int, item_ids: list[int], box_no: int) -> None:
         'INSERT OR IGNORE INTO boxes(case_id,box_no,updated_at) VALUES (?,?,?)',
         (case_id, box_no, now),
     )
-    db.execute(
-        "UPDATE export_cases SET stage='패킹 완료',updated_at=? WHERE id=?",
-        (now, case_id),
-    )
+    _sync_packing_stage(case_id, now)
 
 
 def assign_partial_item(case_id: int, item_id: int, box_no: int, quantity: float) -> None:
@@ -121,10 +134,7 @@ def assign_partial_item(case_id: int, item_id: int, box_no: int, quantity: float
         'INSERT OR IGNORE INTO boxes(case_id,box_no,updated_at) VALUES (?,?,?)',
         (case_id, box_no, now),
     )
-    db.execute(
-        "UPDATE export_cases SET stage='패킹 완료',updated_at=? WHERE id=?",
-        (now, case_id),
-    )
+    _sync_packing_stage(case_id, now)
 
 
 def unassign_items(case_id: int, item_ids: list[int]) -> None:
@@ -134,6 +144,7 @@ def unassign_items(case_id: int, item_ids: list[int]) -> None:
             'UPDATE shipment_items SET box_no=NULL,updated_at=? WHERE id=? AND case_id=?',
             (now, item_id, case_id),
         )
+    _sync_packing_stage(case_id, now)
 
 
 def update_box(box_id: int, length: float, width: float, height: float, weight: float) -> None:
@@ -144,8 +155,10 @@ def update_box(box_id: int, length: float, width: float, height: float, weight: 
 
 
 def clear_box(case_id: int, box_no: int) -> None:
+    now = now_text()
     db.execute(
         'UPDATE shipment_items SET box_no=NULL,updated_at=? WHERE case_id=? AND box_no=?',
-        (now_text(), case_id, box_no),
+        (now, case_id, box_no),
     )
     db.execute('DELETE FROM boxes WHERE case_id=? AND box_no=?', (case_id, box_no))
+    _sync_packing_stage(case_id, now)
