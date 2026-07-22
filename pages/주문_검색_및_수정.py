@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import streamlit as st
 
 from components.editors import order_editor
 from config import TRANSPORT_MODES
 from services import export_service, folder_service, history_service, order_service
+
+
+def summarize_product_names(raw_names: object) -> str:
+    names = [
+        name.strip()
+        for name in re.split(r'[,\n]+', str(raw_names or ''))
+        if name.strip()
+    ]
+    if len(names) <= 2:
+        return ', '.join(names)
+    return f"{', '.join(names[:2])} ~ 외 {len(names) - 2}품목"
 
 
 st.title('주문 검색 및 수정')
@@ -102,22 +115,22 @@ with st.container():
             '바이어': case['buyer'] or '',
             '운송방식': case['transport_mode'],
             '단계': case['stage'],
-            '주문제품': case['product_names'] or '',
+            '주문제품': summarize_product_names(case['product_names']),
         })
 
     selection_df = pd.DataFrame(selection_rows)
     edited_selection = st.data_editor(
         selection_df,
         hide_index=True,
-        use_container_width=False,
+        use_container_width=True,
         disabled=['_case_id', '등록일자', '수출번호', '국가', '바이어', '운송방식', '단계', '주문제품'],
         column_config={
             '선택': st.column_config.CheckboxColumn('선택', help='수정할 주문 한 건만 체크하세요.', width='small'),
             '_case_id': None,
             '등록일자': st.column_config.TextColumn('등록일자', width='small'),
-            '수출번호': st.column_config.TextColumn('수출번호', width='small'),
-            '국가': st.column_config.TextColumn('국가', width='small'),
-            '바이어': st.column_config.TextColumn('바이어', width='small'),
+            '수출번호': st.column_config.TextColumn('수출번호', width='medium'),
+            '국가': st.column_config.TextColumn('국가', width='medium'),
+            '바이어': st.column_config.TextColumn('바이어', width='medium'),
             '운송방식': st.column_config.TextColumn('운송방식', width='small'),
             '단계': st.column_config.TextColumn('단계', width='small'),
             '주문제품': st.column_config.TextColumn('주문제품', width='large'),
