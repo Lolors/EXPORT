@@ -100,14 +100,19 @@ if assign_clicked:
     if not selected_ids:
         st.error('박스에 넣을 실제 출고제품을 선택하세요.')
     else:
-        packing_service.assign_items(case_id, selected_ids, int(box_no))
+        assigned_box_no = int(box_no)
+        packing_service.assign_items(case_id, selected_ids, assigned_box_no)
         folder_service.sync_case_folder(case_id)
         history_service.add(
             case_id,
             '박스 패킹',
-            f'{len(selected_ids)}개 실제 출고 행 → BOX {int(box_no)}',
+            f'{len(selected_ids)}개 실제 출고 행 → BOX {assigned_box_no}',
         )
-        st.success(f'{len(selected_ids)}개 실제 출고 행을 BOX {int(box_no)}에 배정했습니다.')
+        st.session_state[box_number_key] = assigned_box_no + 1
+        st.session_state[f'packing_box_detail_{case_id}'] = f'BOX {assigned_box_no}'
+        for item_id in selected_ids:
+            st.session_state[f'pack_select_{case_id}_{item_id}'] = False
+        st.success(f'{len(selected_ids)}개 실제 출고 행을 BOX {assigned_box_no}에 배정했습니다.')
         st.rerun()
 
 if partial_clicked:
@@ -166,7 +171,8 @@ if partial_item_id:
                     st.session_state.pop('partial_pack_item_id', None)
                     st.session_state.pop('partial_pack_box_no', None)
                     st.session_state[f'pack_select_{case_id}_{partial_item_id}'] = False
-                    st.session_state[box_number_key] = target_box_no
+                    st.session_state[box_number_key] = target_box_no + 1
+                    st.session_state[f'packing_box_detail_{case_id}'] = f'BOX {target_box_no}'
                     st.success(f'{fmt_number(quantity)}개를 BOX {target_box_no}에 배정했습니다.')
                     st.rerun()
             if cancel_col.button('취소', use_container_width=True):
