@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from math import ceil
 
 import streamlit as st
 
@@ -10,6 +11,61 @@ from utils.formatters import fmt_number
 
 st.title('오버뷰')
 st.caption('현재 진행 중인 주문과 수출대기 입고 진행률을 국가별로 확인합니다.')
+
+st.markdown(
+    '''
+    <style>
+    .overview-progress-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0.25rem 0 0.65rem 0;
+    }
+    .overview-progress-track {
+        width: 40vw;
+        max-width: 40vw;
+        height: 0.8rem;
+        background: rgba(49, 51, 63, 0.14);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .overview-progress-fill {
+        height: 100%;
+        background: #4f8bf9;
+        border-radius: 999px;
+    }
+    .overview-progress-label {
+        min-width: 3.5rem;
+        font-weight: 700;
+        text-align: left;
+    }
+    @media (max-width: 900px) {
+        .overview-progress-track {
+            width: 70vw;
+            max-width: 70vw;
+        }
+    }
+    </style>
+    ''',
+    unsafe_allow_html=True,
+)
+
+
+def render_progress_bar(progress: float) -> None:
+    bounded = min(max(progress, 0.0), 1.0)
+    percent = ceil(progress * 100) if progress > 0 else 0
+    st.markdown(
+        f'''
+        <div class="overview-progress-row">
+            <div class="overview-progress-track">
+                <div class="overview-progress-fill" style="width: {bounded * 100:.4f}%;"></div>
+            </div>
+            <div class="overview-progress-label">{percent}%</div>
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
+
 
 cases = active_cases()
 if not cases:
@@ -29,17 +85,18 @@ for country in sorted(country_groups):
         order_total = sum(float(order['quantity'] or 0) for order in orders)
         received_total = sum(float(order['actual_qty'] or 0) for order in orders)
         progress = received_total / order_total if order_total > 0 else 0.0
-        display_progress = min(max(progress, 0.0), 1.0)
 
         with st.container(border=True):
-            header_left, header_right = st.columns([4, 1])
-            header_left.markdown(f"### {case['export_no']} · {case['buyer'] or '바이어 미입력'}")
-            header_right.markdown(f"**{progress * 100:.1f}%**")
+            buyer = str(case['buyer'] or '').strip()
+            header = f"### {case['transport_mode']} · {case['export_no']}"
+            if buyer:
+                header += f" · {buyer}"
+            st.markdown(header)
 
-            st.progress(display_progress)
+            render_progress_bar(progress)
             st.caption(
                 f"주문수량 {fmt_number(order_total)} / 입고수량 {fmt_number(received_total)}"
-                f" · 운송 {case['transport_mode']} · 단계 {case['stage']}"
+                f" · 단계 {case['stage']}"
             )
 
             if not orders:
@@ -53,9 +110,8 @@ for country in sorted(country_groups):
                 st.markdown(
                     f"**{order['product_name']}**  "
                     f"주문 {fmt_number(order_qty)} {order['unit']} · "
-                    f"입고 {fmt_number(received_qty)} {order['unit']} · "
-                    f"{item_progress * 100:.1f}%"
+                    f"입고 {fmt_number(received_qty)} {order['unit']}"
                 )
-                st.progress(min(max(item_progress, 0.0), 1.0))
+                render_progress_bar(item_progress)
 
     st.divider()
