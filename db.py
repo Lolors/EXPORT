@@ -13,17 +13,27 @@ DB_PATH = BASE_DIR / 'export.db'
 UPLOAD_DIR = BASE_DIR / 'uploads'
 
 
+@lru_cache(maxsize=1)
+def _initialize_database_runtime() -> None:
+    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+    try:
+        conn.execute('PRAGMA journal_mode = WAL')
+        conn.execute('PRAGMA synchronous = NORMAL')
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _configure_connection(conn: sqlite3.Connection) -> None:
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
-    conn.execute('PRAGMA journal_mode = WAL')
-    conn.execute('PRAGMA synchronous = NORMAL')
     conn.execute('PRAGMA busy_timeout = 5000')
     conn.execute('PRAGMA temp_store = MEMORY')
 
 
 @contextmanager
 def connect() -> Iterable[sqlite3.Connection]:
+    _initialize_database_runtime()
     conn = sqlite3.connect(DB_PATH, timeout=5.0)
     _configure_connection(conn)
     try:
