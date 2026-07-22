@@ -16,7 +16,7 @@ STAGES = [
     '취소',
 ]
 
-TRANSPORT_MODES = ['AIR', 'SEA', 'HAND']
+TRANSPORT_MODES = ['미지정', 'AIR', 'SEA', 'HAND']
 DOMESTIC_METHODS = ['로젠택배', '퀵배송']
 
 COMPANY_NAME = '주식회사 노투스팜'
