@@ -74,8 +74,23 @@ def render_document(case, packed, actual_rows) -> None:
                     rows_html.append(f'<td rowspan="{rowspan}" class="center merged">{size}</td>')
                 rows_html.append('</tr>')
 
+        total_qty = sum(float(row['requested_qty'] or 0) for row in packed)
+        box_weights = {
+            int(row['box_no']): float(row['weight_kg'] or 0)
+            for row in packed
+        }
+        total_weight = sum(box_weights.values())
+        rows_html.append(
+            '<tr class="total-row">'
+            '<td colspan="5" class="right"><b>합계</b></td>'
+            f'<td class="right"><b>{fmt_number(total_qty)}</b></td>'
+            f'<td class="center"><b>{fmt_number(total_weight)} kg</b></td>'
+            '<td></td>'
+            '</tr>'
+        )
+
         table_header = '<tr><th>CTN No.</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>GW (kg)</th><th>CTN 사이즈</th></tr>'
-        section_title = 'PACKING DETAIL'
+        section_title = 'PACKING LIST'
         first_summary = f'{len({row["box_no"] for row in packed})} CTN'
         first_label = '총 CTN 수'
         display_rows = packed
@@ -110,8 +125,8 @@ body{{margin:0;padding:8px;background:#f4f7fa;color:#172033;font-family:-apple-s
 .body{{padding:28px 38px 36px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 10px}}
 .grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:9px;overflow:hidden;margin-bottom:22px}} .cell{{padding:12px 14px;border-right:1px solid #e5eaf0}} .label{{font-size:10px;color:#7c8797}} .value{{font-size:13px;font-weight:700;margin-top:4px}}
 .summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:23px}} .card{{border:1px solid #dce3eb;border-radius:9px;padding:14px 16px;background:#f8fafc}} .card b{{font-size:20px;color:#214f76}}
-.wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:9px}} table{{border-collapse:collapse;width:100%;min-width:{'900px' if has_packing else '680px'};font-size:11px}} th{{background:#294f71;color:#fff;padding:10px;text-align:left}} td{{padding:10px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0;padding:28px}}
-.note-box{{margin-top:20px;padding:13px 15px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px}} .footer{{margin-top:25px;padding-top:12px;border-top:1px solid #e2e7ed;color:#8a94a1;font-size:10px;display:flex;justify-content:space-between}}
+.wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:9px}} table{{border-collapse:collapse;width:100%;min-width:{'900px' if has_packing else '680px'};font-size:11px}} th{{background:#294f71;color:#fff;padding:10px;text-align:left}} td{{padding:10px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0;padding:28px}} .total-row td{{background:#eef3f8;font-weight:700}}
+.note-box{{margin-top:20px;padding:13px 15px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px}}
 @media print{{body{{background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{border:0;border-radius:0;box-shadow:none;max-width:none}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} .wrap{{overflow:visible}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
@@ -122,8 +137,8 @@ body{{margin:0;padding:8px;background:#f4f7fa;color:#172033;font-family:-apple-s
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
 <div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
 <div class="section">DOMESTIC DELIVERY</div><div class="grid"><div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div><div class="cell" style="grid-column:span 2"><div class="label">{detail_label}</div><div class="value">{html.escape(detail_value)}</div></div><div class="cell"><div class="label">현재 단계</div><div class="value">{html.escape(status_text)}</div></div></div>
-<div class="section">{'PACKING SUMMARY' if has_packing else 'SHIPPING SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>실제 제품 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>실제 출고수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
-<div class="section">{section_title}</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}<div class="footer"><span>주식회사 노투스팜 · 수출관리 시스템</span><span>Generated from Export Management System</span></div></div></div></body></html>'''
+<div class="section">{'PACKING SUMMARY' if has_packing else 'SHIPPING SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
+<div class="section">{section_title}</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}</div></div></body></html>'''
 
     visible_rows = len(display_rows)
     components.html(document, height=min(1800, max(850, 760 + visible_rows * 44)), scrolling=True)
