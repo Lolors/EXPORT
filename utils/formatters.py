@@ -19,8 +19,16 @@ def sanitize_folder_part(value: str | None, fallback: str = '미입력') -> str:
 
 
 def case_label(case, include_type: bool = False) -> str:
-    buyer = f" · {case['buyer']}" if case['buyer'] else ''
     prefix = ''
     if include_type and 'case_type' in case.keys():
         prefix = '[과거] ' if case['case_type'] == 'historical' else '[진행] '
-    return f"{prefix}{case['export_no']} · {case['country']}{buyer} · {case['stage']}"
+
+    values = [
+        case['export_no'],
+        case['country'],
+        case['buyer'],
+        case['transport_mode'],
+        case['stage'],
+    ]
+    parts = [str(value).strip() for value in values if str(value or '').strip()]
+    return prefix + ' · '.join(parts)
