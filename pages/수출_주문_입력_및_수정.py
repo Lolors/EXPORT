@@ -18,8 +18,8 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
-        width: 80vw;
-        max-width: 80vw;
+        width: 60vw;
+        max-width: 60vw;
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
@@ -55,12 +55,15 @@ else:
 
 with st.container():
     st.markdown('<span id="new-case-basic-info-anchor"></span>', unsafe_allow_html=True)
-    export_no_col, country_col, buyer_col, transport_col, note_col = st.columns([2, 2, 2, 1, 3])
-    export_no_col.text_input('수출번호', value=export_no_preview, disabled=True, key='new_export_no')
-    country = country_col.text_input('국가 *', key='new_country')
-    buyer = buyer_col.text_input('바이어 (선택)', key='new_buyer')
-    transport = transport_col.selectbox('운송방식', TRANSPORT_MODES, key='new_transport')
-    note = note_col.text_input('비고', key='new_note')
+
+    first_row = st.columns(3)
+    first_row[0].text_input('수출번호', value=export_no_preview, disabled=True, key='new_export_no')
+    country = first_row[1].text_input('국가 *', key='new_country')
+    buyer = first_row[2].text_input('바이어 (선택)', key='new_buyer')
+
+    second_row = st.columns(3)
+    transport = second_row[0].selectbox('운송방식', TRANSPORT_MODES, key='new_transport')
+    note = second_row[1].text_input('비고', key='new_note')
 
 st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 목록')
 if is_historical:
