@@ -117,17 +117,35 @@ def render_document(case, packed, actual_rows) -> None:
     document = f'''<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-*{{box-sizing:border-box}} @page{{size:A4;margin:12mm}}
-body{{margin:0;padding:8px;background:#f4f7fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif}}
+*{{box-sizing:border-box}} @page{{size:A4 portrait;margin:8mm}}
+html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif}}
+body{{padding:8px}}
 .toolbar{{max-width:1180px;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:8px;background:#173b5f;color:#fff;font-weight:700;padding:10px 18px;cursor:pointer}}
 .document{{max-width:1180px;margin:auto;background:#fff;border:1px solid #d8dee8;border-radius:14px;overflow:hidden;box-shadow:0 12px 34px rgba(30,45,70,.08)}}
-.header{{padding:30px 38px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:20px}} .title{{font-size:28px;font-weight:800}} .sub{{font-size:12px;opacity:.8}} .number{{text-align:right}}
-.body{{padding:28px 38px 36px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 10px}}
-.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:9px;overflow:hidden;margin-bottom:22px}} .cell{{padding:12px 14px;border-right:1px solid #e5eaf0}} .label{{font-size:10px;color:#7c8797}} .value{{font-size:13px;font-weight:700;margin-top:4px}}
-.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:23px}} .card{{border:1px solid #dce3eb;border-radius:9px;padding:14px 16px;background:#f8fafc}} .card b{{font-size:20px;color:#214f76}}
-.wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:9px}} table{{border-collapse:collapse;width:100%;min-width:{'900px' if has_packing else '680px'};font-size:11px}} th{{background:#294f71;color:#fff;padding:10px;text-align:left}} td{{padding:10px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0;padding:28px}} .total-row td{{background:#eef3f8;font-weight:700}}
-.note-box{{margin-top:20px;padding:13px 15px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px}}
-@media print{{body{{background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{border:0;border-radius:0;box-shadow:none;max-width:none}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} .wrap{{overflow:visible}}}}
+.header{{padding:24px 30px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:18px}} .title{{font-size:25px;font-weight:800}} .sub{{font-size:11px;opacity:.8}} .number{{text-align:right}}
+.body{{padding:22px 30px 26px}} .section{{font-size:12px;font-weight:800;color:#294f71;margin:0 0 8px}}
+.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:8px;overflow:hidden;margin-bottom:16px}} .cell{{padding:9px 11px;border-right:1px solid #e5eaf0}} .label{{font-size:9px;color:#7c8797}} .value{{font-size:12px;font-weight:700;margin-top:3px}}
+.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:17px}} .card{{border:1px solid #dce3eb;border-radius:8px;padding:10px 12px;background:#f8fafc}} .card b{{font-size:17px;color:#214f76}}
+.wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:8px}} table{{border-collapse:collapse;width:100%;min-width:{'900px' if has_packing else '680px'};font-size:10px}} th{{background:#294f71;color:#fff;padding:7px 8px;text-align:left}} td{{padding:7px 8px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0;padding:24px}} .total-row td{{background:#eef3f8;font-weight:700}}
+.note-box{{margin-top:14px;padding:10px 12px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:10px}}
+@media print{{
+  html,body{{width:210mm;height:297mm;background:#fff;padding:0;overflow:hidden}}
+  .toolbar{{display:none!important}}
+  .document{{width:194mm;max-width:none;height:auto;margin:0 auto;border:0;border-radius:0;box-shadow:none;transform-origin:top center;zoom:0.82}}
+  .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  .wrap{{overflow:visible}}
+  table{{min-width:0;font-size:8.5px}}
+  th,td{{padding:5px 6px}}
+  .header{{padding:18px 22px}}
+  .title{{font-size:21px}}
+  .body{{padding:16px 22px 18px}}
+  .grid{{margin-bottom:11px}}
+  .summary{{margin-bottom:12px}}
+  .card{{padding:8px 10px}}
+  .card b{{font-size:14px}}
+  .section{{margin-bottom:5px}}
+  .note-box{{margin-top:9px;padding:7px 9px}}
+}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b><br>{html.escape(status_text)}</div></div>
