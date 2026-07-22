@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -100,7 +100,71 @@ if not cases:
     st.info('수정할 수출 건이 없습니다.')
     st.stop()
 
-options = {case_label(case): int(case['id']) for case in cases}
+st.markdown('#### 수정할 수출 건 찾기')
+st.markdown(
+    '''
+    <style>
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor) {
+        width: 56vw;
+        max-width: 56vw;
+    }
+    @media (max-width: 900px) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor) {
+            width: 100%;
+            max-width: 100%;
+        }
+    }
+    </style>
+    ''',
+    unsafe_allow_html=True,
+)
+
+with st.container():
+    st.markdown('<span id="editable-case-filter-anchor"></span>', unsafe_allow_html=True)
+    years = sorted({
+        int(str(case['actual_ship_date'] or case['created_at'])[:4])
+        for case in cases
+        if str(case['actual_ship_date'] or case['created_at'])[:4].isdigit()
+    }, reverse=True)
+    selected_year = st.selectbox('연도', ['전체'] + years, key='edit_case_year')
+
+    if selected_year == '전체':
+        month_options: list[str | int] = ['전체']
+    else:
+        month_values = sorted({
+            int(str(case['actual_ship_date'] or case['created_at'])[5:7])
+            for case in cases
+            if str(case['actual_ship_date'] or case['created_at']).startswith(str(selected_year))
+            and str(case['actual_ship_date'] or case['created_at'])[5:7].isdigit()
+        })
+        month_options = ['전체'] + month_values
+    selected_month = st.selectbox('월', month_options, key='edit_case_month')
+
+    countries = sorted({str(case['country']).strip() for case in cases if str(case['country']).strip()})
+    selected_country = st.selectbox('국가', ['전체'] + countries, key='edit_case_country')
+    product_query = st.text_input('제품명 일부일치 검색', key='edit_case_product_search').strip().casefold()
+
+filtered_cases = []
+for case in cases:
+    raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
+    case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
+    case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
+
+    if selected_year != '전체' and case_year != selected_year:
+        continue
+    if selected_month != '전체' and case_month != selected_month:
+        continue
+    if selected_country != '전체' and str(case['country']).strip() != selected_country:
+        continue
+    if product_query and product_query not in str(case['product_names'] or '').casefold():
+        continue
+    filtered_cases.append(case)
+
+if not filtered_cases:
+    st.warning('조건에 맞는 수출 건이 없습니다.')
+    st.stop()
+
+options = {case_label(case): int(case['id']) for case in filtered_cases}
 selected_case_id = st.session_state.get('order_case_id')
 labels = list(options)
 default_index = 0
@@ -108,7 +172,7 @@ if selected_case_id in options.values():
     default_index = list(options.values()).index(selected_case_id)
 case_id = options[st.selectbox('주문을 수정할 수출 건', labels, index=default_index)]
 
-case_map = {int(row['id']): row for row in cases}
+case_map = {int(row['id']): row for row in filtered_cases}
 case = case_map[case_id]
 
 with st.form(f'case_edit_{case_id}'):
