@@ -55,6 +55,15 @@ def update_basic(case_id: int, country: str, buyer: str, transport: str, note: s
     )
 
 
+def cancel_case(case_id: int) -> None:
+    db.execute(
+        '''UPDATE export_cases
+           SET stage='취소', status='취소', updated_at=?
+           WHERE id=?''',
+        (now_text(), case_id),
+    )
+
+
 def create_case(*, export_no: str, buyer: str, country: str, transport: str,
                 note: str, actual_ship_date: str = '', case_type: str = 'current',
                 stage: str = '주문 접수', status: str = '진행중') -> int:
