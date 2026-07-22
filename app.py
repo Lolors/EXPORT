@@ -3,7 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 import db
-
+from config import APP_ICON, APP_LAYOUT, APP_TITLE
 
 PAGES = {
     '': [
@@ -19,7 +19,7 @@ PAGES = {
 
 
 def main() -> None:
-    st.set_page_config(page_title='수출관리', page_icon='🌏', layout='wide')
+    st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
     db.init_db()
     st.navigation(PAGES, position='sidebar').run()
 
