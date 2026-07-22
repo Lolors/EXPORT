@@ -5,8 +5,8 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-import db
 from components.editors import order_editor
+from config import TRANSPORT_MODES
 from services import export_service, folder_service, history_service, order_service
 from utils.formatters import case_label
 from utils.numbering import next_export_no
@@ -27,7 +27,7 @@ is_historical = case_type_label == '과거 수출 건'
 c1, c2 = st.columns(2)
 country = c1.text_input('국가 *', key='new_country')
 buyer = c2.text_input('바이어 (선택)', key='new_buyer')
-transport = c1.selectbox('운송방식', db.TRANSPORT_MODES, key='new_transport')
+transport = c1.selectbox('운송방식', TRANSPORT_MODES, key='new_transport')
 note = c2.text_input('비고', key='new_note')
 
 historical_date = None
@@ -116,8 +116,8 @@ with st.form(f'case_edit_{case_id}'):
     c1, c2 = st.columns(2)
     new_country = c1.text_input('국가 *', value=case['country'])
     new_buyer = c2.text_input('바이어 (선택)', value=case['buyer'])
-    transport_index = db.TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in db.TRANSPORT_MODES else 0
-    new_transport = c1.selectbox('운송방식', db.TRANSPORT_MODES, index=transport_index)
+    transport_index = TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in TRANSPORT_MODES else 0
+    new_transport = c1.selectbox('운송방식', TRANSPORT_MODES, index=transport_index)
     new_note = c2.text_input('비고', value=case['note'])
     save_basic = st.form_submit_button('기본 정보 저장')
 
