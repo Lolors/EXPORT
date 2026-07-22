@@ -189,48 +189,53 @@ boxes = packing_service.list_boxes(case_id)
 if not boxes:
     st.info('아직 생성된 박스가 없습니다.')
 else:
-    for box in boxes:
-        box_items = packing_service.list_box_items(case_id, int(box['box_no']))
-        box_qty = sum(float(item['requested_qty'] or 0) for item in box_items)
-        with st.expander(
-            f"BOX {box['box_no']} · {len(box_items)}개 행 · 수량 {fmt_number(box_qty)}",
-            expanded=True,
-        ):
-            if box_items:
-                st.dataframe(
-                    [
-                        {
-                            '사업장': item['business_unit'],
-                            '실제 제품명': item['product_name'],
-                            '제조번호': item['lot_no'],
-                            '유통기한': item['expiry_date'],
-                            '수량': item['requested_qty'],
-                        }
-                        for item in box_items
-                    ],
-                    hide_index=True,
-                    use_container_width=True,
-                )
-            else:
-                st.caption('이 박스에 연결된 제품이 없습니다.')
+    box_options = {f"BOX {int(box['box_no'])}": int(box['box_no']) for box in boxes}
+    selected_box_label = st.selectbox(
+        '박스 선택',
+        list(box_options),
+        key=f'packing_box_detail_{case_id}',
+    )
+    selected_box_no = box_options[selected_box_label]
+    box = next(box for box in boxes if int(box['box_no']) == selected_box_no)
+    box_items = packing_service.list_box_items(case_id, selected_box_no)
+    box_qty = sum(float(item['requested_qty'] or 0) for item in box_items)
 
-            with st.form(f'box_info_{case_id}_{box["id"]}'):
-                c1, c2, c3, c4 = st.columns(4)
-                length = c1.number_input('가로(cm)', min_value=0.0, value=float(box['length_cm'] or 0), key=f'len_{box["id"]}')
-                width = c2.number_input('세로(cm)', min_value=0.0, value=float(box['width_cm'] or 0), key=f'wid_{box["id"]}')
-                height = c3.number_input('높이(cm)', min_value=0.0, value=float(box['height_cm'] or 0), key=f'hei_{box["id"]}')
-                weight = c4.number_input('무게(kg)', min_value=0.0, value=float(box['weight_kg'] or 0), key=f'wei_{box["id"]}')
-                left_button_col, center_button_col, right_button_col = st.columns([1, 1, 1])
-                with center_button_col:
-                    save_box = st.form_submit_button('박스 정보 저장', type='primary', use_container_width=True)
+    st.caption(f"{selected_box_label} · {len(box_items)}개 행 · 수량 {fmt_number(box_qty)}")
+    if box_items:
+        st.dataframe(
+            [
+                {
+                    '사업장': item['business_unit'],
+                    '실제 제품명': item['product_name'],
+                    '제조번호': item['lot_no'],
+                    '유통기한': item['expiry_date'],
+                    '수량': item['requested_qty'],
+                }
+                for item in box_items
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.caption('이 박스에 연결된 제품이 없습니다.')
 
-            if save_box:
-                packing_service.update_box(int(box['id']), length, width, height, weight)
-                folder_service.sync_case_folder(case_id)
-                history_service.add(case_id, '박스 정보 수정', f"BOX {box['box_no']}")
-                notice = st.empty()
-                notice.success(f"BOX {box['box_no']} 정보가 저장됐습니다.")
-                time.sleep(2)
-                notice.empty()
+    with st.form(f'box_info_{case_id}_{box["id"]}'):
+        c1, c2, c3, c4 = st.columns(4)
+        length = c1.number_input('가로(cm)', min_value=0.0, value=float(box['length_cm'] or 0), key=f'len_{box["id"]}')
+        width = c2.number_input('세로(cm)', min_value=0.0, value=float(box['width_cm'] or 0), key=f'wid_{box["id"]}')
+        height = c3.number_input('높이(cm)', min_value=0.0, value=float(box['height_cm'] or 0), key=f'hei_{box["id"]}')
+        weight = c4.number_input('무게(kg)', min_value=0.0, value=float(box['weight_kg'] or 0), key=f'wei_{box["id"]}')
+        left_button_col, center_button_col, right_button_col = st.columns([1, 1, 1])
+        with center_button_col:
+            save_box = st.form_submit_button('박스 정보 저장', type='primary', use_container_width=True)
+
+    if save_box:
+        packing_service.update_box(int(box['id']), length, width, height, weight)
+        folder_service.sync_case_folder(case_id)
+        history_service.add(case_id, '박스 정보 수정', selected_box_label)
+        notice = st.empty()
+        notice.success(f'{selected_box_label} 정보가 저장됐습니다.')
+        time.sleep(2)
+        notice.empty()
 
 st.caption(f'현재 미패킹 실제 출고 행: {unpacked_count}개')
