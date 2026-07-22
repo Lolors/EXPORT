@@ -10,8 +10,6 @@ from utils.dates import now_text
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / 'export.db'
 UPLOAD_DIR = BASE_DIR / 'uploads'
-STAGES = ['주문 접수','제품 준비','실출고 입력','패킹','국내배송','선적 준비','선적 완료','완료','취소']
-TRANSPORT_MODES = ['AIR','SEA','HAND']
 
 
 @contextmanager
@@ -27,7 +25,7 @@ def connect() -> Iterable[sqlite3.Connection]:
 
 
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    return {r['name'] for r in conn.execute(f'PRAGMA table_info({table})')}
+    return {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}
 
 
 def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> None:
@@ -39,6 +37,7 @@ def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> None:
 def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
     if 'expected_ship_date' not in _columns(conn, 'export_cases'):
         return
+
     conn.executescript('''
     PRAGMA foreign_keys = OFF;
     CREATE TABLE export_cases_new (
@@ -83,6 +82,7 @@ def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
 
 def init_db() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
     with connect() as conn:
         conn.executescript('''
         CREATE TABLE IF NOT EXISTS export_cases (
@@ -149,6 +149,7 @@ def init_db() -> None:
             updated_at TEXT NOT NULL
         );
         ''')
+
         for definition in [
             "domestic_method TEXT DEFAULT ''",
             "tracking_no TEXT DEFAULT ''",
@@ -163,6 +164,7 @@ def init_db() -> None:
             "case_type TEXT DEFAULT 'current'",
         ]:
             _add_column(conn, 'export_cases', definition)
+
         _remove_expected_ship_date_column(conn)
         _add_column(conn, 'shipment_items', 'order_item_id INTEGER')
 
@@ -179,8 +181,8 @@ def row(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
 
 def execute(query: str, params: tuple[Any, ...] = ()) -> int:
     with connect() as conn:
-        cur = conn.execute(query, params)
-        return int(cur.lastrowid or 0)
+        cursor = conn.execute(query, params)
+        return int(cursor.lastrowid or 0)
 
 
 def executemany(query: str, values: list[tuple[Any, ...]]) -> None:
