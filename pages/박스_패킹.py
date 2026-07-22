@@ -63,13 +63,18 @@ for item in items:
 
 st.divider()
 next_box = packing_service.next_box_no(case_id)
-assign_col, button_col = st.columns([1, 2])
+assign_col, full_col, partial_col = st.columns([1, 2, 2])
 box_no = assign_col.number_input('배정할 박스번호', min_value=1, value=next_box, step=1)
 
-with button_col:
+with full_col:
     st.write('')
     st.write('')
     assign_clicked = st.button('선택 제품을 박스에 배정', type='primary', use_container_width=True)
+
+with partial_col:
+    st.write('')
+    st.write('')
+    partial_clicked = st.button('선택 제품의 일부만 박스에 배정', use_container_width=True)
 
 if assign_clicked:
     if not selected_ids:
@@ -84,6 +89,69 @@ if assign_clicked:
         )
         st.success(f'{len(selected_ids)}개 실제 출고 행을 BOX {int(box_no)}에 배정했습니다.')
         st.rerun()
+
+if partial_clicked:
+    if not selected_ids:
+        st.error('일부 수량을 배정할 실제 출고제품을 선택하세요.')
+    elif len(selected_ids) > 1:
+        st.error('일부 수량 배정은 실제 출고제품 한 개만 선택할 수 있습니다.')
+    else:
+        st.session_state['partial_pack_item_id'] = selected_ids[0]
+        st.session_state['partial_pack_box_no'] = int(box_no)
+        st.rerun()
+
+partial_item_id = st.session_state.get('partial_pack_item_id')
+if partial_item_id:
+    partial_item = next((item for item in items if int(item['id']) == int(partial_item_id)), None)
+    if partial_item is None:
+        st.session_state.pop('partial_pack_item_id', None)
+        st.session_state.pop('partial_pack_box_no', None)
+    else:
+        @st.dialog('선택 제품 일부 수량 배정')
+        def partial_assign_dialog() -> None:
+            total_quantity = float(partial_item['requested_qty'] or 0)
+            target_box_no = int(st.session_state.get('partial_pack_box_no', next_box))
+            st.write(f"**{partial_item['product_name']}**")
+            st.caption(
+                f"남은 출고수량 {fmt_number(total_quantity)} {partial_item['unit'] if 'unit' in partial_item.keys() else ''} · "
+                f"배정 대상 BOX {target_box_no}"
+            )
+            quantity = st.number_input(
+                '박스에 배정할 수량',
+                min_value=0.0,
+                max_value=total_quantity,
+                value=total_quantity,
+                step=1.0,
+                key=f'partial_pack_qty_{case_id}_{partial_item_id}',
+            )
+            confirm_col, cancel_col = st.columns(2)
+            if confirm_col.button('일부 수량 배정', type='primary', use_container_width=True):
+                try:
+                    packing_service.assign_partial_item(
+                        case_id,
+                        int(partial_item_id),
+                        target_box_no,
+                        float(quantity),
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    folder_service.sync_case_folder(case_id)
+                    history_service.add(
+                        case_id,
+                        '박스 일부 수량 배정',
+                        f"{partial_item['product_name']} {fmt_number(quantity)} → BOX {target_box_no}",
+                    )
+                    st.session_state.pop('partial_pack_item_id', None)
+                    st.session_state.pop('partial_pack_box_no', None)
+                    st.success(f'{fmt_number(quantity)}개를 BOX {target_box_no}에 배정했습니다.')
+                    st.rerun()
+            if cancel_col.button('취소', use_container_width=True):
+                st.session_state.pop('partial_pack_item_id', None)
+                st.session_state.pop('partial_pack_box_no', None)
+                st.rerun()
+
+        partial_assign_dialog()
 
 if selected_ids and st.button('선택 제품 박스 배정 해제'):
     packing_service.unassign_items(case_id, selected_ids)
