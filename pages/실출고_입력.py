@@ -10,14 +10,14 @@ from utils.formatters import case_label, fmt_number
 
 def order_state(order_qty: float, linked_qty: float) -> tuple[str, str]:
     if order_qty > 0 and linked_qty >= order_qty:
-        return '🟢', '확보 완료'
+        return '🟢', '입고 완료'
     if linked_qty > 0:
-        return '🟡', '일부 확보'
-    return '🔴', '미확보'
+        return '🟡', '일부 입고'
+    return '🔴', '미입고'
 
 
-st.title('실출고 입력')
-st.caption('주문품목별로 실제 출고제품의 사업장, 제품명, 제조번호, 유통기한과 수량을 연결합니다.')
+st.title('수출대기 입고')
+st.caption('주문품목별로 수출대기 위치에 입고할 제품의 사업장, 제품명, 제조번호, 유통기한과 수량을 연결합니다.')
 
 cases = export_service.active_cases()
 if not cases:
@@ -35,10 +35,10 @@ if not orders:
 unlinked_count = shipment_service.count_unlinked(case_id)
 if unlinked_count:
     st.warning(
-        f'구형 실출고 데이터 중 주문품목에 연결되지 않은 행이 {unlinked_count}개 있습니다. '
-        '이 데이터는 현재 주문품목별 실출고 화면에 표시되지 않으며, 필요하지 않다면 아래에서 삭제할 수 있습니다.'
+        f'구형 입고 데이터 중 주문품목에 연결되지 않은 행이 {unlinked_count}개 있습니다. '
+        '이 데이터는 현재 주문품목별 입고 화면에 표시되지 않으며, 필요하지 않다면 아래에서 삭제할 수 있습니다.'
     )
-    with st.expander('구형 미연결 실출고 데이터 정리', expanded=True):
+    with st.expander('구형 미연결 입고 데이터 정리', expanded=True):
         legacy_rows = shipment_service.list_unlinked(case_id)
         st.dataframe(
             [
@@ -47,7 +47,7 @@ if unlinked_count:
                     '실제 제품명': row['product_name'],
                     '제조번호': row['lot_no'],
                     '유통기한': row['expiry_date'],
-                    '출고수량': row['requested_qty'],
+                    '입고수량': row['requested_qty'],
                     '박스번호': row['box_no'],
                 }
                 for row in legacy_rows
@@ -66,8 +66,8 @@ if unlinked_count:
         ):
             shipment_service.delete_unlinked(case_id)
             folder_service.sync_case_folder(case_id)
-            history_service.add(case_id, '구형 미연결 실출고 삭제', f'{unlinked_count}개 행')
-            st.success('구형 미연결 실출고 데이터를 삭제했습니다.')
+            history_service.add(case_id, '구형 미연결 입고 삭제', f'{unlinked_count}개 행')
+            st.success('구형 미연결 입고 데이터를 삭제했습니다.')
             st.rerun()
 
 for order in orders:
@@ -79,7 +79,7 @@ for order in orders:
     icon, state = order_state(order_qty, linked_qty)
 
     with st.expander(
-        f"{icon} {order['product_name']} · 주문 {fmt_number(order_qty)} {unit} · 실출고 {fmt_number(linked_qty)} {unit} · {state}",
+        f"{icon} {order['product_name']} · 주문 {fmt_number(order_qty)} {unit} · 입고 {fmt_number(linked_qty)} {unit} · {state}",
         expanded=linked_qty < order_qty,
     ):
         st.caption('한 주문품목에 실제 제품이나 제조번호가 여러 개면 행을 추가해 각각 입력하세요.')
@@ -91,7 +91,7 @@ for order in orders:
                     '실제 제품명': row['product_name'] or '',
                     '제조번호': row['lot_no'] or '',
                     '유통기한': row['expiry_date'] or '',
-                    '출고수량': float(row['requested_qty'] or 0),
+                    '입고수량': float(row['requested_qty'] or 0),
                 }
                 for row in current
             ])
@@ -101,15 +101,15 @@ for order in orders:
                 '실제 제품명': '',
                 '제조번호': '',
                 '유통기한': '',
-                '출고수량': 0.0,
+                '입고수량': 0.0,
             }])
 
-        edited = shipment_editor(source, key=f'linked_order_editor_{order_id}')
+        edited = shipment_editor(source.rename(columns={'입고수량': '출고수량'}), key=f'linked_order_editor_{order_id}')
         preview_qty = sum(float(value or 0) for value in edited.get('출고수량', []))
         preview_icon, preview_state = order_state(order_qty, preview_qty)
         st.info(f'{preview_icon} 입력 합계 {fmt_number(preview_qty)} / 주문 {fmt_number(order_qty)} {unit} · {preview_state}')
 
-        if st.button('이 주문품목의 실출고 저장', type='primary', key=f'save_linked_order_{order_id}'):
+        if st.button('이 주문품목의 입고 저장', type='primary', key=f'save_linked_order_{order_id}'):
             values: list[dict] = []
             for _, row in edited.iterrows():
                 actual_name = str(row.get('실제 제품명', '') or '').strip()
@@ -136,11 +136,11 @@ for order in orders:
                 folder_service.sync_case_folder(case_id)
                 history_service.add(
                     case_id,
-                    '주문품목별 실출고 저장',
+                    '주문품목별 입고 저장',
                     f"{order['product_name']} · {fmt_number(preview_qty)} / {fmt_number(order_qty)} {unit}",
                 )
                 st.success('저장했습니다.')
                 st.rerun()
 
 st.divider()
-st.caption(f'현재 주문품목에 연결된 전체 실출고 수량: {fmt_number(shipment_service.total_linked_quantity(case_id))}')
+st.caption(f'현재 주문품목에 연결된 전체 입고 수량: {fmt_number(shipment_service.total_linked_quantity(case_id))}')
