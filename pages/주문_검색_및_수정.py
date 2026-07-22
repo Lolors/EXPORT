@@ -148,15 +148,27 @@ st.session_state['order_case_id'] = case_id
 case_map = {int(row['id']): row for row in filtered_cases}
 case = case_map[case_id]
 
-with st.form(f'case_edit_{case_id}'):
-    st.markdown('#### 기본 정보 수정')
-    c1, c2 = st.columns(2)
-    new_country = c1.text_input('국가 *', value=case['country'])
-    new_buyer = c2.text_input('바이어 (선택)', value=case['buyer'])
-    transport_index = TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in TRANSPORT_MODES else 0
-    new_transport = c1.selectbox('운송방식', TRANSPORT_MODES, index=transport_index)
-    new_note = c2.text_input('비고', value=case['note'])
-    save_basic = st.form_submit_button('기본 정보 저장', use_container_width=True)
+st.markdown('#### 기본 정보 수정')
+c1, c2 = st.columns(2)
+new_country = c1.text_input('국가 *', value=case['country'])
+new_buyer = c2.text_input('바이어 (선택)', value=case['buyer'])
+transport_index = TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in TRANSPORT_MODES else 0
+new_transport = c1.selectbox('운송방식', TRANSPORT_MODES, index=transport_index)
+new_note = c2.text_input('비고', value=case['note'])
+
+save_col, cancel_col, confirm_col = st.columns([2, 2, 6])
+save_basic = save_col.button('기본 정보 저장', use_container_width=True, key=f'save_basic_{case_id}')
+cancel_confirmed = confirm_col.checkbox(
+    f"{case['export_no']} 주문 취소를 확인합니다.",
+    key=f'cancel_confirm_{case_id}',
+)
+cancel_order = cancel_col.button(
+    '주문 취소',
+    type='secondary',
+    disabled=not cancel_confirmed,
+    use_container_width=True,
+    key=f'cancel_order_{case_id}',
+)
 
 if save_basic:
     if not new_country.strip():
@@ -167,17 +179,6 @@ if save_basic:
         history_service.add_history(case_id, '수출 기본 정보 수정', f'{new_country} / {new_transport}')
         st.success('기본 정보를 저장했습니다.')
         st.rerun()
-
-cancel_confirmed = st.checkbox(
-    f"{case['export_no']} 주문 취소를 확인합니다.",
-    key=f'cancel_confirm_{case_id}',
-)
-cancel_order = st.button(
-    '주문 취소',
-    type='secondary',
-    disabled=not cancel_confirmed,
-    key=f'cancel_order_{case_id}',
-)
 
 if cancel_order:
     export_service.cancel_case(case_id)
