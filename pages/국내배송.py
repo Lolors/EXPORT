@@ -22,10 +22,7 @@ if not cases:
     st.info('표시할 수출 건이 없습니다.')
     st.stop()
 
-options = {
-    f"{case_label(case)} · {case['transport_mode']}": int(case['id'])
-    for case in cases
-}
+options = {case_label(case): int(case['id']) for case in cases}
 case_id = options[st.selectbox('수출 건 선택', list(options), key='delivery_case')]
 case = export_service.get_case(case_id)
 
