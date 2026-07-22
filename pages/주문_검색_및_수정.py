@@ -35,15 +35,17 @@ st.markdown(
         width: 56vw;
         max-width: 56vw;
     }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#basic-info-editor-anchor),
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-item-editor-anchor) {
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-edit-panel-anchor) {
         width: 50vw;
         max-width: 50vw;
+        border: 1px solid rgba(49, 51, 63, 0.18);
+        border-radius: 16px;
+        padding: 1.25rem 1.35rem 1.35rem;
+        margin-top: 0.5rem;
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#editable-case-filter-anchor),
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#basic-info-editor-anchor),
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-item-editor-anchor) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-edit-panel-anchor) {
             width: 100%;
             max-width: 100%;
         }
@@ -151,7 +153,7 @@ case_map = {int(row['id']): row for row in filtered_cases}
 case = case_map[case_id]
 
 with st.container():
-    st.markdown('<span id="basic-info-editor-anchor"></span>', unsafe_allow_html=True)
+    st.markdown('<span id="order-edit-panel-anchor"></span>', unsafe_allow_html=True)
     st.markdown('#### 기본 정보 수정')
     info_cols = st.columns(4)
     new_country = info_cols[0].text_input('국가 *', value=case['country'])
@@ -174,37 +176,35 @@ with st.container():
         key=f'cancel_order_{case_id}',
     )
 
-if save_basic:
-    if not new_country.strip():
-        st.error('국가는 필수입니다.')
-    else:
-        export_service.update_basic(case_id, new_country, new_buyer, new_transport, new_note)
-        folder_service.sync_case_folder(case_id)
-        history_service.add_history(case_id, '수출 기본 정보 수정', f'{new_country} / {new_transport}')
-        st.success('기본 정보를 저장했습니다.')
+    if save_basic:
+        if not new_country.strip():
+            st.error('국가는 필수입니다.')
+        else:
+            export_service.update_basic(case_id, new_country, new_buyer, new_transport, new_note)
+            folder_service.sync_case_folder(case_id)
+            history_service.add_history(case_id, '수출 기본 정보 수정', f'{new_country} / {new_transport}')
+            st.success('기본 정보를 저장했습니다.')
+            st.rerun()
+
+    if cancel_order:
+        export_service.cancel_case(case_id)
+        history_service.add_history(case_id, '주문 취소', case['export_no'])
+        st.session_state.pop('order_case_id', None)
+        st.session_state.pop(f'cancel_confirm_{case_id}', None)
+        st.success(f"{case['export_no']} 주문을 취소했습니다.")
         st.rerun()
 
-if cancel_order:
-    export_service.cancel_case(case_id)
-    history_service.add_history(case_id, '주문 취소', case['export_no'])
-    st.session_state.pop('order_case_id', None)
-    st.session_state.pop(f'cancel_confirm_{case_id}', None)
-    st.success(f"{case['export_no']} 주문을 취소했습니다.")
-    st.rerun()
+    existing = order_service.get_order_items_dataframe(case_id)
+    if existing.empty:
+        existing = pd.DataFrame([{'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA'}])
 
-existing = order_service.get_order_items_dataframe(case_id)
-if existing.empty:
-    existing = pd.DataFrame([{'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA'}])
+    historical_case = case['case_type'] == 'historical'
+    st.markdown('#### 실출고 제품 수정' if historical_case else '#### 주문품목 수정')
+    if historical_case:
+        st.caption('과거 수출 건에서는 수정한 내용이 주문목록과 실출고 제품에 함께 반영됩니다.')
+    else:
+        st.caption('실출고가 연결된 행은 삭제할 수 없지만 제품명·수량·단위는 수정할 수 있습니다.')
 
-historical_case = case['case_type'] == 'historical'
-st.markdown('#### 실출고 제품 수정' if historical_case else '#### 주문품목 수정')
-if historical_case:
-    st.caption('과거 수출 건에서는 수정한 내용이 주문목록과 실출고 제품에 함께 반영됩니다.')
-else:
-    st.caption('실출고가 연결된 행은 삭제할 수 없지만 제품명·수량·단위는 수정할 수 있습니다.')
-
-with st.container():
-    st.markdown('<span id="order-item-editor-anchor"></span>', unsafe_allow_html=True)
     edited = order_editor(existing, key=f'orders_{case_id}')
     if st.button('목록 저장' if historical_case else '주문 목록 저장', type='primary', key=f'save_orders_{case_id}'):
         try:
