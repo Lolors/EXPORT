@@ -16,9 +16,7 @@ def summarize_product_names(raw_names: object) -> str:
         for name in re.split(r'[,\n]+', str(raw_names or ''))
         if name.strip()
     ]
-    if len(names) <= 2:
-        return ', '.join(names)
-    return f"{', '.join(names[:2])} ~ 외 {len(names) - 2}품목"
+    return ', '.join(names)
 
 
 st.title('주문 검색 및 수정')
