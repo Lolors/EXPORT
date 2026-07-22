@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -12,11 +13,19 @@ DB_PATH = BASE_DIR / 'export.db'
 UPLOAD_DIR = BASE_DIR / 'uploads'
 
 
-@contextmanager
-def connect() -> Iterable[sqlite3.Connection]:
-    conn = sqlite3.connect(DB_PATH)
+def _configure_connection(conn: sqlite3.Connection) -> None:
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
+    conn.execute('PRAGMA journal_mode = WAL')
+    conn.execute('PRAGMA synchronous = NORMAL')
+    conn.execute('PRAGMA busy_timeout = 5000')
+    conn.execute('PRAGMA temp_store = MEMORY')
+
+
+@contextmanager
+def connect() -> Iterable[sqlite3.Connection]:
+    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+    _configure_connection(conn)
     try:
         yield conn
         conn.commit()
@@ -80,6 +89,7 @@ def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
     ''')
 
 
+@lru_cache(maxsize=1)
 def init_db() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -167,6 +177,25 @@ def init_db() -> None:
 
         _remove_expected_ship_date_column(conn)
         _add_column(conn, 'shipment_items', 'order_item_id INTEGER')
+
+        conn.executescript('''
+        CREATE INDEX IF NOT EXISTS idx_export_cases_status_stage
+            ON export_cases(status, stage);
+        CREATE INDEX IF NOT EXISTS idx_export_cases_dates
+            ON export_cases(actual_ship_date, created_at);
+        CREATE INDEX IF NOT EXISTS idx_order_items_case_id
+            ON order_items(case_id);
+        CREATE INDEX IF NOT EXISTS idx_shipment_items_case_id
+            ON shipment_items(case_id);
+        CREATE INDEX IF NOT EXISTS idx_shipment_items_order_item_id
+            ON shipment_items(order_item_id);
+        CREATE INDEX IF NOT EXISTS idx_shipment_items_case_box
+            ON shipment_items(case_id, box_no);
+        CREATE INDEX IF NOT EXISTS idx_boxes_case_box
+            ON boxes(case_id, box_no);
+        CREATE INDEX IF NOT EXISTS idx_history_case_id
+            ON history(case_id);
+        ''')
 
 
 def rows(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
