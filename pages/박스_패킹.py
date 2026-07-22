@@ -2,48 +2,22 @@ from __future__ import annotations
 
 import streamlit as st
 
-import db
-
-
-st.set_page_config(page_title='박스 패킹', page_icon='📦', layout='wide')
-db.init_db()
-
-
-def case_label(case) -> str:
-    buyer = f" · {case['buyer']}" if case['buyer'] else ''
-    return f"{case['export_no']} · {case['country']}{buyer} · {case['stage']}"
-
-
-def fmt_number(value) -> str:
-    try:
-        return f'{float(value):g}'
-    except (TypeError, ValueError):
-        return '0'
+from services import export_service, folder_service, history_service, packing_service
+from utils.formatters import case_label, fmt_number
 
 
 st.title('박스 패킹')
 st.caption('실제 출고제품을 기준으로 제품·수량과 박스번호를 연결하고, 박스별 규격과 무게를 입력합니다.')
 
-cases = db.rows(
-    "SELECT * FROM export_cases WHERE status='진행중' AND stage NOT IN ('완료','취소') ORDER BY created_at"
-)
+cases = export_service.active_cases()
 if not cases:
     st.info('진행 중 수출 건이 없습니다.')
     st.stop()
 
 options = {case_label(case): int(case['id']) for case in cases}
 case_id = options[st.selectbox('수출 건 선택', list(options), key='actual_packing_case')]
-case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
 
-items = db.rows(
-    '''SELECT id, business_unit, product_name, lot_no, expiry_date,
-              requested_qty, box_no
-       FROM shipment_items
-       WHERE case_id=?
-       ORDER BY CASE WHEN box_no IS NULL THEN 0 ELSE 1 END, box_no, id''',
-    (case_id,),
-)
-
+items = packing_service.list_items(case_id)
 if not items:
     st.warning('연결된 실제 출고제품이 없습니다. 먼저 실출고 입력에서 실제 제품을 등록하세요.')
     st.stop()
@@ -88,8 +62,7 @@ for item in items:
     cols[6].write(f"BOX {item['box_no']}" if item['box_no'] is not None else '미패킹')
 
 st.divider()
-next_box_row = db.row('SELECT COALESCE(MAX(box_no),0)+1 AS n FROM boxes WHERE case_id=?', (case_id,))
-next_box = int(next_box_row['n'] or 1)
+next_box = packing_service.next_box_no(case_id)
 assign_col, button_col = st.columns([1, 2])
 box_no = assign_col.number_input('배정할 박스번호', min_value=1, value=next_box, step=1)
 
@@ -102,49 +75,31 @@ if assign_clicked:
     if not selected_ids:
         st.error('박스에 넣을 실제 출고제품을 선택하세요.')
     else:
-        for item_id in selected_ids:
-            db.execute(
-                'UPDATE shipment_items SET box_no=?,updated_at=? WHERE id=? AND case_id=?',
-                (int(box_no), db.now_text(), item_id, case_id),
-            )
-        db.execute(
-            'INSERT OR IGNORE INTO boxes(case_id,box_no,updated_at) VALUES (?,?,?)',
-            (case_id, int(box_no), db.now_text()),
+        packing_service.assign_items(case_id, selected_ids, int(box_no))
+        folder_service.sync_case_folder(case_id)
+        history_service.add(
+            case_id,
+            '박스 패킹',
+            f'{len(selected_ids)}개 실제 출고 행 → BOX {int(box_no)}',
         )
-        db.execute(
-            "UPDATE export_cases SET stage='패킹',updated_at=? WHERE id=?",
-            (db.now_text(), case_id),
-        )
-        db.sync_case_folder(case_id)
-        db.add_history(case_id, '박스 패킹', f'{len(selected_ids)}개 실제 출고 행 → BOX {int(box_no)}')
         st.success(f'{len(selected_ids)}개 실제 출고 행을 BOX {int(box_no)}에 배정했습니다.')
         st.rerun()
 
 if selected_ids and st.button('선택 제품 박스 배정 해제'):
-    for item_id in selected_ids:
-        db.execute(
-            'UPDATE shipment_items SET box_no=NULL,updated_at=? WHERE id=? AND case_id=?',
-            (db.now_text(), item_id, case_id),
-        )
-    db.sync_case_folder(case_id)
-    db.add_history(case_id, '박스 배정 해제', f'{len(selected_ids)}개 실제 출고 행')
+    packing_service.unassign_items(case_id, selected_ids)
+    folder_service.sync_case_folder(case_id)
+    history_service.add(case_id, '박스 배정 해제', f'{len(selected_ids)}개 실제 출고 행')
     st.success('선택한 제품의 박스 배정을 해제했습니다.')
     st.rerun()
 
 st.divider()
 st.markdown('#### 번호별 박스 정보')
-boxes = db.rows('SELECT * FROM boxes WHERE case_id=? ORDER BY box_no', (case_id,))
+boxes = packing_service.list_boxes(case_id)
 if not boxes:
     st.info('아직 생성된 박스가 없습니다.')
 else:
     for box in boxes:
-        box_items = db.rows(
-            '''SELECT business_unit, product_name, lot_no, expiry_date, requested_qty
-               FROM shipment_items
-               WHERE case_id=? AND box_no=?
-               ORDER BY id''',
-            (case_id, box['box_no']),
-        )
+        box_items = packing_service.list_box_items(case_id, int(box['box_no']))
         box_qty = sum(float(item['requested_qty'] or 0) for item in box_items)
         with st.expander(
             f"BOX {box['box_no']} · {len(box_items)}개 행 · 수량 {fmt_number(box_qty)}",
@@ -177,12 +132,9 @@ else:
                 save_box = st.form_submit_button('박스 정보 저장', type='primary')
 
             if save_box:
-                db.execute(
-                    'UPDATE boxes SET length_cm=?,width_cm=?,height_cm=?,weight_kg=?,updated_at=? WHERE id=?',
-                    (length, width, height, weight, db.now_text(), box['id']),
-                )
-                db.sync_case_folder(case_id)
-                db.add_history(case_id, '박스 정보 수정', f"BOX {box['box_no']}")
+                packing_service.update_box(int(box['id']), length, width, height, weight)
+                folder_service.sync_case_folder(case_id)
+                history_service.add(case_id, '박스 정보 수정', f"BOX {box['box_no']}")
                 st.success(f"BOX {box['box_no']} 정보를 저장했습니다.")
                 st.rerun()
 
