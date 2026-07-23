@@ -28,6 +28,7 @@ FORM_KEYS = {
     'historical_consignee_name',
     'historical_consignee_address',
     'create_case',
+    'price_lookup_product',
 }
 
 
@@ -106,7 +107,7 @@ with st.container():
 st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
 if is_historical:
     st.caption('제품 행마다 CTN 번호를 입력하고, 아래 CTN 정보 표에서 같은 번호의 규격과 GW를 입력하세요.')
-    new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', 'CTN 번호': 1}])
+    new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0, 'CTN 번호': 1}])
     new_orders = historical_order_editor(new_order_source, key='new_order_items')
 
     st.markdown('#### CTN 정보')
@@ -135,7 +136,7 @@ if is_historical:
         driver_phone = delivery_cols[1].text_input('배송기사 연락처', key='historical_driver_phone')
         tracking_no = ''
 else:
-    new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA'}])
+    new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
     new_orders = order_editor(new_order_source, key='new_order_items')
     historical_boxes = pd.DataFrame()
     delivery_method = ''
@@ -144,6 +145,45 @@ else:
     driver_phone = ''
     consignee_name = ''
     consignee_address = ''
+
+product_options = [
+    str(value).strip()
+    for value in new_orders.get('제품명', pd.Series(dtype=str)).tolist()
+    if str(value or '').strip()
+]
+if product_options:
+    with st.expander('과거 매입가 조회', expanded=False):
+        st.caption('현재 입력한 제품명과 비슷한 과거 제품명의 매입가를 보여줍니다. 자동 적용하지 않고 참고용으로만 사용합니다.')
+        selected_product = st.selectbox(
+            '조회할 제품',
+            list(dict.fromkeys(product_options)),
+            key='price_lookup_product',
+        )
+        similar_prices = order_service.find_similar_purchase_prices(selected_product)
+        if similar_prices:
+            history_df = pd.DataFrame([
+                {
+                    '유사 제품명': item['product_name'],
+                    '매입가': item['purchase_price'],
+                    '수량': item['quantity'],
+                    '단위': item['unit'],
+                    '수출번호': item['export_no'],
+                    '바이어': item['buyer'] or '',
+                    '등록일': str(item['created_at'])[:10],
+                    '유사도': f"{item['similarity'] * 100:.0f}%",
+                }
+                for item in similar_prices
+            ])
+            st.dataframe(
+                history_df,
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    '매입가': st.column_config.NumberColumn('매입가', format='₩ %,.0f'),
+                },
+            )
+        else:
+            st.info('유사한 제품명의 매입가 이력이 없습니다.')
 
 button_left, button_center, button_right = st.columns([4, 2, 4])
 button_center.markdown('<span id="create-case-button-anchor"></span>', unsafe_allow_html=True)
@@ -162,12 +202,13 @@ if create_case:
             continue
         quantity = float(row.get('수량', 0) or 0)
         unit = str(row.get('단위', 'EA') or 'EA').strip() or 'EA'
+        purchase_price = float(row.get('매입가', 0) or 0)
         if is_historical:
             raw_box_no = row.get('CTN 번호', 0)
             box_no = int(raw_box_no or 0)
-            valid_orders.append((product_name, quantity, unit, box_no))
+            valid_orders.append((product_name, quantity, unit, purchase_price, box_no))
         else:
-            valid_orders.append((product_name, quantity, unit))
+            valid_orders.append((product_name, quantity, unit, purchase_price))
 
     valid_boxes = []
     if is_historical:
@@ -188,11 +229,11 @@ if create_case:
         st.error('국가는 필수입니다.')
     elif not valid_orders:
         st.error('제품을 한 개 이상 입력하세요.')
-    elif is_historical and any(item[3] <= 0 for item in valid_orders):
+    elif is_historical and any(item[4] <= 0 for item in valid_orders):
         st.error('모든 제품에 CTN 번호를 입력하세요.')
     elif is_historical and not valid_boxes:
         st.error('CTN 정보를 한 개 이상 입력하세요.')
-    elif is_historical and not {item[3] for item in valid_orders}.issubset({box[0] for box in valid_boxes}):
+    elif is_historical and not {item[4] for item in valid_orders}.issubset({box[0] for box in valid_boxes}):
         st.error('제품에 연결한 모든 CTN 번호의 규격과 GW를 입력하세요.')
     else:
         prefix = 'HIS' if is_historical else 'EXP'
