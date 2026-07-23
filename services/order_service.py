@@ -114,7 +114,7 @@ def create_order_items(
 
 def create_historical_case_details(
     case_id: int,
-    items: list[tuple[str, str, str, str, float, float, int]],
+    items: list[tuple[str, str, str, str, str, float, float, int]],
     boxes: list[tuple[int, float, float, float, float]],
     *,
     method: str,
@@ -126,7 +126,7 @@ def create_historical_case_details(
     consignee_address: str = '',
 ) -> None:
     now = now_text()
-    for product_name, unit, lot_no, expiry_date, quantity, purchase_price, box_no in items:
+    for ship_from, product_name, unit, lot_no, expiry_date, quantity, purchase_price, box_no in items:
         order_id = db.execute(
             '''INSERT INTO order_items(case_id,product_name,quantity,unit,purchase_price,created_at)
                VALUES (?,?,?,?,?,?)''',
@@ -138,7 +138,7 @@ def create_historical_case_details(
                    case_id,order_item_id,business_unit,location,product_name,
                    lot_no,expiry_date,requested_qty,box_no,created_at,updated_at
                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-            (case_id, order_id, '', '', product_name, lot_no, expiry_date, quantity, box_no, now, now),
+            (case_id, order_id, '', ship_from, product_name, lot_no, expiry_date, quantity, box_no, now, now),
         )
 
     for box_no, length, width, height, weight in boxes:
