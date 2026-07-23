@@ -124,6 +124,18 @@ def init_db() -> None:
             product_name TEXT NOT NULL,
             quantity REAL NOT NULL DEFAULT 0,
             unit TEXT DEFAULT 'EA',
+            purchase_price REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS purchase_price_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id INTEGER NOT NULL REFERENCES export_cases(id) ON DELETE CASCADE,
+            order_item_id INTEGER REFERENCES order_items(id) ON DELETE SET NULL,
+            product_name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL DEFAULT '',
+            purchase_price REAL NOT NULL DEFAULT 0,
+            quantity REAL NOT NULL DEFAULT 0,
+            unit TEXT DEFAULT 'EA',
             created_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS shipment_items (
@@ -191,6 +203,7 @@ def init_db() -> None:
 
         _remove_expected_ship_date_column(conn)
         _add_column(conn, 'shipment_items', 'order_item_id INTEGER')
+        _add_column(conn, 'order_items', 'purchase_price REAL NOT NULL DEFAULT 0')
 
         conn.executescript('''
         CREATE INDEX IF NOT EXISTS idx_export_cases_status_stage
@@ -199,6 +212,10 @@ def init_db() -> None:
             ON export_cases(actual_ship_date, created_at);
         CREATE INDEX IF NOT EXISTS idx_order_items_case_id
             ON order_items(case_id);
+        CREATE INDEX IF NOT EXISTS idx_purchase_price_history_name
+            ON purchase_price_history(normalized_name, created_at);
+        CREATE INDEX IF NOT EXISTS idx_purchase_price_history_case
+            ON purchase_price_history(case_id, order_item_id);
         CREATE INDEX IF NOT EXISTS idx_shipment_items_case_id
             ON shipment_items(case_id);
         CREATE INDEX IF NOT EXISTS idx_shipment_items_order_item_id
