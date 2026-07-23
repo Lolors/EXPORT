@@ -16,8 +16,8 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) {
-        width: 50vw;
-        max-width: 50vw;
+        width: 40vw;
+        max-width: 40vw;
         border: 1px solid rgba(49, 51, 63, 0.18);
         border-radius: 16px;
         padding: 1.1rem 1.25rem 1.2rem;
@@ -84,8 +84,8 @@ st.markdown(
         text-align: left;
     }
     .overview-details {
-        width: 50vw;
-        max-width: 50vw;
+        width: 40vw;
+        max-width: 40vw;
         margin: -0.2rem 0 1rem;
         padding: 0 1.25rem 1rem;
     }
