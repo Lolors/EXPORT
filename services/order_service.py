@@ -8,7 +8,7 @@ def list_editable_cases():
     return db.rows(
         '''SELECT c.id, c.export_no, c.buyer, c.country, c.transport_mode, c.stage,
                   c.status, c.note, c.actual_ship_date, c.case_type, c.created_at,
-                  COALESCE(GROUP_CONCAT(o.product_name, ' '), '') AS product_names
+                  COALESCE(GROUP_CONCAT(o.product_name, ', '), '') AS product_names
            FROM export_cases c
            LEFT JOIN order_items o ON o.case_id=c.id
            WHERE c.stage<>'취소'
