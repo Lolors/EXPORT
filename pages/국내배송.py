@@ -15,7 +15,7 @@ def date_value(value: str | None):
 
 
 st.title('국내배송')
-st.caption('국내배송 방식과 송장 또는 배송기사 정보를 입력합니다.')
+st.caption('국내배송 방식, 수하인 정보와 송장 또는 배송기사 정보를 입력합니다.')
 
 cases = export_service.active_cases()
 if not cases:
@@ -34,6 +34,9 @@ method = st.radio(
 )
 with st.form(f'delivery_{case_id}_{method}'):
     actual_date = st.date_input('국내배송 일자', value=date_value(case['actual_ship_date']))
+    receiver_cols = st.columns([1, 2])
+    consignee_name = receiver_cols[0].text_input('수하인명', value=case['consignee_name'] or '')
+    consignee_address = receiver_cols[1].text_input('수하인주소', value=case['consignee_address'] or '')
     tracking = st.text_input('송장번호', value=case['tracking_no'] or '') if method == '로젠택배' else ''
     if method == '퀵배송':
         c1, c2 = st.columns(2)
@@ -51,8 +54,10 @@ if submitted:
         tracking_no=tracking,
         driver_name=driver,
         driver_phone=phone,
+        consignee_name=consignee_name,
+        consignee_address=consignee_address,
     )
     folder = folder_service.sync_case_folder(case_id)
-    history_service.add(case_id, '국내배송 완료', f'{method} / {folder}')
+    history_service.add(case_id, '국내배송 완료', f'{method} / {consignee_name} / {folder}')
     st.success('저장했습니다.')
     st.rerun()
