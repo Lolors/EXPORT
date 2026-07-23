@@ -16,12 +16,14 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) {
+        position: relative;
         width: 40vw;
         max-width: 40vw;
         border: 1px solid rgba(49, 51, 63, 0.18);
         border-radius: 16px;
         padding: 1.1rem 1.25rem 1.2rem;
         margin-bottom: 0.8rem;
+        overflow: hidden;
         transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
         cursor: pointer;
     }
@@ -35,12 +37,21 @@ st.markdown(
         inset: 0;
         width: 100%;
         height: 100%;
-        z-index: 5;
+        z-index: 20;
+        margin: 0;
+        padding: 0;
     }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button {
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] > button {
+        position: absolute;
+        inset: 0;
         width: 100%;
         height: 100%;
         min-height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
         opacity: 0;
         cursor: pointer;
     }
@@ -164,7 +175,7 @@ for country in sorted(country_groups):
             )
             render_progress_bar(progress)
             is_open = selected_case_id == case_id
-            if st.button('', key=f'overview_toggle_{case_id}'):
+            if st.button('카드 열기', key=f'overview_toggle_{case_id}'):
                 st.session_state['overview_selected_case_id'] = None if is_open else case_id
                 st.rerun()
 
