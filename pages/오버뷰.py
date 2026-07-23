@@ -16,14 +16,12 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) {
-        position: relative;
         width: 40vw;
         max-width: 40vw;
         border: 1px solid rgba(49, 51, 63, 0.18);
         border-radius: 16px;
         padding: 1.1rem 1.25rem 1.2rem;
         margin-bottom: 0.8rem;
-        overflow: hidden;
         transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
         cursor: pointer;
     }
@@ -32,27 +30,16 @@ st.markdown(
         box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
         transform: translateY(-1px);
     }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] {
-        position: absolute;
-        inset: 0;
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button {
         width: 100%;
-        height: 100%;
-        z-index: 20;
-        margin: 0;
-        padding: 0;
-    }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] > button {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        min-height: 100%;
         margin: 0;
         padding: 0;
         border: 0;
         background: transparent;
         box-shadow: none;
-        opacity: 0;
+        color: transparent;
+        min-height: 0;
+        height: 0;
         cursor: pointer;
     }
     .overview-card-anchor {
@@ -165,7 +152,8 @@ for country in sorted(country_groups):
         if transport_mode.casefold() == '미지정':
             transport_mode = ''
 
-        with st.container():
+        is_open = selected_case_id == case_id
+        with st.container(border=False):
             st.markdown('<div class="overview-card-anchor"></div>', unsafe_allow_html=True)
             st.markdown(f'<div class="overview-country">{country}</div>', unsafe_allow_html=True)
             meta_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
@@ -174,31 +162,35 @@ for country in sorted(country_groups):
                 unsafe_allow_html=True,
             )
             render_progress_bar(progress)
-            is_open = selected_case_id == case_id
-            if st.button('카드 열기', key=f'overview_toggle_{case_id}'):
+            if st.button(
+                '상세 닫기' if is_open else '상세 보기',
+                key=f'overview_toggle_{case_id}',
+                use_container_width=True,
+            ):
                 st.session_state['overview_selected_case_id'] = None if is_open else case_id
                 st.rerun()
 
         if not is_open:
             continue
 
-        st.markdown('<div class="overview-details">', unsafe_allow_html=True)
-        st.markdown('#### 주문목록 및 입고상황')
-        st.caption(
-            f"주문수량 {fmt_number(order_total)} / 입고수량 {fmt_number(received_total)}"
-            f" · 단계 {case['stage']}"
-        )
+        with st.container():
+            st.markdown('<div class="overview-details">', unsafe_allow_html=True)
+            st.markdown('#### 주문목록 및 입고상황')
+            st.caption(
+                f"주문수량 {fmt_number(order_total)} / 입고수량 {fmt_number(received_total)}"
+                f" · 단계 {case['stage']}"
+            )
 
-        if not orders:
-            st.caption('주문품목이 아직 입력되지 않았습니다.')
-        else:
-            for index, order in enumerate(orders, start=1):
-                order_qty = float(order['quantity'] or 0)
-                received_qty = float(order['actual_qty'] or 0)
-                status_icon = order_status_icon(order_qty, received_qty)
-                st.markdown(
-                    f"{status_icon} {index}. **{order['product_name']}**  "
-                    f"주문 {fmt_number(order_qty)} {order['unit']} · "
-                    f"입고 {fmt_number(received_qty)} {order['unit']}"
-                )
-        st.markdown('</div>', unsafe_allow_html=True)
+            if not orders:
+                st.caption('주문품목이 아직 입력되지 않았습니다.')
+            else:
+                for index, order in enumerate(orders, start=1):
+                    order_qty = float(order['quantity'] or 0)
+                    received_qty = float(order['actual_qty'] or 0)
+                    status_icon = order_status_icon(order_qty, received_qty)
+                    st.markdown(
+                        f"{status_icon} {index}. **{order['product_name']}**  "
+                        f"주문 {fmt_number(order_qty)} {order['unit']} · "
+                        f"입고 {fmt_number(received_qty)} {order['unit']}"
+                    )
+            st.markdown('</div>', unsafe_allow_html=True)
