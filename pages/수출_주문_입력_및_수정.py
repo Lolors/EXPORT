@@ -5,13 +5,13 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from components.editors import historical_box_editor, order_editor
+from components.editors import historical_box_editor, historical_order_editor, order_editor
 from config import TRANSPORT_MODES
 from services import export_service, folder_service, history_service, order_service
 from utils.numbering import next_export_no
 
 
-HISTORICAL_ROW_COUNT_KEY = 'historical_order_row_count'
+HISTORICAL_ORDER_EDITOR_KEY = 'historical_order_items_table_v1'
 
 FORM_KEYS = {
     'new_case_type',
@@ -22,7 +22,7 @@ FORM_KEYS = {
     'new_transport',
     'new_note',
     'new_order_items',
-    HISTORICAL_ROW_COUNT_KEY,
+    HISTORICAL_ORDER_EDITOR_KEY,
     'historical_box_items',
     'historical_delivery_method',
     'historical_tracking_no',
@@ -33,6 +33,21 @@ FORM_KEYS = {
     'create_case',
     'price_lookup_query',
 }
+
+
+def historical_order_source() -> pd.DataFrame:
+    return pd.DataFrame([
+        {
+            '출고처': '',
+            '제품명': '',
+            '제조번호': '',
+            '유효기간': '',
+            '수량': 0.0,
+            '단위': 'EA',
+            '매입가': 0.0,
+            'CTN 번호': 1,
+        }
+    ])
 
 
 def reset_new_case_form() -> None:
@@ -85,90 +100,6 @@ def render_similar_price_lookup(*, key: str) -> None:
             '매입가': st.column_config.NumberColumn('매입가', format='₩ %,.0f'),
         },
     )
-
-
-def render_historical_order_rows() -> pd.DataFrame:
-    if HISTORICAL_ROW_COUNT_KEY not in st.session_state:
-        st.session_state[HISTORICAL_ROW_COUNT_KEY] = 1
-
-    widths = [1.7, 3, 1.6, 1.6, 1.1, 0.8, 1.2, 0.8]
-    header = st.columns(widths)
-    for col, label in zip(
-        header,
-        ['출고처', '제품명', '제조번호', '유효기간', '수량', '단위', '매입가', 'CTN 번호'],
-    ):
-        col.markdown(f'**{label}**')
-
-    rows: list[dict[str, object]] = []
-    for index in range(int(st.session_state[HISTORICAL_ROW_COUNT_KEY])):
-        cols = st.columns(widths)
-        ship_from = cols[0].text_input(
-            '출고처', key=f'historical_order_ship_from_{index}', label_visibility='collapsed'
-        )
-        product_name = cols[1].text_input(
-            '제품명', key=f'historical_order_product_{index}', label_visibility='collapsed'
-        )
-        lot_no = cols[2].text_input(
-            '제조번호', key=f'historical_order_lot_{index}', label_visibility='collapsed'
-        )
-        expiry_date = cols[3].text_input(
-            '유효기간',
-            key=f'historical_order_expiry_{index}',
-            placeholder='2028-06-30',
-            label_visibility='collapsed',
-        )
-        quantity = cols[4].number_input(
-            '수량',
-            min_value=0.0,
-            step=1.0,
-            key=f'historical_order_qty_{index}',
-            label_visibility='collapsed',
-        )
-        unit = cols[5].text_input(
-            '단위', value='EA', key=f'historical_order_unit_{index}', label_visibility='collapsed'
-        )
-        purchase_price = cols[6].number_input(
-            '매입가',
-            min_value=0.0,
-            step=100.0,
-            key=f'historical_order_price_{index}',
-            label_visibility='collapsed',
-        )
-        box_no = cols[7].number_input(
-            'CTN 번호',
-            min_value=1,
-            step=1,
-            key=f'historical_order_box_{index}',
-            label_visibility='collapsed',
-        )
-        rows.append({
-            '출고처': ship_from,
-            '제품명': product_name,
-            '제조번호': lot_no,
-            '유효기간': expiry_date,
-            '수량': quantity,
-            '단위': unit,
-            '매입가': purchase_price,
-            'CTN 번호': box_no,
-        })
-
-    add_col, remove_col, spacer = st.columns([1, 1, 6])
-    if add_col.button('행 추가', key='historical_order_add_row', use_container_width=True):
-        st.session_state[HISTORICAL_ROW_COUNT_KEY] += 1
-        st.rerun()
-    if remove_col.button(
-        '마지막 행 삭제',
-        key='historical_order_remove_row',
-        use_container_width=True,
-        disabled=st.session_state[HISTORICAL_ROW_COUNT_KEY] <= 1,
-    ):
-        last_index = st.session_state[HISTORICAL_ROW_COUNT_KEY] - 1
-        for suffix in ['ship_from', 'product', 'lot', 'expiry', 'qty', 'unit', 'price', 'box']:
-            st.session_state.pop(f'historical_order_{suffix}_{last_index}', None)
-        st.session_state[HISTORICAL_ROW_COUNT_KEY] -= 1
-        st.rerun()
-
-    return pd.DataFrame(rows)
 
 
 st.title('주문 입력')
@@ -246,8 +177,11 @@ with st.container():
     st.markdown('<span id="order-price-layout-anchor"></span>', unsafe_allow_html=True)
     st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
     if is_historical:
-        st.caption('출고처·제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호를 입력하세요.')
-        new_orders = render_historical_order_rows()
+        st.caption('엑셀에서 출고처·제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호 순서로 복사해 표의 첫 셀에 붙여넣을 수 있습니다.')
+        new_orders = historical_order_editor(
+            historical_order_source(),
+            key=HISTORICAL_ORDER_EDITOR_KEY,
+        )
     else:
         new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
         new_orders = order_editor(new_order_source, key='new_order_items')
