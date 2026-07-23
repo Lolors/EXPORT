@@ -92,6 +92,10 @@ st.markdown(
         width: 60vw;
         max-width: 60vw;
     }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-price-layout-anchor) {
+        width: 70vw;
+        max-width: 70vw;
+    }
     div[data-testid="stHorizontalBlock"]:has(#create-case-button-anchor) {
         align-items: center;
         justify-content: center;
@@ -102,7 +106,8 @@ st.markdown(
         justify-content: center;
     }
     @media (max-width: 900px) {
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor),
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-price-layout-anchor) {
             width: 100%;
             max-width: 100%;
         }
@@ -145,19 +150,21 @@ with st.container():
     transport = second_row[0].selectbox('운송방식', TRANSPORT_MODES, key='new_transport')
     note = second_row[1].text_input('비고', key='new_note')
 
-order_col, lookup_col = st.columns([1, 1], gap='large')
-with order_col:
-    st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
-    if is_historical:
-        st.caption('제품 행마다 CTN 번호를 입력하고, 아래 CTN 정보 표에서 같은 번호의 규격과 GW를 입력하세요.')
-        new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0, 'CTN 번호': 1}])
-        new_orders = historical_order_editor(new_order_source, key='new_order_items')
-    else:
-        new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
-        new_orders = order_editor(new_order_source, key='new_order_items')
+with st.container():
+    st.markdown('<span id="order-price-layout-anchor"></span>', unsafe_allow_html=True)
+    order_col, lookup_col = st.columns([6, 4], gap='large')
+    with order_col:
+        st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
+        if is_historical:
+            st.caption('제품 행마다 CTN 번호를 입력하고, 아래 CTN 정보 표에서 같은 번호의 규격과 GW를 입력하세요.')
+            new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0, 'CTN 번호': 1}])
+            new_orders = historical_order_editor(new_order_source, key='new_order_items')
+        else:
+            new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
+            new_orders = order_editor(new_order_source, key='new_order_items')
 
-with lookup_col:
-    render_similar_price_lookup(key='price_lookup_query')
+    with lookup_col:
+        render_similar_price_lookup(key='price_lookup_query')
 
 if is_historical:
     st.markdown('#### CTN 정보')
