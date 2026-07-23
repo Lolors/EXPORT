@@ -152,19 +152,26 @@ with st.container():
 
 with st.container():
     st.markdown('<span id="order-price-layout-anchor"></span>', unsafe_allow_html=True)
-    order_col, lookup_col = st.columns([6, 4], gap='large')
-    with order_col:
-        st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
-        if is_historical:
-            st.caption('제품 행마다 CTN 번호를 입력하고, 아래 CTN 정보 표에서 같은 번호의 규격과 GW를 입력하세요.')
-            new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0, 'CTN 번호': 1}])
-            new_orders = historical_order_editor(new_order_source, key='new_order_items')
-        else:
-            new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
-            new_orders = order_editor(new_order_source, key='new_order_items')
+    st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
+    if is_historical:
+        st.caption('제품명·단위·제조번호·유효기간·수량·매입가·CTN 번호를 입력하세요.')
+        new_order_source = pd.DataFrame([
+            {
+                '제품명': '',
+                '단위': 'EA',
+                '제조번호': '',
+                '유효기간': '',
+                '수량': 0.0,
+                '매입가': 0.0,
+                'CTN 번호': 1,
+            }
+        ])
+        new_orders = historical_order_editor(new_order_source, key='new_order_items')
+    else:
+        new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
+        new_orders = order_editor(new_order_source, key='new_order_items')
 
-    with lookup_col:
-        render_similar_price_lookup(key='price_lookup_query')
+    render_similar_price_lookup(key='price_lookup_query')
 
 if is_historical:
     st.markdown('#### CTN 정보')
@@ -220,9 +227,11 @@ if create_case:
         unit = str(row.get('단위', 'EA') or 'EA').strip() or 'EA'
         purchase_price = float(row.get('매입가', 0) or 0)
         if is_historical:
+            lot_no = str(row.get('제조번호', '') or '').strip()
+            expiry_date = str(row.get('유효기간', '') or '').strip()
             raw_box_no = row.get('CTN 번호', 0)
             box_no = int(raw_box_no or 0)
-            valid_orders.append((product_name, quantity, unit, purchase_price, box_no))
+            valid_orders.append((product_name, unit, lot_no, expiry_date, quantity, purchase_price, box_no))
         else:
             valid_orders.append((product_name, quantity, unit, purchase_price))
 
@@ -245,11 +254,11 @@ if create_case:
         st.error('국가는 필수입니다.')
     elif not valid_orders:
         st.error('제품을 한 개 이상 입력하세요.')
-    elif is_historical and any(item[4] <= 0 for item in valid_orders):
+    elif is_historical and any(item[6] <= 0 for item in valid_orders):
         st.error('모든 제품에 CTN 번호를 입력하세요.')
     elif is_historical and not valid_boxes:
         st.error('CTN 정보를 한 개 이상 입력하세요.')
-    elif is_historical and not {item[4] for item in valid_orders}.issubset({box[0] for box in valid_boxes}):
+    elif is_historical and not {item[6] for item in valid_orders}.issubset({box[0] for box in valid_boxes}):
         st.error('제품에 연결한 모든 CTN 번호의 규격과 GW를 입력하세요.')
     else:
         prefix = 'HIS' if is_historical else 'EXP'
