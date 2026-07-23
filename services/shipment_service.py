@@ -23,6 +23,55 @@ def list_actual(case_id: int):
     )
 
 
+def get_lot_expiry_dataframe(case_id: int):
+    import pandas as pd
+
+    rows = db.rows(
+        '''SELECT id AS _id, product_name AS 제품명, requested_qty AS 출고수량,
+                  box_no AS CTN번호, lot_no AS 제조번호, expiry_date AS 유통기한
+           FROM shipment_items
+           WHERE case_id=? AND order_item_id IS NOT NULL
+           ORDER BY CASE WHEN box_no IS NULL THEN 1 ELSE 0 END, box_no, id''',
+        (case_id,),
+    )
+    return pd.DataFrame([dict(row) for row in rows])
+
+
+def update_lot_expiry(case_id: int, edited) -> int:
+    now = now_text()
+    updated = 0
+    valid_ids = {
+        int(row['id'])
+        for row in db.rows(
+            'SELECT id FROM shipment_items WHERE case_id=? AND order_item_id IS NOT NULL',
+            (case_id,),
+        )
+    }
+    for _, row in edited.iterrows():
+        raw_id = row.get('_id')
+        if raw_id in (None, '', 0):
+            continue
+        shipment_id = int(raw_id)
+        if shipment_id not in valid_ids:
+            continue
+        db.execute(
+            '''UPDATE shipment_items
+               SET lot_no=?, expiry_date=?, updated_at=?
+               WHERE id=? AND case_id=?''',
+            (
+                str(row.get('제조번호', '') or '').strip(),
+                str(row.get('유통기한', '') or '').strip(),
+                now,
+                shipment_id,
+                case_id,
+            ),
+        )
+        updated += 1
+    if updated:
+        db.execute('UPDATE export_cases SET updated_at=? WHERE id=?', (now, case_id))
+    return updated
+
+
 def list_linked(order_item_id: int):
     return db.rows(
         '''SELECT id, business_unit, product_name, lot_no, expiry_date,
