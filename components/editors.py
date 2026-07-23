@@ -10,12 +10,19 @@ def order_editor(dataframe, *, key: str, dynamic: bool = True):
         hide_index=True,
         use_container_width=True,
         key=key,
-        column_order=['제품명', '수량', '단위'],
+        column_order=['제품명', '수량', '단위', '매입가'],
         column_config={
             '_id': None,
             '제품명': st.column_config.TextColumn('제품명', required=True),
             '수량': st.column_config.NumberColumn('수량', min_value=0.0, step=1.0, width=30),
             '단위': st.column_config.TextColumn('단위', width=30),
+            '매입가': st.column_config.NumberColumn(
+                '매입가',
+                min_value=0.0,
+                step=100.0,
+                format='₩ %,.0f',
+                help='제품 1개(입력 단위 기준)의 매입 단가입니다.',
+            ),
         },
     )
 
@@ -27,11 +34,17 @@ def historical_order_editor(dataframe, *, key: str):
         hide_index=True,
         use_container_width=True,
         key=key,
-        column_order=['제품명', '수량', '단위', 'CTN 번호'],
+        column_order=['제품명', '수량', '단위', '매입가', 'CTN 번호'],
         column_config={
             '제품명': st.column_config.TextColumn('제품명', required=True),
             '수량': st.column_config.NumberColumn('수량', min_value=0.0, step=1.0),
             '단위': st.column_config.TextColumn('단위'),
+            '매입가': st.column_config.NumberColumn(
+                '매입가',
+                min_value=0.0,
+                step=100.0,
+                format='₩ %,.0f',
+            ),
             'CTN 번호': st.column_config.NumberColumn('CTN 번호', min_value=1, step=1),
         },
     )
