@@ -11,6 +11,8 @@ from services import export_service, folder_service, history_service, order_serv
 from utils.numbering import next_export_no
 
 
+HISTORICAL_ORDER_EDITOR_KEY = 'new_order_items_v2'
+
 FORM_KEYS = {
     'new_case_type',
     'historical_export_date',
@@ -20,6 +22,7 @@ FORM_KEYS = {
     'new_transport',
     'new_note',
     'new_order_items',
+    HISTORICAL_ORDER_EDITOR_KEY,
     'historical_box_items',
     'historical_delivery_method',
     'historical_tracking_no',
@@ -34,7 +37,11 @@ FORM_KEYS = {
 
 def reset_new_case_form() -> None:
     for key in list(st.session_state):
-        if key in FORM_KEYS or key.startswith('new_order_items') or key.startswith('historical_box_items'):
+        if (
+            key in FORM_KEYS
+            or key.startswith('new_order_items')
+            or key.startswith('historical_box_items')
+        ):
             st.session_state.pop(key, None)
 
 
@@ -154,19 +161,22 @@ with st.container():
     st.markdown('<span id="order-price-layout-anchor"></span>', unsafe_allow_html=True)
     st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
     if is_historical:
-        st.caption('제품명·단위·제조번호·유효기간·수량·매입가·CTN 번호를 입력하세요.')
+        st.caption('제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호를 입력하세요.')
         new_order_source = pd.DataFrame([
             {
                 '제품명': '',
-                '단위': 'EA',
                 '제조번호': '',
                 '유효기간': '',
                 '수량': 0.0,
+                '단위': 'EA',
                 '매입가': 0.0,
                 'CTN 번호': 1,
             }
         ])
-        new_orders = historical_order_editor(new_order_source, key='new_order_items')
+        new_orders = historical_order_editor(
+            new_order_source,
+            key=HISTORICAL_ORDER_EDITOR_KEY,
+        )
     else:
         new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
         new_orders = order_editor(new_order_source, key='new_order_items')
