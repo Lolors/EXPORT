@@ -11,7 +11,7 @@ from services import export_service, folder_service, history_service, order_serv
 from utils.numbering import next_export_no
 
 
-FORM_KEYS = [
+FORM_KEYS = {
     'new_case_type',
     'historical_export_date',
     'new_export_no',
@@ -20,12 +20,14 @@ FORM_KEYS = [
     'new_transport',
     'new_note',
     'new_order_items',
-]
+    'create_case',
+}
 
 
 def reset_new_case_form() -> None:
-    for key in FORM_KEYS:
-        st.session_state.pop(key, None)
+    for key in list(st.session_state):
+        if key in FORM_KEYS or key.startswith('new_order_items'):
+            st.session_state.pop(key, None)
 
 
 st.title('주문 입력')
