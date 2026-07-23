@@ -157,10 +157,21 @@ if not selected_rows:
     st.stop()
 
 selected_index = int(selected_rows[0])
+if selected_index < 0 or selected_index >= len(selection_df):
+    st.session_state.pop('editable_case_table', None)
+    st.session_state.pop('order_case_id', None)
+    st.info('목록이 변경되었습니다. 수정할 수출 건을 다시 선택하세요.')
+    st.stop()
+
 case_id = int(selection_df.iloc[selected_index]['_case_id'])
 st.session_state['order_case_id'] = case_id
 case_map = {int(row['id']): row for row in filtered_cases}
-case = case_map[case_id]
+case = case_map.get(case_id)
+if case is None:
+    st.session_state.pop('editable_case_table', None)
+    st.session_state.pop('order_case_id', None)
+    st.info('목록이 변경되었습니다. 수정할 수출 건을 다시 선택하세요.')
+    st.stop()
 
 with st.container():
     st.markdown('<span id="order-edit-panel-anchor"></span>', unsafe_allow_html=True)
@@ -187,7 +198,7 @@ with st.container():
         )
     with confirm_col:
         st.markdown('<div class="basic-action-slot"></div>', unsafe_allow_html=True)
-        cancel_confirmed = st.checkbox(
+        st.checkbox(
             f"{case['export_no']} 주문 취소를 확인합니다.",
             key=f'cancel_confirm_{case_id}',
         )
@@ -205,9 +216,10 @@ with st.container():
     if cancel_order:
         export_service.cancel_case(case_id)
         history_service.add_history(case_id, '주문 취소', case['export_no'])
-        st.session_state.pop('order_case_id', None)
-        st.session_state.pop(f'cancel_confirm_{case_id}', None)
-        st.success(f"{case['export_no']} 주문을 취소했습니다.")
+        for key in list(st.session_state):
+            if key in {'editable_case_table', 'order_case_id'} or key.endswith(f'_{case_id}'):
+                st.session_state.pop(key, None)
+        st.session_state['order_cancel_success_message'] = f"{case['export_no']} 주문을 취소했습니다."
         st.rerun()
 
     existing = order_service.get_order_items_dataframe(case_id)
