@@ -73,6 +73,8 @@ def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
         tracking_no TEXT DEFAULT '',
         driver_name TEXT DEFAULT '',
         driver_phone TEXT DEFAULT '',
+        consignee_name TEXT DEFAULT '',
+        consignee_address TEXT DEFAULT '',
         note TEXT DEFAULT '',
         actual_ship_date TEXT DEFAULT '',
         folder_path TEXT DEFAULT '',
@@ -83,13 +85,13 @@ def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
     );
     INSERT INTO export_cases_new(
         id,export_no,buyer,country,transport_mode,stage,status,created_at,updated_at,
-        domestic_method,tracking_no,driver_name,driver_phone,note,actual_ship_date,
-        folder_path,cancel_reason,cancelled_at,previous_stage,case_type
+        domestic_method,tracking_no,driver_name,driver_phone,consignee_name,consignee_address,
+        note,actual_ship_date,folder_path,cancel_reason,cancelled_at,previous_stage,case_type
     )
     SELECT
         id,export_no,buyer,country,transport_mode,stage,status,created_at,updated_at,
         COALESCE(domestic_method,''),COALESCE(tracking_no,''),COALESCE(driver_name,''),
-        COALESCE(driver_phone,''),COALESCE(note,''),COALESCE(actual_ship_date,''),
+        COALESCE(driver_phone,''),'','',COALESCE(note,''),COALESCE(actual_ship_date,''),
         COALESCE(folder_path,''),COALESCE(cancel_reason,''),COALESCE(cancelled_at,''),
         COALESCE(previous_stage,''),'current'
     FROM export_cases;
@@ -175,6 +177,8 @@ def init_db() -> None:
             "tracking_no TEXT DEFAULT ''",
             "driver_name TEXT DEFAULT ''",
             "driver_phone TEXT DEFAULT ''",
+            "consignee_name TEXT DEFAULT ''",
+            "consignee_address TEXT DEFAULT ''",
             "note TEXT DEFAULT ''",
             "actual_ship_date TEXT DEFAULT ''",
             "folder_path TEXT DEFAULT ''",
