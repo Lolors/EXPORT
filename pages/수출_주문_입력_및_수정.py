@@ -28,7 +28,7 @@ FORM_KEYS = {
     'historical_consignee_name',
     'historical_consignee_address',
     'create_case',
-    'price_lookup_product',
+    'price_lookup_query',
 }
 
 
@@ -36,6 +36,47 @@ def reset_new_case_form() -> None:
     for key in list(st.session_state):
         if key in FORM_KEYS or key.startswith('new_order_items') or key.startswith('historical_box_items'):
             st.session_state.pop(key, None)
+
+
+def render_similar_price_lookup(*, key: str) -> None:
+    st.markdown('#### 유사 제품 매입가 조회')
+    query = st.text_input(
+        '제품명 검색',
+        key=key,
+        placeholder='예: 리드카인 1% 10Am',
+    ).strip()
+    st.caption('공백·기호와 일부 표현 차이를 보정해 과거 매입가 이력을 찾습니다.')
+
+    if not query:
+        st.info('제품명을 입력하면 유사한 과거 매입가가 표시됩니다.')
+        return
+
+    similar_prices = order_service.find_similar_purchase_prices(query)
+    if not similar_prices:
+        st.info('유사한 제품명의 매입가 이력이 없습니다.')
+        return
+
+    history_df = pd.DataFrame([
+        {
+            '유사 제품명': item['product_name'],
+            '매입가': item['purchase_price'],
+            '수량': item['quantity'],
+            '단위': item['unit'],
+            '수출번호': item['export_no'],
+            '바이어': item['buyer'] or '',
+            '등록일': str(item['created_at'])[:10],
+            '유사도': f"{item['similarity'] * 100:.0f}%",
+        }
+        for item in similar_prices
+    ])
+    st.dataframe(
+        history_df,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            '매입가': st.column_config.NumberColumn('매입가', format='₩ %,.0f'),
+        },
+    )
 
 
 st.title('주문 입력')
@@ -104,12 +145,21 @@ with st.container():
     transport = second_row[0].selectbox('운송방식', TRANSPORT_MODES, key='new_transport')
     note = second_row[1].text_input('비고', key='new_note')
 
-st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
-if is_historical:
-    st.caption('제품 행마다 CTN 번호를 입력하고, 아래 CTN 정보 표에서 같은 번호의 규격과 GW를 입력하세요.')
-    new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0, 'CTN 번호': 1}])
-    new_orders = historical_order_editor(new_order_source, key='new_order_items')
+order_col, lookup_col = st.columns([1, 1], gap='large')
+with order_col:
+    st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
+    if is_historical:
+        st.caption('제품 행마다 CTN 번호를 입력하고, 아래 CTN 정보 표에서 같은 번호의 규격과 GW를 입력하세요.')
+        new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0, 'CTN 번호': 1}])
+        new_orders = historical_order_editor(new_order_source, key='new_order_items')
+    else:
+        new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
+        new_orders = order_editor(new_order_source, key='new_order_items')
 
+with lookup_col:
+    render_similar_price_lookup(key='price_lookup_query')
+
+if is_historical:
     st.markdown('#### CTN 정보')
     box_source = pd.DataFrame([
         {'CTN 번호': 1, '가로 (cm)': 0.0, '세로 (cm)': 0.0, '높이 (cm)': 0.0, 'GW (kg)': 0.0}
@@ -136,8 +186,6 @@ if is_historical:
         driver_phone = delivery_cols[1].text_input('배송기사 연락처', key='historical_driver_phone')
         tracking_no = ''
 else:
-    new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
-    new_orders = order_editor(new_order_source, key='new_order_items')
     historical_boxes = pd.DataFrame()
     delivery_method = ''
     tracking_no = ''
@@ -145,45 +193,6 @@ else:
     driver_phone = ''
     consignee_name = ''
     consignee_address = ''
-
-product_options = [
-    str(value).strip()
-    for value in new_orders.get('제품명', pd.Series(dtype=str)).tolist()
-    if str(value or '').strip()
-]
-if product_options:
-    with st.expander('과거 매입가 조회', expanded=False):
-        st.caption('현재 입력한 제품명과 비슷한 과거 제품명의 매입가를 보여줍니다. 자동 적용하지 않고 참고용으로만 사용합니다.')
-        selected_product = st.selectbox(
-            '조회할 제품',
-            list(dict.fromkeys(product_options)),
-            key='price_lookup_product',
-        )
-        similar_prices = order_service.find_similar_purchase_prices(selected_product)
-        if similar_prices:
-            history_df = pd.DataFrame([
-                {
-                    '유사 제품명': item['product_name'],
-                    '매입가': item['purchase_price'],
-                    '수량': item['quantity'],
-                    '단위': item['unit'],
-                    '수출번호': item['export_no'],
-                    '바이어': item['buyer'] or '',
-                    '등록일': str(item['created_at'])[:10],
-                    '유사도': f"{item['similarity'] * 100:.0f}%",
-                }
-                for item in similar_prices
-            ])
-            st.dataframe(
-                history_df,
-                hide_index=True,
-                use_container_width=True,
-                column_config={
-                    '매입가': st.column_config.NumberColumn('매입가', format='₩ %,.0f'),
-                },
-            )
-        else:
-            st.info('유사한 제품명의 매입가 이력이 없습니다.')
 
 button_left, button_center, button_right = st.columns([4, 2, 4])
 button_center.markdown('<span id="create-case-button-anchor"></span>', unsafe_allow_html=True)
