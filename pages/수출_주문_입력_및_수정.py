@@ -11,7 +11,7 @@ from services import export_service, folder_service, history_service, order_serv
 from utils.numbering import next_export_no
 
 
-HISTORICAL_ORDER_EDITOR_KEY = 'new_order_items_v4'
+HISTORICAL_ORDER_EDITOR_KEY = 'new_order_items_v5'
 
 FORM_KEYS = {
     'new_case_type',
@@ -176,10 +176,12 @@ with st.container():
     st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
     if is_historical:
         st.caption('제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호를 입력하세요.')
-        new_orders = historical_order_editor(
-            historical_order_source(),
-            key=HISTORICAL_ORDER_EDITOR_KEY,
-        )
+        with st.form('historical_order_entry_form', clear_on_submit=False):
+            new_orders = historical_order_editor(
+                historical_order_source(),
+                key=HISTORICAL_ORDER_EDITOR_KEY,
+            )
+            st.form_submit_button('입력 내용 유지', use_container_width=False)
     else:
         new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
         new_orders = order_editor(new_order_source, key='new_order_items')
