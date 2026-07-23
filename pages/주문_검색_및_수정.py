@@ -89,8 +89,8 @@ st.markdown(
         max-width: 56vw;
     }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-edit-panel-anchor) {
-        width: 72vw;
-        max-width: 72vw;
+        width: 70vw;
+        max-width: 70vw;
         border: 1px solid rgba(49, 51, 63, 0.18);
         border-radius: 16px;
         padding: 1.25rem 1.35rem 1.35rem;
@@ -288,7 +288,7 @@ with st.container():
         existing = pd.DataFrame([{'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
 
     historical_case = case['case_type'] == 'historical'
-    order_col, lookup_col = st.columns([1, 1], gap='large')
+    order_col, lookup_col = st.columns([6, 4], gap='large')
 
     with order_col:
         st.markdown('#### 실출고 제품 수정' if historical_case else '#### 주문품목 수정')
