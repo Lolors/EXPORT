@@ -10,13 +10,12 @@ from utils.formatters import fmt_number
 
 
 st.title('오버뷰')
-st.caption('현재 진행 중인 수출 건을 요약해서 보고, 카드를 클릭해 주문목록과 입고상황을 확인합니다.')
+st.caption('현재 진행 중인 수출 건을 요약해서 보고, 상세 보기 버튼으로 주문목록과 입고상황을 확인합니다.')
 
 st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) {
-        position: relative;
         width: 40vw;
         max-width: 40vw;
         border: 1px solid rgba(49, 51, 63, 0.18);
@@ -25,31 +24,11 @@ st.markdown(
         margin-bottom: 0.8rem;
         overflow: hidden;
         transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-        cursor: pointer;
     }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor):hover {
         border-color: rgba(79, 139, 249, 0.72);
         box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
         transform: translateY(-1px);
-    }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] {
-        position: absolute;
-        inset: 0;
-        z-index: 20;
-        margin: 0;
-        padding: 0;
-    }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button {
-        width: 100%;
-        height: 100%;
-        min-height: 100%;
-        margin: 0;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        box-shadow: none;
-        opacity: 0;
-        cursor: pointer;
     }
     .overview-card-anchor {
         height: 0;
@@ -71,7 +50,7 @@ st.markdown(
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        margin: 0.25rem 0 0.2rem 0;
+        margin: 0.25rem 0 0.65rem 0;
     }
     .overview-progress-track {
         width: 100%;
@@ -89,6 +68,16 @@ st.markdown(
         min-width: 3.5rem;
         font-weight: 700;
         text-align: left;
+    }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] {
+        display: flex;
+        justify-content: center;
+    }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button {
+        width: auto;
+        min-width: 8rem;
+        padding-left: 1.4rem;
+        padding-right: 1.4rem;
     }
     .overview-details {
         width: 40vw;
@@ -172,9 +161,8 @@ for country in sorted(country_groups):
             )
             render_progress_bar(progress)
             if st.button(
-                '카드 열기',
+                '상세 닫기' if is_open else '상세 보기',
                 key=f'overview_toggle_{case_id}',
-                use_container_width=True,
             ):
                 st.session_state['overview_selected_case_id'] = None if is_open else case_id
                 st.rerun()
