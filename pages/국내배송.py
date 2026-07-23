@@ -17,9 +17,9 @@ def date_value(value: str | None):
 st.title('국내배송')
 st.caption('국내배송 방식과 송장 또는 배송기사 정보를 입력합니다.')
 
-cases = export_service.list_cases()
+cases = export_service.active_cases()
 if not cases:
-    st.info('표시할 수출 건이 없습니다.')
+    st.info('국내배송 처리할 수출 건이 없습니다.')
     st.stop()
 
 options = {case_label(case): int(case['id']) for case in cases}
