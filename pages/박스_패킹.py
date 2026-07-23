@@ -114,7 +114,7 @@ if assign_clicked:
         st.session_state[pending_box_number_key] = assigned_box_no + 1
         st.session_state[f'packing_box_detail_{case_id}'] = f'CTN {assigned_box_no}'
         for item_id in selected_ids:
-            st.session_state[f'pack_select_{case_id}_{item_id}'] = False
+            st.session_state.pop(f'pack_select_{case_id}_{item_id}', None)
         st.success(f'{len(selected_ids)}개 실제 출고 행을 CTN {assigned_box_no}에 배정했습니다.')
         st.rerun()
 
@@ -173,7 +173,7 @@ if partial_item_id:
                     )
                     st.session_state.pop('partial_pack_item_id', None)
                     st.session_state.pop('partial_pack_box_no', None)
-                    st.session_state[f'pack_select_{case_id}_{partial_item_id}'] = False
+                    st.session_state.pop(f'pack_select_{case_id}_{partial_item_id}', None)
                     st.session_state[pending_box_number_key] = target_box_no + 1
                     st.session_state[f'packing_box_detail_{case_id}'] = f'CTN {target_box_no}'
                     st.success(f'{fmt_number(quantity)}개를 CTN {target_box_no}에 배정했습니다.')
