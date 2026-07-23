@@ -58,6 +58,58 @@ def create_order_items(case_id: int, items: list[tuple[str, float, str]], *, his
             )
 
 
+def create_historical_case_details(
+    case_id: int,
+    items: list[tuple[str, float, str, int]],
+    boxes: list[tuple[int, float, float, float, float]],
+    *,
+    method: str,
+    actual_ship_date: str,
+    tracking_no: str = '',
+    driver_name: str = '',
+    driver_phone: str = '',
+) -> None:
+    now = now_text()
+    for product_name, quantity, unit, box_no in items:
+        order_id = db.execute(
+            'INSERT INTO order_items(case_id,product_name,quantity,unit,created_at) VALUES (?,?,?,?,?)',
+            (case_id, product_name, quantity, unit, now),
+        )
+        db.execute(
+            '''INSERT INTO shipment_items(
+                   case_id,order_item_id,business_unit,location,product_name,
+                   lot_no,expiry_date,requested_qty,box_no,created_at,updated_at
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+            (case_id, order_id, '', '', product_name, '', '', quantity, box_no, now, now),
+        )
+
+    for box_no, length, width, height, weight in boxes:
+        db.execute(
+            '''INSERT OR REPLACE INTO boxes(
+                   id,case_id,box_no,length_cm,width_cm,height_cm,weight_kg,updated_at
+               ) VALUES (
+                   (SELECT id FROM boxes WHERE case_id=? AND box_no=?),?,?,?,?,?,?,?
+               )''',
+            (case_id, box_no, case_id, box_no, length, width, height, weight, now),
+        )
+
+    db.execute(
+        '''UPDATE export_cases
+           SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,
+               actual_ship_date=?,stage='완료',status='완료',updated_at=?
+           WHERE id=?''',
+        (
+            method,
+            tracking_no.strip(),
+            driver_name.strip(),
+            driver_phone.strip(),
+            actual_ship_date,
+            now,
+            case_id,
+        ),
+    )
+
+
 def sync_historical_shipments(case_id: int) -> None:
     case = db.row('SELECT case_type FROM export_cases WHERE id=?', (case_id,))
     if not case or case['case_type'] != 'historical':
