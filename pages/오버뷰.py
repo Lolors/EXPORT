@@ -10,11 +10,21 @@ from utils.formatters import fmt_number
 
 
 st.title('오버뷰')
-st.caption('현재 진행 중인 주문과 수출대기 입고 진행률을 국가별로 확인합니다.')
+st.caption('현재 진행 중인 수출 건을 요약해서 보고, 선택한 카드의 주문목록과 입고상황을 확인합니다.')
 
 st.markdown(
     '''
     <style>
+    .overview-country {
+        font-size: 1.35rem;
+        font-weight: 800;
+        margin-bottom: 0.35rem;
+    }
+    .overview-meta {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 0.7rem;
+    }
     .overview-progress-row {
         display: flex;
         align-items: center;
@@ -22,8 +32,7 @@ st.markdown(
         margin: 0.25rem 0 0.65rem 0;
     }
     .overview-progress-track {
-        width: 30vw;
-        max-width: 30vw;
+        width: 100%;
         height: 0.8rem;
         background: rgba(49, 51, 63, 0.14);
         border-radius: 999px;
@@ -39,12 +48,6 @@ st.markdown(
         font-weight: 700;
         text-align: left;
     }
-    @media (max-width: 900px) {
-        .overview-progress-track {
-            width: 70vw;
-            max-width: 70vw;
-        }
-    }
     </style>
     ''',
     unsafe_allow_html=True,
@@ -53,7 +56,7 @@ st.markdown(
 
 def render_progress_bar(progress: float) -> None:
     bounded = min(max(progress, 0.0), 1.0)
-    percent = ceil(progress * 100) if progress > 0 else 0
+    percent = ceil(bounded * 100) if bounded > 0 else 0
     st.markdown(
         f'''
         <div class="overview-progress-row">
@@ -85,28 +88,44 @@ for case in cases:
     country = str(case['country'] or '').strip() or '국가 미지정'
     country_groups[country].append(case)
 
-for country in sorted(country_groups):
-    st.markdown(f'## {country}')
+selected_case_id = st.session_state.get('overview_selected_case_id')
 
+for country in sorted(country_groups):
     for case in country_groups[country]:
-        orders = get_order_items_with_actual(int(case['id']))
+        case_id = int(case['id'])
+        orders = get_order_items_with_actual(case_id)
         order_total = sum(float(order['quantity'] or 0) for order in orders)
         received_total = sum(float(order['actual_qty'] or 0) for order in orders)
         progress = received_total / order_total if order_total > 0 else 0.0
 
+        buyer = str(case['buyer'] or '').strip()
+        if buyer.casefold() == '미지정':
+            buyer = ''
+
+        transport_mode = str(case['transport_mode'] or '').strip()
+        if transport_mode.casefold() == '미지정':
+            transport_mode = ''
+
         with st.container(border=True):
-            buyer = str(case['buyer'] or '').strip()
-            if buyer.casefold() == '미지정':
-                buyer = ''
-
-            transport_mode = str(case['transport_mode'] or '').strip()
-            if transport_mode.casefold() == '미지정':
-                transport_mode = ''
-
-            header_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
-            st.markdown(f"### {' · '.join(header_parts)}")
-
+            st.markdown(f'<div class="overview-country">{country}</div>', unsafe_allow_html=True)
+            meta_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
+            st.markdown(
+                f'<div class="overview-meta">{" · ".join(meta_parts)}</div>',
+                unsafe_allow_html=True,
+            )
             render_progress_bar(progress)
+
+            is_open = selected_case_id == case_id
+            button_label = '상세 닫기' if is_open else '상세 보기'
+            if st.button(button_label, key=f'overview_toggle_{case_id}', use_container_width=True):
+                st.session_state['overview_selected_case_id'] = None if is_open else case_id
+                st.rerun()
+
+            if not is_open:
+                continue
+
+            st.divider()
+            st.markdown('#### 주문목록 및 입고상황')
             st.caption(
                 f"주문수량 {fmt_number(order_total)} / 입고수량 {fmt_number(received_total)}"
                 f" · 단계 {case['stage']}"
@@ -125,5 +144,3 @@ for country in sorted(country_groups):
                     f"주문 {fmt_number(order_qty)} {order['unit']} · "
                     f"입고 {fmt_number(received_qty)} {order['unit']}"
                 )
-
-    st.divider()
