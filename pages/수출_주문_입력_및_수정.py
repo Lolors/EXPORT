@@ -91,46 +91,50 @@ def render_historical_order_rows() -> pd.DataFrame:
     if HISTORICAL_ROW_COUNT_KEY not in st.session_state:
         st.session_state[HISTORICAL_ROW_COUNT_KEY] = 1
 
-    header = st.columns([3, 1.6, 1.6, 1.1, 0.8, 1.2, 0.8])
+    widths = [1.7, 3, 1.6, 1.6, 1.1, 0.8, 1.2, 0.8]
+    header = st.columns(widths)
     for col, label in zip(
         header,
-        ['제품명', '제조번호', '유효기간', '수량', '단위', '매입가', 'CTN 번호'],
+        ['출고처', '제품명', '제조번호', '유효기간', '수량', '단위', '매입가', 'CTN 번호'],
     ):
         col.markdown(f'**{label}**')
 
     rows: list[dict[str, object]] = []
     for index in range(int(st.session_state[HISTORICAL_ROW_COUNT_KEY])):
-        cols = st.columns([3, 1.6, 1.6, 1.1, 0.8, 1.2, 0.8])
-        product_name = cols[0].text_input(
+        cols = st.columns(widths)
+        ship_from = cols[0].text_input(
+            '출고처', key=f'historical_order_ship_from_{index}', label_visibility='collapsed'
+        )
+        product_name = cols[1].text_input(
             '제품명', key=f'historical_order_product_{index}', label_visibility='collapsed'
         )
-        lot_no = cols[1].text_input(
+        lot_no = cols[2].text_input(
             '제조번호', key=f'historical_order_lot_{index}', label_visibility='collapsed'
         )
-        expiry_date = cols[2].text_input(
+        expiry_date = cols[3].text_input(
             '유효기간',
             key=f'historical_order_expiry_{index}',
             placeholder='2028-06-30',
             label_visibility='collapsed',
         )
-        quantity = cols[3].number_input(
+        quantity = cols[4].number_input(
             '수량',
             min_value=0.0,
             step=1.0,
             key=f'historical_order_qty_{index}',
             label_visibility='collapsed',
         )
-        unit = cols[4].text_input(
+        unit = cols[5].text_input(
             '단위', value='EA', key=f'historical_order_unit_{index}', label_visibility='collapsed'
         )
-        purchase_price = cols[5].number_input(
+        purchase_price = cols[6].number_input(
             '매입가',
             min_value=0.0,
             step=100.0,
             key=f'historical_order_price_{index}',
             label_visibility='collapsed',
         )
-        box_no = cols[6].number_input(
+        box_no = cols[7].number_input(
             'CTN 번호',
             min_value=1,
             step=1,
@@ -138,6 +142,7 @@ def render_historical_order_rows() -> pd.DataFrame:
             label_visibility='collapsed',
         )
         rows.append({
+            '출고처': ship_from,
             '제품명': product_name,
             '제조번호': lot_no,
             '유효기간': expiry_date,
@@ -158,7 +163,7 @@ def render_historical_order_rows() -> pd.DataFrame:
         disabled=st.session_state[HISTORICAL_ROW_COUNT_KEY] <= 1,
     ):
         last_index = st.session_state[HISTORICAL_ROW_COUNT_KEY] - 1
-        for suffix in ['product', 'lot', 'expiry', 'qty', 'unit', 'price', 'box']:
+        for suffix in ['ship_from', 'product', 'lot', 'expiry', 'qty', 'unit', 'price', 'box']:
             st.session_state.pop(f'historical_order_{suffix}_{last_index}', None)
         st.session_state[HISTORICAL_ROW_COUNT_KEY] -= 1
         st.rerun()
@@ -241,7 +246,7 @@ with st.container():
     st.markdown('<span id="order-price-layout-anchor"></span>', unsafe_allow_html=True)
     st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
     if is_historical:
-        st.caption('제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호를 입력하세요.')
+        st.caption('출고처·제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호를 입력하세요.')
         new_orders = render_historical_order_rows()
     else:
         new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
@@ -303,11 +308,12 @@ if create_case:
         unit = str(row.get('단위', 'EA') or 'EA').strip() or 'EA'
         purchase_price = float(row.get('매입가', 0) or 0)
         if is_historical:
+            ship_from = str(row.get('출고처', '') or '').strip()
             lot_no = str(row.get('제조번호', '') or '').strip()
             expiry_date = str(row.get('유효기간', '') or '').strip()
             raw_box_no = row.get('CTN 번호', 0)
             box_no = int(raw_box_no or 0)
-            valid_orders.append((product_name, unit, lot_no, expiry_date, quantity, purchase_price, box_no))
+            valid_orders.append((ship_from, product_name, unit, lot_no, expiry_date, quantity, purchase_price, box_no))
         else:
             valid_orders.append((product_name, quantity, unit, purchase_price))
 
@@ -330,11 +336,11 @@ if create_case:
         st.error('국가는 필수입니다.')
     elif not valid_orders:
         st.error('제품을 한 개 이상 입력하세요.')
-    elif is_historical and any(item[6] <= 0 for item in valid_orders):
+    elif is_historical and any(item[7] <= 0 for item in valid_orders):
         st.error('모든 제품에 CTN 번호를 입력하세요.')
     elif is_historical and not valid_boxes:
         st.error('CTN 정보를 한 개 이상 입력하세요.')
-    elif is_historical and not {item[6] for item in valid_orders}.issubset({box[0] for box in valid_boxes}):
+    elif is_historical and not {item[7] for item in valid_orders}.issubset({box[0] for box in valid_boxes}):
         st.error('제품에 연결한 모든 CTN 번호의 규격과 GW를 입력하세요.')
     else:
         prefix = 'HIS' if is_historical else 'EXP'
