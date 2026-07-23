@@ -11,8 +11,28 @@ from services import export_service, folder_service, history_service, order_serv
 from utils.numbering import next_export_no
 
 
+FORM_KEYS = [
+    'new_case_type',
+    'historical_export_date',
+    'new_export_no',
+    'new_country',
+    'new_buyer',
+    'new_transport',
+    'new_note',
+    'new_order_items',
+]
+
+
+def reset_new_case_form() -> None:
+    for key in FORM_KEYS:
+        st.session_state.pop(key, None)
+
+
 st.title('주문 입력')
 st.caption('현재 진행 건은 주문목록을 등록하고, 과거 수출 건은 주문목록을 실출고 제품으로도 자동 저장합니다.')
+
+if success_message := st.session_state.pop('new_case_success_message', None):
+    st.success(success_message)
 
 st.markdown(
     '''
@@ -20,6 +40,15 @@ st.markdown(
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
         width: 60vw;
         max-width: 60vw;
+    }
+    div[data-testid="stHorizontalBlock"]:has(#create-case-button-anchor) {
+        align-items: center;
+        justify-content: center;
+    }
+    div[data-testid="stHorizontalBlock"]:has(#create-case-button-anchor) > div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
@@ -71,7 +100,16 @@ if is_historical:
 new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA'}])
 new_orders = order_editor(new_order_source, key='new_order_items')
 
-if st.button('수출 건 생성', type='primary', key='create_case'):
+button_left, button_center, button_right = st.columns([4, 2, 4])
+button_center.markdown('<span id="create-case-button-anchor"></span>', unsafe_allow_html=True)
+create_case = button_center.button(
+    '수출 건 생성',
+    type='primary',
+    key='create_case',
+    use_container_width=True,
+)
+
+if create_case:
     valid_orders = []
     for _, row in new_orders.iterrows():
         product_name = str(row.get('제품명', '') or '').strip()
@@ -113,5 +151,6 @@ if st.button('수출 건 생성', type='primary', key='create_case'):
             history_detail += ' / 주문목록=실출고'
         history_service.add_history(case_id, '수출 건 생성', history_detail)
         st.session_state['order_case_id'] = case_id
-        st.success(f'{export_no} 생성 완료')
+        st.session_state['new_case_success_message'] = f'{export_no} 생성 완료'
+        reset_new_case_form()
         st.rerun()
