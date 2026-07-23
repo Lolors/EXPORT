@@ -16,36 +16,79 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) {
+        position: relative;
         width: 40vw;
         max-width: 40vw;
-        margin-bottom: 0.8rem;
-    }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button {
-        width: 100%;
-        min-height: 7.8rem;
-        padding: 1.1rem 1.25rem 1.2rem;
         border: 1px solid rgba(49, 51, 63, 0.18);
         border-radius: 16px;
-        background: transparent;
-        box-shadow: none;
-        white-space: pre-wrap;
-        text-align: left;
-        justify-content: flex-start;
-        font-size: 1rem;
-        line-height: 1.55;
-        cursor: pointer;
+        padding: 1.1rem 1.25rem 1.2rem;
+        margin-bottom: 0.8rem;
+        overflow: hidden;
         transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+        cursor: pointer;
     }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button:hover {
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor):hover {
         border-color: rgba(79, 139, 249, 0.72);
         box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
         transform: translateY(-1px);
+    }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        margin: 0;
+        padding: 0;
+    }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button {
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        opacity: 0;
+        cursor: pointer;
     }
     .overview-card-anchor {
         height: 0;
         margin: 0;
         padding: 0;
         overflow: hidden;
+    }
+    .overview-country {
+        font-size: 1.35rem;
+        font-weight: 800;
+        margin-bottom: 0.35rem;
+    }
+    .overview-meta {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 0.7rem;
+    }
+    .overview-progress-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0.25rem 0 0.2rem 0;
+    }
+    .overview-progress-track {
+        width: 100%;
+        height: 0.8rem;
+        background: rgba(49, 51, 63, 0.14);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .overview-progress-fill {
+        height: 100%;
+        background: #4f8bf9;
+        border-radius: 999px;
+    }
+    .overview-progress-label {
+        min-width: 3.5rem;
+        font-weight: 700;
+        text-align: left;
     }
     .overview-details {
         width: 40vw;
@@ -66,11 +109,20 @@ st.markdown(
 )
 
 
-def progress_text(progress: float) -> str:
+def render_progress_bar(progress: float) -> None:
     bounded = min(max(progress, 0.0), 1.0)
     percent = ceil(bounded * 100) if bounded > 0 else 0
-    filled = min(10, max(0, round(bounded * 10)))
-    return f"{'█' * filled}{'░' * (10 - filled)} {percent}%"
+    st.markdown(
+        f'''
+        <div class="overview-progress-row">
+            <div class="overview-progress-track">
+                <div class="overview-progress-fill" style="width: {bounded * 100:.4f}%;"></div>
+            </div>
+            <div class="overview-progress-label">{percent}%</div>
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
 
 
 def order_status_icon(order_qty: float, received_qty: float) -> str:
@@ -110,17 +162,17 @@ for country in sorted(country_groups):
             transport_mode = ''
 
         is_open = selected_case_id == case_id
-        meta_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
-        card_label = (
-            f"{country}\n"
-            f"{' · '.join(meta_parts)}\n"
-            f"{progress_text(progress)}"
-        )
-
         with st.container():
             st.markdown('<div class="overview-card-anchor"></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="overview-country">{country}</div>', unsafe_allow_html=True)
+            meta_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
+            st.markdown(
+                f'<div class="overview-meta">{" · ".join(meta_parts)}</div>',
+                unsafe_allow_html=True,
+            )
+            render_progress_bar(progress)
             if st.button(
-                card_label,
+                '카드 열기',
                 key=f'overview_toggle_{case_id}',
                 use_container_width=True,
             ):
