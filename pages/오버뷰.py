@@ -18,68 +18,34 @@ st.markdown(
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) {
         width: 40vw;
         max-width: 40vw;
-        border: 1px solid rgba(49, 51, 63, 0.18);
-        border-radius: 16px;
-        padding: 1.1rem 1.25rem 1.2rem;
         margin-bottom: 0.8rem;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-        cursor: pointer;
-    }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor):hover {
-        border-color: rgba(79, 139, 249, 0.72);
-        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
-        transform: translateY(-1px);
     }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button {
         width: 100%;
-        margin: 0;
-        padding: 0;
-        border: 0;
+        min-height: 7.8rem;
+        padding: 1.1rem 1.25rem 1.2rem;
+        border: 1px solid rgba(49, 51, 63, 0.18);
+        border-radius: 16px;
         background: transparent;
         box-shadow: none;
-        color: transparent;
-        min-height: 0;
-        height: 0;
+        white-space: pre-wrap;
+        text-align: left;
+        justify-content: flex-start;
+        font-size: 1rem;
+        line-height: 1.55;
         cursor: pointer;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) div[data-testid="stButton"] button:hover {
+        border-color: rgba(79, 139, 249, 0.72);
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+        transform: translateY(-1px);
     }
     .overview-card-anchor {
         height: 0;
         margin: 0;
         padding: 0;
         overflow: hidden;
-    }
-    .overview-country {
-        font-size: 1.35rem;
-        font-weight: 800;
-        margin-bottom: 0.35rem;
-    }
-    .overview-meta {
-        font-size: 1rem;
-        font-weight: 700;
-        margin-bottom: 0.7rem;
-    }
-    .overview-progress-row {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin: 0.25rem 0 0.2rem 0;
-    }
-    .overview-progress-track {
-        width: 100%;
-        height: 0.8rem;
-        background: rgba(49, 51, 63, 0.14);
-        border-radius: 999px;
-        overflow: hidden;
-    }
-    .overview-progress-fill {
-        height: 100%;
-        background: #4f8bf9;
-        border-radius: 999px;
-    }
-    .overview-progress-label {
-        min-width: 3.5rem;
-        font-weight: 700;
-        text-align: left;
     }
     .overview-details {
         width: 40vw;
@@ -100,20 +66,11 @@ st.markdown(
 )
 
 
-def render_progress_bar(progress: float) -> None:
+def progress_text(progress: float) -> str:
     bounded = min(max(progress, 0.0), 1.0)
     percent = ceil(bounded * 100) if bounded > 0 else 0
-    st.markdown(
-        f'''
-        <div class="overview-progress-row">
-            <div class="overview-progress-track">
-                <div class="overview-progress-fill" style="width: {bounded * 100:.4f}%;"></div>
-            </div>
-            <div class="overview-progress-label">{percent}%</div>
-        </div>
-        ''',
-        unsafe_allow_html=True,
-    )
+    filled = min(10, max(0, round(bounded * 10)))
+    return f"{'█' * filled}{'░' * (10 - filled)} {percent}%"
 
 
 def order_status_icon(order_qty: float, received_qty: float) -> str:
@@ -153,17 +110,17 @@ for country in sorted(country_groups):
             transport_mode = ''
 
         is_open = selected_case_id == case_id
-        with st.container(border=False):
+        meta_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
+        card_label = (
+            f"{country}\n"
+            f"{' · '.join(meta_parts)}\n"
+            f"{progress_text(progress)}"
+        )
+
+        with st.container():
             st.markdown('<div class="overview-card-anchor"></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="overview-country">{country}</div>', unsafe_allow_html=True)
-            meta_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
-            st.markdown(
-                f'<div class="overview-meta">{" · ".join(meta_parts)}</div>',
-                unsafe_allow_html=True,
-            )
-            render_progress_bar(progress)
             if st.button(
-                '상세 닫기' if is_open else '상세 보기',
+                card_label,
                 key=f'overview_toggle_{case_id}',
                 use_container_width=True,
             ):
