@@ -33,6 +33,47 @@ def date_value(value: str | None):
     return parsed.date() if parsed else date.today()
 
 
+def render_similar_price_lookup(*, key: str) -> None:
+    st.markdown('#### 유사 제품 매입가 조회')
+    query = st.text_input(
+        '제품명 검색',
+        key=key,
+        placeholder='예: 리드카인 1% 10Am',
+    ).strip()
+    st.caption('공백·기호와 일부 표현 차이를 보정해 과거 매입가 이력을 찾습니다.')
+
+    if not query:
+        st.info('제품명을 입력하면 유사한 과거 매입가가 표시됩니다.')
+        return
+
+    similar_prices = order_service.find_similar_purchase_prices(query)
+    if not similar_prices:
+        st.info('유사한 제품명의 매입가 이력이 없습니다.')
+        return
+
+    history_df = pd.DataFrame([
+        {
+            '유사 제품명': item['product_name'],
+            '매입가': item['purchase_price'],
+            '수량': item['quantity'],
+            '단위': item['unit'],
+            '수출번호': item['export_no'],
+            '바이어': item['buyer'] or '',
+            '등록일': str(item['created_at'])[:10],
+            '유사도': f"{item['similarity'] * 100:.0f}%",
+        }
+        for item in similar_prices
+    ])
+    st.dataframe(
+        history_df,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            '매입가': st.column_config.NumberColumn('매입가', format='₩ %,.0f'),
+        },
+    )
+
+
 st.title('주문 검색 및 수정')
 
 cases = order_service.list_editable_cases()
@@ -48,8 +89,8 @@ st.markdown(
         max-width: 56vw;
     }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-edit-panel-anchor) {
-        width: 64vw;
-        max-width: 64vw;
+        width: 72vw;
+        max-width: 72vw;
         border: 1px solid rgba(49, 51, 63, 0.18);
         border-radius: 16px;
         padding: 1.25rem 1.35rem 1.35rem;
@@ -244,24 +285,31 @@ with st.container():
 
     existing = order_service.get_order_items_dataframe(case_id)
     if existing.empty:
-        existing = pd.DataFrame([{'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA'}])
+        existing = pd.DataFrame([{'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
 
     historical_case = case['case_type'] == 'historical'
-    st.markdown('#### 실출고 제품 수정' if historical_case else '#### 주문품목 수정')
-    if historical_case:
-        st.caption('과거 수출 건에서는 수정한 내용이 주문목록과 실출고 제품에 함께 반영됩니다.')
-    else:
-        st.caption('실출고가 연결된 행은 삭제할 수 없지만 제품명·수량·단위는 수정할 수 있습니다.')
+    order_col, lookup_col = st.columns([1, 1], gap='large')
 
-    edited = order_editor(existing, key=f'orders_{case_id}')
-    save_left, save_center, save_right = st.columns([4, 2, 4])
-    save_center.markdown('<span id="order-save-row-anchor"></span>', unsafe_allow_html=True)
-    save_orders = save_center.button(
-        '목록 저장' if historical_case else '주문 목록 저장',
-        type='primary',
-        use_container_width=True,
-        key=f'save_orders_{case_id}',
-    )
+    with order_col:
+        st.markdown('#### 실출고 제품 수정' if historical_case else '#### 주문품목 수정')
+        if historical_case:
+            st.caption('과거 수출 건에서는 수정한 내용이 주문목록과 실출고 제품에 함께 반영됩니다.')
+        else:
+            st.caption('실출고가 연결된 행은 삭제할 수 없지만 제품명·수량·단위·매입가는 수정할 수 있습니다.')
+
+        edited = order_editor(existing, key=f'orders_{case_id}')
+        save_left, save_center, save_right = st.columns([3, 2, 3])
+        save_center.markdown('<span id="order-save-row-anchor"></span>', unsafe_allow_html=True)
+        save_orders = save_center.button(
+            '목록 저장' if historical_case else '주문 목록 저장',
+            type='primary',
+            use_container_width=True,
+            key=f'save_orders_{case_id}',
+        )
+
+    with lookup_col:
+        render_similar_price_lookup(key=f'edit_price_lookup_query_{case_id}')
+
     if save_orders:
         try:
             order_service.save_order_items(case_id, edited)
