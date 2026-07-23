@@ -137,7 +137,7 @@ body{{padding:8px}}
 .document{{max-width:1180px;margin:auto;background:#fff;border:1px solid #d8dee8;border-radius:14px;overflow:hidden;box-shadow:0 12px 34px rgba(30,45,70,.08)}}
 .header{{padding:30px 38px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:18px}} .title{{font-size:28px;font-weight:800}} .sub{{font-size:12px;opacity:.8}} .number{{text-align:right}}
 .body{{padding:28px 38px 32px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 9px}}
-.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:8px;overflow:hidden;margin-bottom:18px}} .cell{{padding:11px 13px;border-right:1px solid #e5eaf0}} .label{{font-size:9.5px;color:#7c8797}} .value{{font-size:12.5px;font-weight:700;margin-top:3px}}
+.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:8px;overflow:hidden;margin-bottom:18px}} .cell{{padding:11px 13px;border-right:1px solid #e5eaf0}} .label{{font-size:9.5px;color:#7c8797}} .value{{font-size:12.5px;font-weight:700;margin-top:3px;white-space:pre-wrap;word-break:break-word}}
 .summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:19px}} .card{{border:1px solid #dce3eb;border-radius:8px;padding:12px 14px;background:#f8fafc}} .card b{{font-size:18px;color:#214f76}}
 .wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:8px}} table{{border-collapse:collapse;width:100%;min-width:{'900px' if has_packing else '680px'};font-size:10.5px}} th{{background:#294f71;color:#fff;padding:8px 9px;text-align:left}} td{{padding:8px 9px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0;padding:24px}} .total-row td{{background:#eef3f8;font-weight:700}}
 .note-box{{margin-top:15px;padding:11px 13px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:10.5px}}
@@ -164,13 +164,18 @@ body{{padding:8px}}
 }}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
-<div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b><br>{html.escape(status_text)}</div></div>
+<div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b></div></div>
 <div class="body"><div class="section">EXPORT INFORMATION</div><div class="grid">
 <div class="cell"><div class="label">국가 / Country</div><div class="value">{html.escape(case['country'] or '-')}</div></div>
 <div class="cell"><div class="label">바이어 / Buyer</div><div class="value">{html.escape(case['buyer'] or '-')}</div></div>
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
 <div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
-<div class="section">DOMESTIC DELIVERY</div><div class="grid"><div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div><div class="cell" style="grid-column:span 2"><div class="label">{detail_label}</div><div class="value">{html.escape(detail_value)}</div></div><div class="cell"><div class="label">현재 단계</div><div class="value">{html.escape(status_text)}</div></div></div>
+<div class="section">DOMESTIC DELIVERY</div><div class="grid">
+<div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div>
+<div class="cell"><div class="label">{html.escape(detail_label)}</div><div class="value">{html.escape(detail_value)}</div></div>
+<div class="cell"><div class="label">수하인명</div><div class="value">{html.escape(case['consignee_name'] or '-')}</div></div>
+<div class="cell"><div class="label">수하인주소</div><div class="value">{html.escape(case['consignee_address'] or '-')}</div></div>
+</div>
 <div class="section">{'PACKING SUMMARY' if has_packing else 'SHIPPING SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
 <div class="section">{section_title}</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}</div></div></body></html>'''
 
