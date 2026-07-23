@@ -131,9 +131,9 @@ with st.container():
     st.markdown('<span id="editable-case-filter-anchor"></span>', unsafe_allow_html=True)
 
     years = sorted({
-        int(str(case['actual_ship_date'] or case['created_at'])[:4])
+        int(str(case['actual_ship_date'])[:4])
         for case in cases
-        if str(case['actual_ship_date'] or case['created_at'])[:4].isdigit()
+        if str(case['actual_ship_date'] or '')[:4].isdigit()
     }, reverse=True)
 
     filter_cols = st.columns([1.5, 1.5, 3, 4])
@@ -143,10 +143,10 @@ with st.container():
         month_options: list[str | int] = ['전체']
     else:
         month_values = sorted({
-            int(str(case['actual_ship_date'] or case['created_at'])[5:7])
+            int(str(case['actual_ship_date'])[5:7])
             for case in cases
-            if str(case['actual_ship_date'] or case['created_at']).startswith(str(selected_year))
-            and str(case['actual_ship_date'] or case['created_at'])[5:7].isdigit()
+            if str(case['actual_ship_date'] or '').startswith(str(selected_year))
+            and str(case['actual_ship_date'] or '')[5:7].isdigit()
         })
         month_options = ['전체'] + month_values
 
@@ -157,7 +157,7 @@ with st.container():
 
 filtered_cases = []
 for case in cases:
-    raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
+    raw_date = str(case['actual_ship_date'] or '')
     case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
     case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
 
@@ -178,10 +178,10 @@ if not filtered_cases:
 with st.container():
     selection_rows = []
     for case in filtered_cases:
-        raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
+        ship_date = str(case['actual_ship_date'] or '')
         selection_rows.append({
             '_case_id': int(case['id']),
-            '등록일자': raw_date[:10],
+            '출고일자': ship_date[:10] if ship_date else '',
             '수출번호': case['export_no'],
             '국가': case['country'],
             '바이어': case['buyer'] or '',
@@ -199,7 +199,7 @@ with st.container():
         selection_mode='single-row',
         column_config={
             '_case_id': None,
-            '등록일자': st.column_config.TextColumn('등록일자'),
+            '출고일자': st.column_config.TextColumn('출고일자'),
             '수출번호': st.column_config.TextColumn('수출번호'),
             '국가': st.column_config.TextColumn('국가'),
             '바이어': st.column_config.TextColumn('바이어'),
