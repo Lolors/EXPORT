@@ -105,7 +105,6 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
 
     box_rows: dict[int, list[int]] = {}
     order_fill = PatternFill('solid', fgColor='F5F8FB')
-    shipment_rows: list[int] = []
 
     for order in orders:
         order_row = ws2.max_row + 1
@@ -118,7 +117,6 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
         for shipment in grouped.get(int(order['id']), []):
             box_no = int(shipment['box_no']) if shipment['box_no'] is not None else None
             row_no = ws2.max_row + 1
-            shipment_rows.append(row_no)
             ws2.append([
                 f'└ {shipment["actual_product_name"] or order["product_name"]}', '', order['unit'],
                 shipment['business_unit'] or '', shipment['actual_product_name'] or '',
@@ -163,12 +161,13 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     ws3.append(['항목', '내용'])
     for label, value in [
         ('국내배송 방식', case['domestic_method']), ('국내배송 일자', case['actual_ship_date']),
+        ('수하인명', case['consignee_name']), ('수하인주소', case['consignee_address']),
         ('송장번호', case['tracking_no']), ('배송기사 이름', case['driver_name']),
         ('배송기사 연락처', case['driver_phone']), ('현재 단계', case['stage']),
         ('상태', case['status']), ('비고', case['note']), ('취소 사유', case['cancel_reason']),
         ('취소 일시', case['cancelled_at']), ('최종 수정일', case['updated_at']),
     ]:
         ws3.append([label, value or ''])
-    _style_sheet(ws3, {'A': 24, 'B': 48}, {2})
+    _style_sheet(ws3, {'A': 24, 'B': 64}, {2})
     wb.save(workbook_path)
     return workbook_path
