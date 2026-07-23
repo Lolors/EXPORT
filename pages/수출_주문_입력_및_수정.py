@@ -11,7 +11,8 @@ from services import export_service, folder_service, history_service, order_serv
 from utils.numbering import next_export_no
 
 
-HISTORICAL_ORDER_EDITOR_KEY = 'new_order_items_v2'
+HISTORICAL_ORDER_EDITOR_KEY = 'new_order_items_v3'
+HISTORICAL_ORDER_DATA_KEY = 'new_order_items_data'
 
 FORM_KEYS = {
     'new_case_type',
@@ -23,6 +24,7 @@ FORM_KEYS = {
     'new_note',
     'new_order_items',
     HISTORICAL_ORDER_EDITOR_KEY,
+    HISTORICAL_ORDER_DATA_KEY,
     'historical_box_items',
     'historical_delivery_method',
     'historical_tracking_no',
@@ -33,6 +35,20 @@ FORM_KEYS = {
     'create_case',
     'price_lookup_query',
 }
+
+
+def historical_order_source() -> pd.DataFrame:
+    return pd.DataFrame([
+        {
+            '제품명': '',
+            '제조번호': '',
+            '유효기간': '',
+            '수량': 0.0,
+            '단위': 'EA',
+            '매입가': 0.0,
+            'CTN 번호': 1,
+        }
+    ])
 
 
 def reset_new_case_form() -> None:
@@ -162,21 +178,14 @@ with st.container():
     st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
     if is_historical:
         st.caption('제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호를 입력하세요.')
-        new_order_source = pd.DataFrame([
-            {
-                '제품명': '',
-                '제조번호': '',
-                '유효기간': '',
-                '수량': 0.0,
-                '단위': 'EA',
-                '매입가': 0.0,
-                'CTN 번호': 1,
-            }
-        ])
+        if HISTORICAL_ORDER_DATA_KEY not in st.session_state:
+            st.session_state[HISTORICAL_ORDER_DATA_KEY] = historical_order_source()
+
         new_orders = historical_order_editor(
-            new_order_source,
+            st.session_state[HISTORICAL_ORDER_DATA_KEY],
             key=HISTORICAL_ORDER_EDITOR_KEY,
         )
+        st.session_state[HISTORICAL_ORDER_DATA_KEY] = new_orders.copy()
     else:
         new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
         new_orders = order_editor(new_order_source, key='new_order_items')
