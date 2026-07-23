@@ -87,13 +87,48 @@ def unique_folder_path(base: Path, folder_name: str, current_path: Path | None =
         index += 1
 
 
+def _parse_timestamp(value: object) -> datetime | None:
+    text = str(value or '').strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace('Z', '+00:00')).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def _workbook_needs_update(case_id: int, folder: Path) -> bool:
+    workbook_path = folder / '수출진행내역.xlsx'
+    if not workbook_path.exists():
+        return True
+
+    timestamps: list[datetime] = []
+    queries = [
+        ('SELECT updated_at AS value FROM export_cases WHERE id=?', (case_id,)),
+        ('SELECT MAX(created_at) AS value FROM order_items WHERE case_id=?', (case_id,)),
+        ('SELECT MAX(COALESCE(updated_at, created_at)) AS value FROM shipment_items WHERE case_id=?', (case_id,)),
+        ('SELECT MAX(updated_at) AS value FROM boxes WHERE case_id=?', (case_id,)),
+    ]
+    for sql, params in queries:
+        row = db.row(sql, params)
+        parsed = _parse_timestamp(row['value'] if row else '')
+        if parsed:
+            timestamps.append(parsed)
+
+    if not timestamps:
+        return False
+    workbook_time = datetime.fromtimestamp(workbook_path.stat().st_mtime)
+    return max(timestamps) > workbook_time
+
+
 def ensure_case_folder(case_id: int) -> Path:
     case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
     if not case:
         raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
     saved_path = Path(case['folder_path']) if case['folder_path'] else None
     if saved_path and saved_path.exists():
-        write_case_workbook(case_id, saved_path)
+        if _workbook_needs_update(case_id, saved_path):
+            write_case_workbook(case_id, saved_path)
         return saved_path
     base = case_folder_base(case)
     base.mkdir(parents=True, exist_ok=True)
@@ -124,10 +159,16 @@ def sync_case_folder(case_id: int) -> Path:
     if not case:
         raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
     base = case_folder_base(case)
-    base.mkdir(parents=True, exist_ok=True)
     current = Path(case['folder_path']) if case['folder_path'] else None
     target = unique_folder_path(base, case_folder_name(case), current)
-    if current and current.exists() and current.resolve() != target.resolve():
+
+    if current and current.exists() and current.resolve() == target.resolve():
+        if _workbook_needs_update(case_id, current):
+            write_case_workbook(case_id, current)
+        return current
+
+    base.mkdir(parents=True, exist_ok=True)
+    if current and current.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(current), str(target))
         refresh_attachment_paths(case_id, current, target)
