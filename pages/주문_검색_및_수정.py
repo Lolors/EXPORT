@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 
 import pandas as pd
 import streamlit as st
 
 from components.editors import order_editor
 from config import TRANSPORT_MODES
-from services import export_service, folder_service, history_service, order_service
+from services import (
+    delivery_service,
+    export_service,
+    folder_service,
+    history_service,
+    order_service,
+    shipment_service,
+)
+from utils.dates import parse_date
 
 
 def summarize_product_names(raw_names: object) -> str:
@@ -17,6 +26,11 @@ def summarize_product_names(raw_names: object) -> str:
         if name.strip()
     ]
     return ', '.join(names)
+
+
+def date_value(value: str | None):
+    parsed = parse_date(value)
+    return parsed.date() if parsed else date.today()
 
 
 st.title('주문 검색 및 수정')
@@ -34,18 +48,22 @@ st.markdown(
         max-width: 56vw;
     }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-edit-panel-anchor) {
-        width: 50vw;
-        max-width: 50vw;
+        width: 64vw;
+        max-width: 64vw;
         border: 1px solid rgba(49, 51, 63, 0.18);
         border-radius: 16px;
         padding: 1.25rem 1.35rem 1.35rem;
         margin-top: 0.5rem;
     }
-    div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) {
+    div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor),
+    div[data-testid="stHorizontalBlock"]:has(#shipment-save-row-anchor),
+    div[data-testid="stHorizontalBlock"]:has(#delivery-save-row-anchor) {
         align-items: center;
         justify-content: center;
     }
-    div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) > div {
+    div[data-testid="stHorizontalBlock"]:has(#order-save-row-anchor) > div,
+    div[data-testid="stHorizontalBlock"]:has(#shipment-save-row-anchor) > div,
+    div[data-testid="stHorizontalBlock"]:has(#delivery-save-row-anchor) > div {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -173,6 +191,8 @@ if case is None:
     st.info('목록이 변경되었습니다. 수정할 수출 건을 다시 선택하세요.')
     st.stop()
 
+case_detail = export_service.get_case(case_id)
+
 with st.container():
     st.markdown('<span id="order-edit-panel-anchor"></span>', unsafe_allow_html=True)
     st.markdown('#### 기본 정보 수정')
@@ -253,3 +273,88 @@ with st.container():
             history_service.add_history(case_id, action, f'{len(edited)}행')
             st.success('목록을 저장했습니다.')
             st.rerun()
+
+    shipment_df = shipment_service.get_lot_expiry_dataframe(case_id)
+    if not shipment_df.empty:
+        st.divider()
+        st.markdown('#### 출고제품 제조번호·유통기한 수정')
+        st.caption('배송완료된 건도 수정할 수 있습니다. 제품명·출고수량·CTN 번호는 확인용이며 변경되지 않습니다.')
+        shipment_edited = st.data_editor(
+            shipment_df,
+            hide_index=True,
+            use_container_width=True,
+            num_rows='fixed',
+            key=f'completed_shipments_{case_id}',
+            disabled=['제품명', '출고수량', 'CTN번호'],
+            column_config={
+                '_id': None,
+                '제품명': st.column_config.TextColumn('제품명'),
+                '출고수량': st.column_config.NumberColumn('출고수량', format='%,.0f'),
+                'CTN번호': st.column_config.NumberColumn('CTN 번호', format='%d'),
+                '제조번호': st.column_config.TextColumn('제조번호'),
+                '유통기한': st.column_config.TextColumn('유통기한', help='예: 2028-06-30'),
+            },
+        )
+        ship_left, ship_center, ship_right = st.columns([4, 2, 4])
+        ship_center.markdown('<span id="shipment-save-row-anchor"></span>', unsafe_allow_html=True)
+        if ship_center.button('제조번호·유통기한 저장', type='primary', use_container_width=True, key=f'save_shipments_{case_id}'):
+            count = shipment_service.update_lot_expiry(case_id, shipment_edited)
+            folder_service.sync_case_folder(case_id)
+            history_service.add_history(case_id, '출고제품 제조번호·유통기한 수정', f'{count}행')
+            st.success('제조번호와 유통기한을 저장했습니다.')
+            st.rerun()
+
+    st.divider()
+    st.markdown('#### 국내배송 정보 수정')
+    delivery_method = st.radio(
+        '배송 방식',
+        ['로젠택배', '퀵배송'],
+        index=1 if case_detail['domestic_method'] == '퀵배송' else 0,
+        horizontal=True,
+        key=f'edit_delivery_method_{case_id}',
+    )
+    delivery_date = st.date_input(
+        '국내배송 일자',
+        value=date_value(case_detail['actual_ship_date']),
+        key=f'edit_delivery_date_{case_id}',
+    )
+    consignee_cols = st.columns([1, 2])
+    consignee_name = consignee_cols[0].text_input(
+        '수하인명', value=case_detail['consignee_name'] or '', key=f'edit_consignee_name_{case_id}'
+    )
+    consignee_address = consignee_cols[1].text_input(
+        '수하인주소', value=case_detail['consignee_address'] or '', key=f'edit_consignee_address_{case_id}'
+    )
+    if delivery_method == '로젠택배':
+        tracking_no = st.text_input(
+            '송장번호', value=case_detail['tracking_no'] or '', key=f'edit_tracking_no_{case_id}'
+        )
+        driver_name = ''
+        driver_phone = ''
+    else:
+        delivery_cols = st.columns(2)
+        driver_name = delivery_cols[0].text_input(
+            '배송기사 이름', value=case_detail['driver_name'] or '', key=f'edit_driver_name_{case_id}'
+        )
+        driver_phone = delivery_cols[1].text_input(
+            '배송기사 연락처', value=case_detail['driver_phone'] or '', key=f'edit_driver_phone_{case_id}'
+        )
+        tracking_no = ''
+
+    delivery_left, delivery_center, delivery_right = st.columns([4, 2, 4])
+    delivery_center.markdown('<span id="delivery-save-row-anchor"></span>', unsafe_allow_html=True)
+    if delivery_center.button('국내배송 정보 저장', type='primary', use_container_width=True, key=f'save_delivery_edit_{case_id}'):
+        delivery_service.save_delivery(
+            case_id,
+            method=delivery_method,
+            actual_ship_date=str(delivery_date),
+            tracking_no=tracking_no,
+            driver_name=driver_name,
+            driver_phone=driver_phone,
+            consignee_name=consignee_name,
+            consignee_address=consignee_address,
+        )
+        folder_service.sync_case_folder(case_id)
+        history_service.add_history(case_id, '국내배송 정보 수정', delivery_method)
+        st.success('국내배송 정보를 저장했습니다.')
+        st.rerun()
