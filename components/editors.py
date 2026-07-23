@@ -34,11 +34,13 @@ def historical_order_editor(dataframe, *, key: str):
         hide_index=True,
         use_container_width=True,
         key=key,
-        column_order=['제품명', '수량', '단위', '매입가', 'CTN 번호'],
+        column_order=['제품명', '단위', '제조번호', '유효기간', '수량', '매입가', 'CTN 번호'],
         column_config={
             '제품명': st.column_config.TextColumn('제품명', required=True),
-            '수량': st.column_config.NumberColumn('수량', min_value=0.0, step=1.0),
             '단위': st.column_config.TextColumn('단위'),
+            '제조번호': st.column_config.TextColumn('제조번호'),
+            '유효기간': st.column_config.TextColumn('유효기간', help='예: 2028-06-30'),
+            '수량': st.column_config.NumberColumn('수량', min_value=0.0, step=1.0),
             '매입가': st.column_config.NumberColumn(
                 '매입가',
                 min_value=0.0,
