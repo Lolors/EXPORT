@@ -1,8 +1,1 @@
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.env
 export.db
-uploads/
-*.xlsx
