@@ -10,11 +10,20 @@ from utils.formatters import fmt_number
 
 
 st.title('오버뷰')
-st.caption('현재 진행 중인 수출 건을 요약해서 보고, 상세 보기 버튼으로 주문목록과 입고상황을 확인합니다.')
+st.caption('현재 진행 중인 수출 건을 국가별로 묶어 보고, 상세 보기 버튼으로 주문목록과 입고상황을 확인합니다.')
 
 st.markdown(
     '''
     <style>
+    .overview-country-group {
+        width: 40vw;
+        max-width: 40vw;
+        margin: 1.2rem 0 0.7rem;
+        padding-bottom: 0.35rem;
+        border-bottom: 2px solid rgba(49, 51, 63, 0.12);
+        font-size: 1.45rem;
+        font-weight: 800;
+    }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor) {
         width: 40vw;
         max-width: 40vw;
@@ -36,15 +45,16 @@ st.markdown(
         padding: 0;
         overflow: hidden;
     }
-    .overview-country {
-        font-size: 1.35rem;
+    .overview-buyer {
+        font-size: 1.2rem;
         font-weight: 800;
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.25rem;
     }
-    .overview-meta {
-        font-size: 1rem;
+    .overview-export-no {
+        font-size: 0.98rem;
         font-weight: 700;
         margin-bottom: 0.7rem;
+        opacity: 0.82;
     }
     .overview-progress-row {
         display: flex;
@@ -86,6 +96,7 @@ st.markdown(
         padding: 0 1.25rem 1rem;
     }
     @media (max-width: 900px) {
+        .overview-country-group,
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-card-anchor),
         .overview-details {
             width: 100%;
@@ -135,6 +146,8 @@ for case in cases:
 selected_case_id = st.session_state.get('overview_selected_case_id')
 
 for country in sorted(country_groups):
+    st.markdown(f'<div class="overview-country-group">{country}</div>', unsafe_allow_html=True)
+
     for case in country_groups[country]:
         case_id = int(case['id'])
         orders = get_order_items_with_actual(case_id)
@@ -143,22 +156,16 @@ for country in sorted(country_groups):
         progress = received_total / order_total if order_total > 0 else 0.0
 
         buyer = str(case['buyer'] or '').strip()
-        if buyer.casefold() == '미지정':
-            buyer = ''
+        if not buyer or buyer.casefold() == '미지정':
+            buyer = '바이어 미지정'
 
-        transport_mode = str(case['transport_mode'] or '').strip()
-        if transport_mode.casefold() == '미지정':
-            transport_mode = ''
-
+        export_no = str(case['export_no'] or '').strip() or '수출번호 미지정'
         is_open = selected_case_id == case_id
+
         with st.container():
             st.markdown('<div class="overview-card-anchor"></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="overview-country">{country}</div>', unsafe_allow_html=True)
-            meta_parts = [part for part in [buyer, transport_mode, str(case['export_no'])] if part]
-            st.markdown(
-                f'<div class="overview-meta">{" · ".join(meta_parts)}</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(f'<div class="overview-buyer">{buyer}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="overview-export-no">{export_no}</div>', unsafe_allow_html=True)
             render_progress_bar(progress)
             if st.button(
                 '상세 닫기' if is_open else '상세 보기',
