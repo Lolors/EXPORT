@@ -25,6 +25,8 @@ FORM_KEYS = {
     'historical_tracking_no',
     'historical_driver_name',
     'historical_driver_phone',
+    'historical_consignee_name',
+    'historical_consignee_address',
     'create_case',
 }
 
@@ -114,6 +116,9 @@ if is_historical:
     historical_boxes = historical_box_editor(box_source, key='historical_box_items')
 
     st.markdown('#### 국내배송 정보')
+    receiver_cols = st.columns([1, 2])
+    consignee_name = receiver_cols[0].text_input('수하인명', key='historical_consignee_name')
+    consignee_address = receiver_cols[1].text_input('수하인주소', key='historical_consignee_address')
     delivery_method = st.radio(
         '배송 방식',
         ['로젠택배', '퀵배송'],
@@ -137,6 +142,8 @@ else:
     tracking_no = ''
     driver_name = ''
     driver_phone = ''
+    consignee_name = ''
+    consignee_address = ''
 
 button_left, button_center, button_right = st.columns([4, 2, 4])
 button_center.markdown('<span id="create-case-button-anchor"></span>', unsafe_allow_html=True)
@@ -216,13 +223,15 @@ if create_case:
                 tracking_no=tracking_no,
                 driver_name=driver_name,
                 driver_phone=driver_phone,
+                consignee_name=consignee_name,
+                consignee_address=consignee_address,
             )
         else:
             order_service.create_order_items(case_id, valid_orders)
         folder_service.sync_case_folder(case_id)
         history_detail = f'{export_no} / 제품 {len(valid_orders)}개'
         if is_historical:
-            history_detail += f' / CTN {len(valid_boxes)}개 / {delivery_method}'
+            history_detail += f' / CTN {len(valid_boxes)}개 / {delivery_method} / {consignee_name}'
         history_service.add_history(case_id, '수출 건 생성', history_detail)
         st.session_state['order_case_id'] = case_id
         st.session_state['new_case_success_message'] = f'{export_no} 생성 완료'
