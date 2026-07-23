@@ -68,6 +68,8 @@ def create_historical_case_details(
     tracking_no: str = '',
     driver_name: str = '',
     driver_phone: str = '',
+    consignee_name: str = '',
+    consignee_address: str = '',
 ) -> None:
     now = now_text()
     for product_name, quantity, unit, box_no in items:
@@ -96,13 +98,16 @@ def create_historical_case_details(
     db.execute(
         '''UPDATE export_cases
            SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,
-               actual_ship_date=?,stage='완료',status='완료',updated_at=?
+               consignee_name=?,consignee_address=?,actual_ship_date=?,
+               stage='완료',status='완료',updated_at=?
            WHERE id=?''',
         (
             method,
             tracking_no.strip(),
             driver_name.strip(),
             driver_phone.strip(),
+            consignee_name.strip(),
+            consignee_address.strip(),
             actual_ship_date,
             now,
             case_id,
