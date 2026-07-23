@@ -242,23 +242,142 @@ else:
     else:
         st.caption('이 CTN에 연결된 제품이 없습니다.')
 
+    length_key = f'len_{box["id"]}'
+    width_key = f'wid_{box["id"]}'
+    height_key = f'hei_{box["id"]}'
+    weight_key = f'wei_{box["id"]}'
+    pending_values_key = f'pending_box_values_{box["id"]}'
+    if pending_values_key in st.session_state:
+        pending_values = st.session_state.pop(pending_values_key)
+        st.session_state[length_key] = pending_values['length_cm']
+        st.session_state[width_key] = pending_values['width_cm']
+        st.session_state[height_key] = pending_values['height_cm']
+        st.session_state[weight_key] = pending_values['weight_kg']
+
+    presets = packing_service.list_box_presets()
+    last_values = packing_service.get_last_box_values()
+    preset_labels = ['선택 안 함']
+    if last_values is not None:
+        preset_labels.append('마지막 사용값')
+    preset_labels.extend(sorted(presets))
+
+    preset_col, apply_col, save_col = st.columns([2.5, 1.2, 1.2])
+    selected_preset = preset_col.selectbox(
+        '박스 프리셋',
+        preset_labels,
+        key=f'box_preset_select_{case_id}',
+    )
+    apply_preset = apply_col.button('프리셋 적용', use_container_width=True)
+    save_preset_open = save_col.button('현재 값 저장', use_container_width=True)
+    continuous_apply = st.checkbox(
+        '다음 CTN에도 계속 적용',
+        key=f'continuous_box_preset_{case_id}',
+    )
+
+    if apply_preset:
+        values = None
+        if selected_preset == '마지막 사용값':
+            values = last_values
+        elif selected_preset in presets:
+            values = presets[selected_preset]
+        if values is None:
+            st.warning('적용할 프리셋을 선택하세요.')
+        else:
+            st.session_state[pending_values_key] = values
+            st.session_state[f'active_box_values_{case_id}'] = values
+            st.rerun()
+
+    if save_preset_open:
+        st.session_state[f'show_preset_save_{case_id}'] = True
+
+    if st.session_state.get(f'show_preset_save_{case_id}'):
+        with st.form(f'box_preset_save_form_{case_id}_{box["id"]}'):
+            preset_name = st.text_input('프리셋 이름')
+            save_preset = st.form_submit_button('프리셋 저장', type='primary')
+        if save_preset:
+            try:
+                packing_service.save_box_preset(
+                    preset_name,
+                    float(st.session_state.get(length_key, box['length_cm'] or 0)),
+                    float(st.session_state.get(width_key, box['width_cm'] or 0)),
+                    float(st.session_state.get(height_key, box['height_cm'] or 0)),
+                    float(st.session_state.get(weight_key, box['weight_kg'] or 0)),
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state.pop(f'show_preset_save_{case_id}', None)
+                st.success(f'{preset_name.strip()} 프리셋을 저장했습니다.')
+                st.rerun()
+
     with st.form(f'box_info_{case_id}_{box["id"]}'):
         c1, c2, c3, c4 = st.columns(4)
-        length = c1.number_input('가로(cm)', min_value=0.0, value=float(box['length_cm'] or 0), key=f'len_{box["id"]}')
-        width = c2.number_input('세로(cm)', min_value=0.0, value=float(box['width_cm'] or 0), key=f'wid_{box["id"]}')
-        height = c3.number_input('높이(cm)', min_value=0.0, value=float(box['height_cm'] or 0), key=f'hei_{box["id"]}')
-        weight = c4.number_input('무게(kg)', min_value=0.0, value=float(box['weight_kg'] or 0), key=f'wei_{box["id"]}')
+        length = c1.number_input('가로(cm)', min_value=0.0, value=float(box['length_cm'] or 0), key=length_key)
+        width = c2.number_input('세로(cm)', min_value=0.0, value=float(box['width_cm'] or 0), key=width_key)
+        height = c3.number_input('높이(cm)', min_value=0.0, value=float(box['height_cm'] or 0), key=height_key)
+        weight = c4.number_input('무게(kg)', min_value=0.0, value=float(box['weight_kg'] or 0), key=weight_key)
         left_button_col, center_button_col, right_button_col = st.columns([1, 1, 1])
         with center_button_col:
             save_box = st.form_submit_button('CTN 정보 저장', type='primary', use_container_width=True)
 
     if save_box:
         packing_service.update_box(int(box['id']), length, width, height, weight)
+        packing_service.save_last_box_values(length, width, height, weight)
         folder_service.sync_case_folder(case_id)
         history_service.add(case_id, 'CTN 정보 수정', selected_box_label)
+        st.session_state[f'active_box_values_{case_id}'] = {
+            'length_cm': float(length),
+            'width_cm': float(width),
+            'height_cm': float(height),
+            'weight_kg': float(weight),
+        }
+
+        if continuous_apply:
+            current_index = box_labels.index(selected_box_label)
+            if current_index + 1 < len(box_labels):
+                next_label = box_labels[current_index + 1]
+                next_box_no = box_options[next_label]
+                next_box = next(box for box in boxes if int(box['box_no']) == next_box_no)
+                st.session_state[f'pending_box_values_{next_box["id"]}'] = st.session_state[f'active_box_values_{case_id}']
+                st.session_state[selector_key] = next_label
+                st.success(f'{selected_box_label} 저장 완료. {next_label}에 같은 값을 적용했습니다.')
+                st.rerun()
+
         notice = st.empty()
         notice.success(f'{selected_box_label} 정보가 저장됐습니다.')
         time.sleep(2)
         notice.empty()
+
+    st.markdown('##### CTN 구성 복제')
+    st.caption('현재 CTN의 제품 구성과 박스 규격·무게를 그대로 복제합니다.')
+    clone_col, clone_button_col = st.columns([1, 2])
+    clone_count = clone_col.number_input(
+        '복제할 CTN 개수',
+        min_value=1,
+        step=1,
+        value=1,
+        key=f'clone_count_{case_id}_{selected_box_no}',
+    )
+    with clone_button_col:
+        st.write('')
+        st.write('')
+        clone_clicked = st.button('CTN 구성 복제', type='primary', use_container_width=True)
+
+    if clone_clicked:
+        try:
+            created_boxes = packing_service.clone_box(case_id, selected_box_no, int(clone_count))
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            folder_service.sync_case_folder(case_id)
+            created_text = ', '.join(f'CTN {number}' for number in created_boxes)
+            history_service.add(
+                case_id,
+                'CTN 구성 복제',
+                f'{selected_box_label} → {created_text}',
+            )
+            st.session_state[selector_key] = f'CTN {created_boxes[0]}'
+            st.success(f'{created_text}을 생성했습니다.')
+            st.rerun()
 
 st.caption(f'현재 미패킹 실제 출고 행: {unpacked_count}개')
