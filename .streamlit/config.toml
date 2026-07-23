@@ -1,0 +1,8 @@
+[server]
+# Dropbox/Windows 환경에서도 코드 변경을 안정적으로 감지합니다.
+fileWatcherType = "poll"
+# 저장된 Python 코드가 바뀌면 실행 중인 앱을 자동으로 다시 실행합니다.
+runOnSave = true
+
+[browser]
+gatherUsageStats = false

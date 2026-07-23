@@ -1,0 +1,239 @@
+from __future__ import annotations
+
+from datetime import date
+
+import pandas as pd
+import streamlit as st
+
+from components.editors import historical_box_editor, historical_order_editor, order_editor
+from config import TRANSPORT_MODES
+from services import export_service, folder_service, history_service, order_service
+from utils.numbering import next_export_no
+
+
+FORM_KEYS = {
+    'new_case_type',
+    'historical_export_date',
+    'new_export_no',
+    'new_country',
+    'new_buyer',
+    'new_transport',
+    'new_note',
+    'new_order_items',
+    'historical_box_items',
+    'historical_delivery_method',
+    'historical_tracking_no',
+    'historical_driver_name',
+    'historical_driver_phone',
+    'historical_consignee_name',
+    'historical_consignee_address',
+    'create_case',
+}
+
+
+def reset_new_case_form() -> None:
+    for key in list(st.session_state):
+        if key in FORM_KEYS or key.startswith('new_order_items') or key.startswith('historical_box_items'):
+            st.session_state.pop(key, None)
+
+
+st.title('주문 입력')
+st.caption('현재 진행 건은 주문목록을 등록하고, 과거 수출 건은 제품·CTN·국내배송 정보를 한 번에 저장합니다.')
+
+if success_message := st.session_state.pop('new_case_success_message', None):
+    st.success(success_message)
+
+st.markdown(
+    '''
+    <style>
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
+        width: 60vw;
+        max-width: 60vw;
+    }
+    div[data-testid="stHorizontalBlock"]:has(#create-case-button-anchor) {
+        align-items: center;
+        justify-content: center;
+    }
+    div[data-testid="stHorizontalBlock"]:has(#create-case-button-anchor) > div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    @media (max-width: 900px) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor) {
+            width: 100%;
+            max-width: 100%;
+        }
+    }
+    </style>
+    ''',
+    unsafe_allow_html=True,
+)
+
+st.markdown('#### 수출 주문 등록')
+case_type_label = st.radio(
+    '등록 유형',
+    ['현재 진행 건', '과거 수출 건'],
+    horizontal=True,
+    key='new_case_type',
+)
+is_historical = case_type_label == '과거 수출 건'
+
+historical_date = None
+if is_historical:
+    historical_date = st.date_input(
+        '과거 수출일',
+        value=date.today(),
+        help='수출번호의 연도와 폴더 연도를 결정하며, 국내배송 완료일로 저장됩니다.',
+        key='historical_export_date',
+    )
+    export_no_preview = next_export_no('HIS', historical_date.year)
+else:
+    export_no_preview = next_export_no('EXP')
+
+with st.container():
+    st.markdown('<span id="new-case-basic-info-anchor"></span>', unsafe_allow_html=True)
+
+    first_row = st.columns(3)
+    first_row[0].text_input('수출번호', value=export_no_preview, disabled=True, key='new_export_no')
+    country = first_row[1].text_input('국가 *', key='new_country')
+    buyer = first_row[2].text_input('바이어 (선택)', key='new_buyer')
+
+    second_row = st.columns(3)
+    transport = second_row[0].selectbox('운송방식', TRANSPORT_MODES, key='new_transport')
+    note = second_row[1].text_input('비고', key='new_note')
+
+st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
+if is_historical:
+    st.caption('제품 행마다 CTN 번호를 입력하고, 아래 CTN 정보 표에서 같은 번호의 규격과 GW를 입력하세요.')
+    new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', 'CTN 번호': 1}])
+    new_orders = historical_order_editor(new_order_source, key='new_order_items')
+
+    st.markdown('#### CTN 정보')
+    box_source = pd.DataFrame([
+        {'CTN 번호': 1, '가로 (cm)': 0.0, '세로 (cm)': 0.0, '높이 (cm)': 0.0, 'GW (kg)': 0.0}
+    ])
+    historical_boxes = historical_box_editor(box_source, key='historical_box_items')
+
+    st.markdown('#### 국내배송 정보')
+    receiver_cols = st.columns([1, 2])
+    consignee_name = receiver_cols[0].text_input('수하인명', key='historical_consignee_name')
+    consignee_address = receiver_cols[1].text_input('수하인주소', key='historical_consignee_address')
+    delivery_method = st.radio(
+        '배송 방식',
+        ['로젠택배', '퀵배송'],
+        horizontal=True,
+        key='historical_delivery_method',
+    )
+    if delivery_method == '로젠택배':
+        tracking_no = st.text_input('송장번호', key='historical_tracking_no')
+        driver_name = ''
+        driver_phone = ''
+    else:
+        delivery_cols = st.columns(2)
+        driver_name = delivery_cols[0].text_input('배송기사 이름', key='historical_driver_name')
+        driver_phone = delivery_cols[1].text_input('배송기사 연락처', key='historical_driver_phone')
+        tracking_no = ''
+else:
+    new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA'}])
+    new_orders = order_editor(new_order_source, key='new_order_items')
+    historical_boxes = pd.DataFrame()
+    delivery_method = ''
+    tracking_no = ''
+    driver_name = ''
+    driver_phone = ''
+    consignee_name = ''
+    consignee_address = ''
+
+button_left, button_center, button_right = st.columns([4, 2, 4])
+button_center.markdown('<span id="create-case-button-anchor"></span>', unsafe_allow_html=True)
+create_case = button_center.button(
+    '수출 건 생성',
+    type='primary',
+    key='create_case',
+    use_container_width=True,
+)
+
+if create_case:
+    valid_orders = []
+    for _, row in new_orders.iterrows():
+        product_name = str(row.get('제품명', '') or '').strip()
+        if not product_name:
+            continue
+        quantity = float(row.get('수량', 0) or 0)
+        unit = str(row.get('단위', 'EA') or 'EA').strip() or 'EA'
+        if is_historical:
+            raw_box_no = row.get('CTN 번호', 0)
+            box_no = int(raw_box_no or 0)
+            valid_orders.append((product_name, quantity, unit, box_no))
+        else:
+            valid_orders.append((product_name, quantity, unit))
+
+    valid_boxes = []
+    if is_historical:
+        for _, row in historical_boxes.iterrows():
+            raw_box_no = row.get('CTN 번호', 0)
+            box_no = int(raw_box_no or 0)
+            if box_no <= 0:
+                continue
+            valid_boxes.append((
+                box_no,
+                float(row.get('가로 (cm)', 0) or 0),
+                float(row.get('세로 (cm)', 0) or 0),
+                float(row.get('높이 (cm)', 0) or 0),
+                float(row.get('GW (kg)', 0) or 0),
+            ))
+
+    if not country.strip():
+        st.error('국가는 필수입니다.')
+    elif not valid_orders:
+        st.error('제품을 한 개 이상 입력하세요.')
+    elif is_historical and any(item[3] <= 0 for item in valid_orders):
+        st.error('모든 제품에 CTN 번호를 입력하세요.')
+    elif is_historical and not valid_boxes:
+        st.error('CTN 정보를 한 개 이상 입력하세요.')
+    elif is_historical and not {item[3] for item in valid_orders}.issubset({box[0] for box in valid_boxes}):
+        st.error('제품에 연결한 모든 CTN 번호의 규격과 GW를 입력하세요.')
+    else:
+        prefix = 'HIS' if is_historical else 'EXP'
+        number_year = historical_date.year if historical_date else None
+        export_no = next_export_no(prefix, number_year)
+        case_type = 'historical' if is_historical else 'current'
+        actual_ship_date = str(historical_date) if historical_date else ''
+        stage = '완료' if is_historical else '주문 접수'
+        status = '완료' if is_historical else '진행중'
+        case_id = export_service.create_case(
+            export_no=export_no,
+            buyer=buyer,
+            country=country,
+            transport=transport,
+            note=note,
+            actual_ship_date=actual_ship_date,
+            case_type=case_type,
+            stage=stage,
+            status=status,
+        )
+        if is_historical:
+            order_service.create_historical_case_details(
+                case_id,
+                valid_orders,
+                valid_boxes,
+                method=delivery_method,
+                actual_ship_date=actual_ship_date,
+                tracking_no=tracking_no,
+                driver_name=driver_name,
+                driver_phone=driver_phone,
+                consignee_name=consignee_name,
+                consignee_address=consignee_address,
+            )
+        else:
+            order_service.create_order_items(case_id, valid_orders)
+        folder_service.sync_case_folder(case_id)
+        history_detail = f'{export_no} / 제품 {len(valid_orders)}개'
+        if is_historical:
+            history_detail += f' / CTN {len(valid_boxes)}개 / {delivery_method} / {consignee_name}'
+        history_service.add_history(case_id, '수출 건 생성', history_detail)
+        st.session_state['order_case_id'] = case_id
+        st.session_state['new_case_success_message'] = f'{export_no} 생성 완료'
+        reset_new_case_form()
+        st.rerun()
