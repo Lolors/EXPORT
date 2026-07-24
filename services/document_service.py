@@ -49,15 +49,20 @@ def _aggregate_actual(rows) -> list[dict]:
     )
 
 
-def _aggregate_packed(rows) -> list[dict]:
+def _aggregate_packed(rows, boxes_by_no: dict[int, object]) -> list[dict]:
     grouped: dict[tuple[int, str, str, str, str], dict] = {}
     for row in rows:
+        if row['box_no'] is None:
+            continue
+
         box_no = int(row['box_no'])
         business = _text(row['business_unit'])
         product = _text(row['product_name'])
         lot = _text(row['lot_no'])
         expiry = _text(row['expiry_date'])
         key = (box_no, business, product, lot, expiry)
+        box = boxes_by_no.get(box_no)
+
         if key not in grouped:
             grouped[key] = {
                 'box_no': box_no,
@@ -66,10 +71,10 @@ def _aggregate_packed(rows) -> list[dict]:
                 'lot_no': lot,
                 'expiry_date': expiry,
                 'requested_qty': 0.0,
-                'weight_kg': row['weight_kg'],
-                'length_cm': row['length_cm'],
-                'width_cm': row['width_cm'],
-                'height_cm': row['height_cm'],
+                'weight_kg': box['weight_kg'] if box else 0,
+                'length_cm': box['length_cm'] if box else 0,
+                'width_cm': box['width_cm'] if box else 0,
+                'height_cm': box['height_cm'] if box else 0,
             }
         grouped[key]['requested_qty'] += float(row['requested_qty'] or 0)
 
@@ -86,7 +91,12 @@ def _aggregate_packed(rows) -> list[dict]:
 
 
 def get_document_data(case_id: int):
-    """Return grouped and sorted packing/shipment rows for shareable documents."""
-    packed = _aggregate_packed(packing_service.list_packed_rows(case_id))
-    actual = _aggregate_actual(shipment_service.list_actual(case_id))
+    """Read the current packing state directly from the canonical shipment rows."""
+    current_rows = shipment_service.list_case_items(case_id)
+    boxes_by_no = {
+        int(box['box_no']): box
+        for box in packing_service.list_boxes(case_id)
+    }
+    packed = _aggregate_packed(current_rows, boxes_by_no)
+    actual = _aggregate_actual(current_rows)
     return packed, actual
