@@ -11,7 +11,7 @@ from services import export_service, folder_service, history_service, order_serv
 from utils.numbering import next_export_no
 
 
-HISTORICAL_ORDER_EDITOR_KEY = 'historical_order_items_table_v1'
+HISTORICAL_ORDER_EDITOR_KEY = 'historical_order_items_table_v2'
 
 FORM_KEYS = {
     'new_case_type',
@@ -48,6 +48,31 @@ def historical_order_source() -> pd.DataFrame:
             'CTN 번호': 1,
         }
     ])
+
+
+def safe_text(value: object, default: str = '') -> str:
+    if value is None or pd.isna(value):
+        return default
+    text = str(value).strip()
+    return default if text.casefold() in {'nan', 'none', '<na>'} else text
+
+
+def safe_float(value: object, default: float = 0.0) -> float:
+    if value is None or pd.isna(value):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_int(value: object, default: int = 0) -> int:
+    if value is None or pd.isna(value):
+        return default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def reset_new_case_form() -> None:
@@ -235,18 +260,17 @@ create_case = button_center.button(
 if create_case:
     valid_orders = []
     for _, row in new_orders.iterrows():
-        product_name = str(row.get('제품명', '') or '').strip()
+        product_name = safe_text(row.get('제품명'))
         if not product_name:
             continue
-        quantity = float(row.get('수량', 0) or 0)
-        unit = str(row.get('단위', 'EA') or 'EA').strip() or 'EA'
-        purchase_price = float(row.get('매입가', 0) or 0)
+        quantity = safe_float(row.get('수량'))
+        unit = safe_text(row.get('단위'), 'EA') or 'EA'
+        purchase_price = safe_float(row.get('매입가'))
         if is_historical:
-            ship_from = str(row.get('출고처', '') or '').strip()
-            lot_no = str(row.get('제조번호', '') or '').strip()
-            expiry_date = str(row.get('유효기간', '') or '').strip()
-            raw_box_no = row.get('CTN 번호', 0)
-            box_no = int(raw_box_no or 0)
+            ship_from = safe_text(row.get('출고처'))
+            lot_no = safe_text(row.get('제조번호'))
+            expiry_date = safe_text(row.get('유효기간'))
+            box_no = safe_int(row.get('CTN 번호'))
             valid_orders.append((ship_from, product_name, unit, lot_no, expiry_date, quantity, purchase_price, box_no))
         else:
             valid_orders.append((product_name, quantity, unit, purchase_price))
@@ -254,16 +278,15 @@ if create_case:
     valid_boxes = []
     if is_historical:
         for _, row in historical_boxes.iterrows():
-            raw_box_no = row.get('CTN 번호', 0)
-            box_no = int(raw_box_no or 0)
+            box_no = safe_int(row.get('CTN 번호'))
             if box_no <= 0:
                 continue
             valid_boxes.append((
                 box_no,
-                float(row.get('가로 (cm)', 0) or 0),
-                float(row.get('세로 (cm)', 0) or 0),
-                float(row.get('높이 (cm)', 0) or 0),
-                float(row.get('GW (kg)', 0) or 0),
+                safe_float(row.get('가로 (cm)')),
+                safe_float(row.get('세로 (cm)')),
+                safe_float(row.get('높이 (cm)')),
+                safe_float(row.get('GW (kg)')),
             ))
 
     if not country.strip():
