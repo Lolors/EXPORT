@@ -89,7 +89,7 @@ def save_historical(case_id, edited, boxes, basic, delivery):
                 oid=c.execute('INSERT INTO order_items(case_id,product_name,quantity,unit,purchase_price,created_at) VALUES(?,?,?,?,?,?)',
                     (case_id,x['name'],x['qty'],x['unit'],x['price'],now)).lastrowid
             keep_o.add(int(oid))
-            if x['price']>0 and (not prev or num(prev['purchase_price'])!=x['price'] or prev['product_name']!=x['name']):
+            if not prev or num(prev['purchase_price'])!=x['price'] or prev['product_name']!=x['name']:
                 c.execute('''INSERT INTO purchase_price_history(case_id,order_item_id,product_name,normalized_name,
                     purchase_price,quantity,unit,created_at) VALUES(?,?,?,?,?,?,?,?)''',
                     (case_id,oid,x['name'],order_service.normalize_product_name(x['name']),x['price'],x['qty'],x['unit'],now))
