@@ -41,53 +41,51 @@ def cleanup_invalid_links(case_id: int) -> int:
     return len(ids)
 
 
-def list_actual(case_id: int):
+def list_case_items(case_id: int):
+    """Canonical current shipment rows used by intake, packing, and documents."""
     cleanup_invalid_links(case_id)
     return db.rows(
-        '''SELECT s.business_unit, s.product_name, s.lot_no, s.expiry_date, s.requested_qty
+        '''SELECT s.id, s.case_id, s.order_item_id, s.business_unit,
+                  s.product_name, s.lot_no, s.expiry_date,
+                  s.requested_qty, s.box_no, o.unit
            FROM shipment_items s
            JOIN order_items o
              ON o.id=s.order_item_id
             AND o.case_id=s.case_id
            WHERE s.case_id=?
-           ORDER BY s.id''',
+           ORDER BY o.id,
+                    CASE WHEN s.box_no IS NULL THEN 0 ELSE 1 END,
+                    s.box_no,
+                    s.id''',
         (case_id,),
     )
+
+
+def list_actual(case_id: int):
+    return list_case_items(case_id)
 
 
 def get_lot_expiry_dataframe(case_id: int):
     import pandas as pd
 
-    cleanup_invalid_links(case_id)
-    rows = db.rows(
-        '''SELECT s.id AS _id, s.product_name AS 제품명, s.requested_qty AS 출고수량,
-                  s.box_no AS CTN번호, s.lot_no AS 제조번호, s.expiry_date AS 유통기한
-           FROM shipment_items s
-           JOIN order_items o
-             ON o.id=s.order_item_id
-            AND o.case_id=s.case_id
-           WHERE s.case_id=?
-           ORDER BY CASE WHEN s.box_no IS NULL THEN 1 ELSE 0 END, s.box_no, s.id''',
-        (case_id,),
-    )
-    return pd.DataFrame([dict(row) for row in rows])
+    rows = list_case_items(case_id)
+    return pd.DataFrame([
+        {
+            '_id': row['id'],
+            '제품명': row['product_name'],
+            '출고수량': row['requested_qty'],
+            'CTN번호': row['box_no'],
+            '제조번호': row['lot_no'],
+            '유통기한': row['expiry_date'],
+        }
+        for row in rows
+    ])
 
 
 def update_lot_expiry(case_id: int, edited) -> int:
     now = now_text()
     updated = 0
-    valid_ids = {
-        int(row['id'])
-        for row in db.rows(
-            '''SELECT s.id
-               FROM shipment_items s
-               JOIN order_items o
-                 ON o.id=s.order_item_id
-                AND o.case_id=s.case_id
-               WHERE s.case_id=?''',
-            (case_id,),
-        )
-    }
+    valid_ids = {int(row['id']) for row in list_case_items(case_id)}
     for _, row in edited.iterrows():
         raw_id = row.get('_id')
         if raw_id in (None, '', 0):
@@ -114,18 +112,11 @@ def update_lot_expiry(case_id: int, edited) -> int:
 
 
 def list_linked(case_id: int, order_item_id: int):
-    cleanup_invalid_links(case_id)
-    return db.rows(
-        '''SELECT s.id, s.business_unit, s.product_name, s.lot_no, s.expiry_date,
-                  s.requested_qty, s.box_no
-           FROM shipment_items s
-           JOIN order_items o
-             ON o.id=s.order_item_id
-            AND o.case_id=s.case_id
-           WHERE s.case_id=? AND s.order_item_id=?
-           ORDER BY s.id''',
-        (case_id, order_item_id),
-    )
+    return [
+        row
+        for row in list_case_items(case_id)
+        if int(row['order_item_id']) == int(order_item_id)
+    ]
 
 
 def count_unlinked(case_id: int) -> int:
@@ -197,22 +188,21 @@ def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
             values,
         )
+    db.execute(
+        '''DELETE FROM boxes
+           WHERE case_id=?
+             AND NOT EXISTS(
+                 SELECT 1 FROM shipment_items s
+                 WHERE s.case_id=boxes.case_id AND s.box_no=boxes.box_no
+             )''',
+        (case_id,),
+    )
     db.execute("UPDATE export_cases SET stage='출고 대기', updated_at=? WHERE id=?", (now, case_id))
     return total
 
 
 def total_linked_quantity(case_id: int) -> float:
-    cleanup_invalid_links(case_id)
-    result = db.row(
-        '''SELECT COALESCE(SUM(s.requested_qty),0) AS quantity
-           FROM shipment_items s
-           JOIN order_items o
-             ON o.id=s.order_item_id
-            AND o.case_id=s.case_id
-           WHERE s.case_id=?''',
-        (case_id,),
-    )
-    return float(result['quantity'] or 0) if result else 0.0
+    return sum(float(row['requested_qty'] or 0) for row in list_case_items(case_id))
 
 
 def sync_historical(case_id: int) -> None:
