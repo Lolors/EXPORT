@@ -91,12 +91,7 @@ def _aggregate_packed(rows, boxes_by_no: dict[int, object]) -> list[dict]:
 
 
 def get_document_data(case_id: int):
-    """Read the current packing state directly from the canonical shipment rows."""
+    """공유문서는 현재 수출대기 입고 목록만 표시한다."""
     current_rows = shipment_service.list_case_items(case_id)
-    boxes_by_no = {
-        int(box['box_no']): box
-        for box in packing_service.list_boxes(case_id)
-    }
-    packed = _aggregate_packed(current_rows, boxes_by_no)
     actual = _aggregate_actual(current_rows)
-    return packed, actual
+    return [], actual
