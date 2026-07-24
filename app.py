@@ -4,6 +4,7 @@ import streamlit as st
 
 import db
 from config import APP_ICON, APP_LAYOUT, APP_TITLE
+from services import packing_service, shipment_service
 
 PAGES = {
     '': [
@@ -22,6 +23,10 @@ PAGES = {
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
     db.init_db()
+
+    # 수출대기 입고와 박스 패킹은 반드시 같은 현재 출고행 목록을 사용한다.
+    packing_service.list_items = shipment_service.list_case_items
+
     st.navigation(PAGES, position='sidebar').run()
 
 
