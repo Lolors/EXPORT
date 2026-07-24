@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from components.editors import shipment_editor
+from components.editors import order_editor, shipment_editor
 from services import export_service, folder_service, history_service, order_service, shipment_service
 from utils.formatters import case_label, fmt_number
 
@@ -26,7 +26,7 @@ def safe_number(value: object) -> float:
 
 
 st.title('수출대기 입고')
-st.caption('왼쪽 주문목록에서 한 행을 선택하고, 오른쪽에서 실제 수출대기 위치에 입고된 제품을 입력합니다.')
+st.caption('왼쪽에서 주문목록을 수정하거나 한 행을 선택하고, 오른쪽에서 실제 수출대기 입고제품을 입력합니다.')
 
 cases = export_service.active_cases()
 if not cases:
@@ -44,9 +44,6 @@ st.session_state['actual_packing_case_id'] = case_id
 
 shipment_service.cleanup_invalid_links(case_id)
 orders = order_service.list_for_case(case_id)
-if not orders:
-    st.warning('먼저 주문품목을 입력하세요.')
-    st.stop()
 
 unlinked_count = shipment_service.count_unlinked(case_id)
 if unlinked_count:
@@ -84,8 +81,10 @@ if unlinked_count:
 
 selected_order_key = f'linked_selected_order_{case_id}'
 order_ids = [int(order['id']) for order in orders]
-if st.session_state.get(selected_order_key) not in order_ids:
+if order_ids and st.session_state.get(selected_order_key) not in order_ids:
     st.session_state[selected_order_key] = order_ids[0]
+if not order_ids:
+    st.session_state.pop(selected_order_key, None)
 
 
 def choose_order(order_id: int) -> None:
@@ -103,118 +102,152 @@ for order_id in order_ids:
     checkbox_key = f'linked_order_check_{case_id}_{order_id}'
     st.session_state[checkbox_key] = st.session_state.get(selected_order_key) == order_id
 
-left, right = st.columns([0.9, 1.45], gap='large')
+left, right = st.columns([1.05, 1.45], gap='large')
 
 with left:
     st.markdown('### 주문목록')
-    st.caption('체크한 주문품목의 실제 입고 내역이 오른쪽에 표시됩니다.')
+    st.caption('제품명·주문수량·단위·매입가를 수정한 뒤 저장할 수 있습니다.')
 
-    header = st.columns([0.45, 2.3, 0.8, 0.8])
-    for column, title in zip(header, ['선택', '제품명', '주문', '상태']):
-        column.markdown(f'**{title}**')
-
-    for order in orders:
-        order_id = int(order['id'])
-        order_qty = safe_number(order['quantity'])
-        unit = str(order['unit'] or 'EA')
-        current = shipment_service.list_linked(case_id, order_id)
-        linked_qty = sum(safe_number(row['requested_qty']) for row in current)
-        icon, _ = order_state(order_qty, linked_qty)
-
-        row_cols = st.columns([0.45, 2.3, 0.8, 0.8])
-        row_cols[0].checkbox(
-            '선택',
-            key=f'linked_order_check_{case_id}_{order_id}',
-            label_visibility='collapsed',
-            on_change=choose_order,
-            args=(order_id,),
-        )
-        row_cols[1].write(str(order['product_name'] or '-'))
-        row_cols[2].write(f'{fmt_number(order_qty)} {unit}')
-        row_cols[3].write(icon)
-
-with right:
-    selected_order_id = int(st.session_state[selected_order_key])
-    selected_order = next(order for order in orders if int(order['id']) == selected_order_id)
-    order_qty = safe_number(selected_order['quantity'])
-    unit = str(selected_order['unit'] or 'EA')
-    current = shipment_service.list_linked(case_id, selected_order_id)
-    linked_qty = sum(safe_number(row['requested_qty']) for row in current)
-    icon, state = order_state(order_qty, linked_qty)
-
-    st.markdown('### 실제 수출대기 입고제품')
-    st.markdown(f"**선택 주문:** {selected_order['product_name']}")
-    st.caption(
-        f'주문 {fmt_number(order_qty)} {unit} · 현재 입고 {fmt_number(linked_qty)} {unit} · {icon} {state}'
-    )
-    st.caption('실제 제품이나 제조번호가 여러 개면 행을 추가해 각각 입력하세요.')
-
-    if current:
-        source = pd.DataFrame([
-            {
-                '사업장': row['business_unit'] or '',
-                '실제 제품명': row['product_name'] or '',
-                '제조번호': row['lot_no'] or '',
-                '유통기한': row['expiry_date'] or '',
-                '출고수량': safe_number(row['requested_qty']),
-            }
-            for row in current
+    order_source = order_service.get_order_items_dataframe(case_id)
+    if order_source.empty:
+        order_source = pd.DataFrame([
+            {'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}
         ])
-    else:
-        source = pd.DataFrame([{
-            '사업장': '',
-            '실제 제품명': '',
-            '제조번호': '',
-            '유통기한': '',
-            '출고수량': 0.0,
-        }])
-
-    edited = shipment_editor(source, key=f'linked_order_editor_{case_id}_{selected_order_id}')
-    preview_qty = sum(safe_number(value) for value in edited.get('출고수량', []))
-    preview_icon, preview_state = order_state(order_qty, preview_qty)
-    st.info(
-        f'{preview_icon} 입력 합계 {fmt_number(preview_qty)} / '
-        f'주문 {fmt_number(order_qty)} {unit} · {preview_state}'
-    )
+    edited_orders = order_editor(order_source, key=f'shipment_orders_{case_id}')
+    st.caption('주문행을 삭제하고 저장하면 그 주문에 연결된 실제 출고제품도 함께 삭제됩니다.')
 
     if st.button(
-        '선택 주문품목 입고 저장',
+        '주문목록 저장',
         type='primary',
         use_container_width=True,
-        key=f'save_linked_order_{case_id}_{selected_order_id}',
+        key=f'save_shipment_orders_{case_id}',
     ):
-        values: list[dict] = []
-        for _, row in edited.iterrows():
-            actual_name = str(row.get('실제 제품명', '') or '').strip()
-            quantity = safe_number(row.get('출고수량', 0))
-            has_any_value = any(
-                str(row.get(column, '') or '').strip()
-                for column in ['사업장', '실제 제품명', '제조번호', '유통기한']
-            ) or quantity > 0
-            if not has_any_value:
-                continue
-            values.append({
-                'business_unit': row.get('사업장', ''),
-                'product_name': actual_name,
-                'lot_no': row.get('제조번호', ''),
-                'expiry_date': row.get('유통기한', ''),
-                'requested_qty': quantity,
-            })
-
         try:
-            shipment_service.save_for_order(case_id, selected_order_id, values)
+            order_service.save_order_items(case_id, edited_orders)
         except ValueError as exc:
             st.error(str(exc))
         else:
-            st.session_state['actual_packing_case_id'] = case_id
             folder_service.sync_case_folder(case_id)
-            history_service.add(
-                case_id,
-                '주문품목별 입고 저장',
-                f"{selected_order['product_name']} · {fmt_number(preview_qty)} / {fmt_number(order_qty)} {unit}",
-            )
-            st.success('저장했습니다. 박스 패킹에 바로 반영됩니다.')
+            history_service.add(case_id, '출고 단계 주문목록 수정', f'{len(edited_orders)}개 행')
+            st.success('주문목록을 저장했습니다.')
             st.rerun()
+
+    st.divider()
+    st.caption('체크한 주문품목의 실제 입고 내역이 오른쪽에 표시됩니다.')
+
+    if not orders:
+        st.info('주문목록을 입력하고 저장하세요.')
+    else:
+        header = st.columns([0.45, 2.3, 0.8, 0.8])
+        for column, title in zip(header, ['선택', '제품명', '주문', '상태']):
+            column.markdown(f'**{title}**')
+
+        for order in orders:
+            order_id = int(order['id'])
+            order_qty = safe_number(order['quantity'])
+            unit = str(order['unit'] or 'EA')
+            current = shipment_service.list_linked(case_id, order_id)
+            linked_qty = sum(safe_number(row['requested_qty']) for row in current)
+            icon, _ = order_state(order_qty, linked_qty)
+
+            row_cols = st.columns([0.45, 2.3, 0.8, 0.8])
+            row_cols[0].checkbox(
+                '선택',
+                key=f'linked_order_check_{case_id}_{order_id}',
+                label_visibility='collapsed',
+                on_change=choose_order,
+                args=(order_id,),
+            )
+            row_cols[1].write(str(order['product_name'] or '-'))
+            row_cols[2].write(f'{fmt_number(order_qty)} {unit}')
+            row_cols[3].write(icon)
+
+with right:
+    if not orders or selected_order_key not in st.session_state:
+        st.markdown('### 실제 수출대기 입고제품')
+        st.info('왼쪽에서 주문목록을 입력하고 저장하세요.')
+    else:
+        selected_order_id = int(st.session_state[selected_order_key])
+        selected_order = next(order for order in orders if int(order['id']) == selected_order_id)
+        order_qty = safe_number(selected_order['quantity'])
+        unit = str(selected_order['unit'] or 'EA')
+        current = shipment_service.list_linked(case_id, selected_order_id)
+        linked_qty = sum(safe_number(row['requested_qty']) for row in current)
+        icon, state = order_state(order_qty, linked_qty)
+
+        st.markdown('### 실제 수출대기 입고제품')
+        st.markdown(f"**선택 주문:** {selected_order['product_name']}")
+        st.caption(
+            f'주문 {fmt_number(order_qty)} {unit} · 현재 입고 {fmt_number(linked_qty)} {unit} · {icon} {state}'
+        )
+        st.caption('실제 제품이나 제조번호가 여러 개면 행을 추가해 각각 입력하세요.')
+
+        if current:
+            source = pd.DataFrame([
+                {
+                    '사업장': row['business_unit'] or '',
+                    '실제 제품명': row['product_name'] or '',
+                    '제조번호': row['lot_no'] or '',
+                    '유통기한': row['expiry_date'] or '',
+                    '출고수량': safe_number(row['requested_qty']),
+                }
+                for row in current
+            ])
+        else:
+            source = pd.DataFrame([{
+                '사업장': '',
+                '실제 제품명': selected_order['product_name'] or '',
+                '제조번호': '',
+                '유통기한': '',
+                '출고수량': 0.0,
+            }])
+
+        edited = shipment_editor(source, key=f'linked_order_editor_{case_id}_{selected_order_id}')
+        preview_qty = sum(safe_number(value) for value in edited.get('출고수량', []))
+        preview_icon, preview_state = order_state(order_qty, preview_qty)
+        st.info(
+            f'{preview_icon} 입력 합계 {fmt_number(preview_qty)} / '
+            f'주문 {fmt_number(order_qty)} {unit} · {preview_state}'
+        )
+
+        if st.button(
+            '선택 주문품목 입고 저장',
+            type='primary',
+            use_container_width=True,
+            key=f'save_linked_order_{case_id}_{selected_order_id}',
+        ):
+            values: list[dict] = []
+            for _, row in edited.iterrows():
+                actual_name = str(row.get('실제 제품명', '') or '').strip()
+                quantity = safe_number(row.get('출고수량', 0))
+                has_any_value = any(
+                    str(row.get(column, '') or '').strip()
+                    for column in ['사업장', '실제 제품명', '제조번호', '유통기한']
+                ) or quantity > 0
+                if not has_any_value:
+                    continue
+                values.append({
+                    'business_unit': row.get('사업장', ''),
+                    'product_name': actual_name,
+                    'lot_no': row.get('제조번호', ''),
+                    'expiry_date': row.get('유통기한', ''),
+                    'requested_qty': quantity,
+                })
+
+            try:
+                shipment_service.save_for_order(case_id, selected_order_id, values)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state['actual_packing_case_id'] = case_id
+                folder_service.sync_case_folder(case_id)
+                history_service.add(
+                    case_id,
+                    '주문품목별 입고 저장',
+                    f"{selected_order['product_name']} · {fmt_number(preview_qty)} / {fmt_number(order_qty)} {unit}",
+                )
+                st.success('저장했습니다. 박스 패킹에 바로 반영됩니다.')
+                st.rerun()
 
 st.divider()
 st.caption(
