@@ -119,7 +119,7 @@ with left:
         unit = str(order['unit'] or 'EA')
         current = shipment_service.list_linked(case_id, order_id)
         linked_qty = sum(safe_number(row['requested_qty']) for row in current)
-        icon, state = order_state(order_qty, linked_qty)
+        icon, _ = order_state(order_qty, linked_qty)
 
         row_cols = st.columns([0.45, 2.3, 0.8, 0.8])
         row_cols[0].checkbox(
@@ -131,8 +131,7 @@ with left:
         )
         row_cols[1].write(str(order['product_name'] or '-'))
         row_cols[2].write(f'{fmt_number(order_qty)} {unit}')
-        row_cols[3].write(f'{icon} {state}')
-        row_cols[1].caption(f'입고 {fmt_number(linked_qty)} {unit}')
+        row_cols[3].write(icon)
 
 with right:
     selected_order_id = int(st.session_state[selected_order_key])
