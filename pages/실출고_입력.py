@@ -25,7 +25,14 @@ if not cases:
     st.stop()
 
 options = {case_label(case): int(case['id']) for case in cases}
-case_id = options[st.selectbox('수출 건 선택', list(options), key='linked_shipment_case')]
+selected_case_label = st.selectbox('수출 건 선택', list(options), key='linked_shipment_case')
+case_id = options[selected_case_label]
+
+# 수출대기 입고에서 보고 있는 수출 건을 박스 패킹 화면에도 그대로 전달한다.
+# 박스 패킹의 selectbox는 라벨 값을 session_state에 보관하므로 ID와 라벨을 모두 맞춘다.
+st.session_state['actual_packing_case_id'] = case_id
+st.session_state['actual_packing_case'] = selected_case_label
+
 shipment_service.cleanup_invalid_links(case_id)
 orders = order_service.list_for_case(case_id)
 
@@ -134,13 +141,16 @@ for order in orders:
             except ValueError as exc:
                 st.error(str(exc))
             else:
+                # 저장 직후 박스 패킹에서도 동일 수출 건을 열도록 다시 고정한다.
+                st.session_state['actual_packing_case_id'] = case_id
+                st.session_state['actual_packing_case'] = selected_case_label
                 folder_service.sync_case_folder(case_id)
                 history_service.add(
                     case_id,
                     '주문품목별 입고 저장',
                     f"{order['product_name']} · {fmt_number(preview_qty)} / {fmt_number(order_qty)} {unit}",
                 )
-                st.success('저장했습니다.')
+                st.success('저장했습니다. 박스 패킹에 바로 반영됩니다.')
                 st.rerun()
 
 st.divider()
