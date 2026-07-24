@@ -114,6 +114,10 @@ def save_historical(case_id, edited, boxes, basic, delivery):
 
 
 st.title('주문 검색 및 수정')
+
+if message := st.session_state.pop('order_cancel_success_message', None):
+    st.success(message)
+
 cases=order_service.list_editable_cases()
 if not cases:
     st.info('수정할 수출 건이 없습니다.'); st.stop()
@@ -144,6 +148,37 @@ idx=int(event.selection.rows[0])
 if idx<0 or idx>=len(df): st.stop()
 case_id=int(df.iloc[idx]['_id']); case=next(c for c in filtered if int(c['id'])==case_id); detail=export_service.get_case(case_id)
 is_his=txt(case['export_no']).upper().startswith('HIS')
+
+st.divider()
+st.markdown('#### 주문 취소')
+cancel_cols = st.columns([3, 2, 5])
+cancel_confirm = cancel_cols[0].checkbox(
+    f"{case['export_no']} 주문 취소를 확인합니다.",
+    key=f'cancel_confirm_{case_id}',
+)
+cancel_order = cancel_cols[1].button(
+    '주문 취소',
+    type='secondary',
+    disabled=not cancel_confirm,
+    use_container_width=True,
+    key=f'cancel_order_{case_id}',
+)
+cancel_cols[2].caption('취소하면 해당 건은 주문 검색 목록에서 제외되며, 기존 데이터는 삭제되지 않고 취소 상태로 보관됩니다.')
+
+if cancel_order:
+    export_service.cancel_case(case_id)
+    history_service.add_history(case_id, '주문 취소', case['export_no'])
+    try:
+        folder_service.sync_case_folder(case_id)
+    except OSError:
+        pass
+    for key in list(st.session_state):
+        if key in {'editable_case_table_v2', 'order_case_id'} or key.endswith(f'_{case_id}'):
+            st.session_state.pop(key, None)
+    st.session_state['order_cancel_success_message'] = f"{case['export_no']} 주문을 취소했습니다."
+    st.rerun()
+
+st.divider()
 
 if is_his:
     st.markdown('### 과거 수출 건 수정')
