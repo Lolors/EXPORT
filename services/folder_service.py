@@ -12,7 +12,23 @@ from utils.formatters import sanitize_folder_part
 
 def storage_root() -> Path:
     configured = db.get_setting('shared_root').strip()
-    return Path(configured).expanduser() if configured else db.UPLOAD_DIR
+    if not configured:
+        return db.UPLOAD_DIR
+
+    path = Path(configured).expanduser()
+
+    # Windows에서 E:\ 같은 설정이 남아 있지만 해당 드라이브가 현재
+    # 연결되어 있지 않은 경우 mkdir이 FileNotFoundError를 발생시킨다.
+    # 드라이브/공유 루트 자체가 없으면 앱 내부 uploads 폴더로 안전하게 대체한다.
+    anchor = path.anchor
+    if anchor:
+        try:
+            if not Path(anchor).exists():
+                return db.UPLOAD_DIR
+        except OSError:
+            return db.UPLOAD_DIR
+
+    return path
 
 
 def test_storage_root(path_text: str) -> tuple[bool, str]:
@@ -21,6 +37,9 @@ def test_storage_root(path_text: str) -> tuple[bool, str]:
         return False, '폴더 경로를 입력하세요.'
     try:
         path = Path(path_text).expanduser()
+        anchor = path.anchor
+        if anchor and not Path(anchor).exists():
+            return False, f'드라이브 또는 공유 경로를 찾을 수 없습니다: {anchor}'
         path.mkdir(parents=True, exist_ok=True)
         probe = path / '.export_write_test'
         probe.write_text('ok', encoding='utf-8')
