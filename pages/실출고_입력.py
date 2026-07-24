@@ -26,6 +26,7 @@ if not cases:
 
 options = {case_label(case): int(case['id']) for case in cases}
 case_id = options[st.selectbox('수출 건 선택', list(options), key='linked_shipment_case')]
+shipment_service.cleanup_invalid_links(case_id)
 orders = order_service.list_for_case(case_id)
 
 if not orders:
@@ -74,7 +75,7 @@ for order in orders:
     order_id = int(order['id'])
     order_qty = float(order['quantity'] or 0)
     unit = str(order['unit'] or 'EA')
-    current = shipment_service.list_linked(order_id)
+    current = shipment_service.list_linked(case_id, order_id)
     linked_qty = sum(float(row['requested_qty'] or 0) for row in current)
     icon, state = order_state(order_qty, linked_qty)
 
