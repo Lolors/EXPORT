@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from services import document_service, export_service, order_service
+from services import document_service, export_service, order_service, shipment_service
 from utils.formatters import fmt_number
 
 
@@ -59,7 +59,6 @@ def render_document(case, packed, actual_rows) -> None:
         detail_label = '배송 상세'
         detail_value = '-'
 
-    status_text = display_stage(case['stage'])
     note_html = ''
     if case['note']:
         note_html = f'<div class="note-box"><b>특이사항</b><div>{html.escape(case["note"])}</div></div>'
@@ -293,12 +292,22 @@ selected_rows = st.dataframe(
 
 selected_indexes = selected_rows.selection.rows
 if not selected_indexes:
+    st.session_state.pop('document_case_id', None)
     st.info('공유문서를 출력할 수출 건의 행을 선택하세요.')
     st.stop()
 
 selected_index = int(selected_indexes[0])
 case_id = int(selection_df.iloc[selected_index]['_case_id'])
 st.session_state['document_case_id'] = case_id
+
 case = export_service.get_case(case_id)
-packed, actual_rows = document_service.get_document_data(case_id)
+
+# 행을 선택할 때마다 현재 DB의 수출대기 입고 목록을 직접 다시 읽는다.
+# 이전에 생성된 공유문서 결과나 session_state의 품목 데이터는 재사용하지 않는다.
+fresh_actual_rows = shipment_service.list_actual(case_id)
+actual_rows = document_service._aggregate_actual(fresh_actual_rows)
+
+# 현재 남아 있는 출고행 중 실제로 CTN이 배정된 행만 패킹 정보와 함께 다시 읽는다.
+packed, _ = document_service.get_document_data(case_id)
+
 render_document(case, packed, actual_rows)
