@@ -139,14 +139,8 @@ with right:
         order_qty = safe_number(selected_order['quantity'])
         unit = str(selected_order['unit'] or 'EA')
         current = shipment_service.list_linked(case_id, selected_order_id)
-        linked_qty = sum(safe_number(row['requested_qty']) for row in current)
-        icon, state = order_state(order_qty, linked_qty)
 
         st.markdown(f"**선택 주문:** {selected_order['product_name']}")
-        st.caption(
-            f'주문 {fmt_number(order_qty)} {unit} · 현재 입고 {fmt_number(linked_qty)} {unit} · {icon} {state}'
-        )
-        st.caption('실제 제품이나 제조번호가 여러 개면 행을 추가해 각각 입력하세요.')
 
         if current:
             source = pd.DataFrame([
