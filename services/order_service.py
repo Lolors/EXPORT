@@ -277,60 +277,107 @@ def sync_historical_shipments(case_id: int) -> None:
 
 
 def save_order_items(case_id: int, edited) -> None:
-    existing_rows = db.rows(
-        '''SELECT o.id, o.product_name, o.quantity, o.unit, o.purchase_price,
-                  COUNT(s.id) AS linked_count
-           FROM order_items o
-           LEFT JOIN shipment_items s ON s.order_item_id=o.id
-           WHERE o.case_id=?
-           GROUP BY o.id, o.product_name, o.quantity, o.unit, o.purchase_price
-           ORDER BY o.id''',
-        (case_id,),
-    )
-    existing = {int(row['id']): row for row in existing_rows}
-    seen_ids: set[int] = set()
     now = now_text()
+    with db.connect() as conn:
+        existing_rows = conn.execute(
+            '''SELECT o.id, o.product_name, o.quantity, o.unit, o.purchase_price
+               FROM order_items o
+               WHERE o.case_id=?
+               ORDER BY o.id''',
+            (case_id,),
+        ).fetchall()
+        existing = {int(row['id']): row for row in existing_rows}
+        seen_ids: set[int] = set()
 
-    for _, row in edited.iterrows():
-        raw_id = row.get('_id')
-        order_id = int(raw_id) if raw_id not in (None, '', 0) else None
-        product_name = str(row.get('제품명', '') or '').strip()
-        quantity = float(row.get('수량', 0) or 0)
-        unit = str(row.get('단위', 'EA') or 'EA').strip() or 'EA'
-        purchase_price = float(row.get('매입가', 0) or 0)
+        for _, row in edited.iterrows():
+            raw_id = row.get('_id')
+            order_id = int(raw_id) if raw_id not in (None, '', 0) else None
+            product_name = str(row.get('제품명', '') or '').strip()
+            quantity = float(row.get('수량', 0) or 0)
+            unit = str(row.get('단위', 'EA') or 'EA').strip() or 'EA'
+            purchase_price = float(row.get('매입가', 0) or 0)
 
-        if not product_name:
-            continue
+            if not product_name:
+                continue
 
-        if order_id and order_id in existing:
-            previous = existing[order_id]
-            seen_ids.add(order_id)
-            db.execute(
-                '''UPDATE order_items
-                   SET product_name=?,quantity=?,unit=?,purchase_price=?
-                   WHERE id=? AND case_id=?''',
-                (product_name, quantity, unit, purchase_price, order_id, case_id),
+            if order_id and order_id in existing:
+                previous = existing[order_id]
+                seen_ids.add(order_id)
+                conn.execute(
+                    '''UPDATE order_items
+                       SET product_name=?,quantity=?,unit=?,purchase_price=?
+                       WHERE id=? AND case_id=?''',
+                    (product_name, quantity, unit, purchase_price, order_id, case_id),
+                )
+                if (
+                    float(previous['purchase_price'] or 0) != purchase_price
+                    or str(previous['product_name']) != product_name
+                ):
+                    conn.execute(
+                        '''INSERT INTO purchase_price_history(
+                               case_id,order_item_id,product_name,normalized_name,purchase_price,quantity,unit,created_at
+                           ) VALUES (?,?,?,?,?,?,?,?)''',
+                        (
+                            case_id,
+                            order_id,
+                            product_name,
+                            normalize_product_name(product_name),
+                            purchase_price,
+                            quantity,
+                            unit,
+                            now,
+                        ),
+                    )
+            else:
+                cursor = conn.execute(
+                    '''INSERT INTO order_items(case_id,product_name,quantity,unit,purchase_price,created_at)
+                       VALUES (?,?,?,?,?,?)''',
+                    (case_id, product_name, quantity, unit, purchase_price, now),
+                )
+                order_id = int(cursor.lastrowid)
+                seen_ids.add(order_id)
+                conn.execute(
+                    '''INSERT INTO purchase_price_history(
+                           case_id,order_item_id,product_name,normalized_name,purchase_price,quantity,unit,created_at
+                       ) VALUES (?,?,?,?,?,?,?,?)''',
+                    (
+                        case_id,
+                        order_id,
+                        product_name,
+                        normalize_product_name(product_name),
+                        purchase_price,
+                        quantity,
+                        unit,
+                        now,
+                    ),
+                )
+
+        removed_ids = [order_id for order_id in existing if order_id not in seen_ids]
+        for order_id in removed_ids:
+            conn.execute(
+                'DELETE FROM shipment_items WHERE case_id=? AND order_item_id=?',
+                (case_id, order_id),
             )
-            if (
-                float(previous['purchase_price'] or 0) != purchase_price
-                or str(previous['product_name']) != product_name
-            ):
-                _append_price_history(case_id, order_id, product_name, purchase_price, quantity, unit, created_at=now)
-        else:
-            order_id = db.execute(
-                '''INSERT INTO order_items(case_id,product_name,quantity,unit,purchase_price,created_at)
-                   VALUES (?,?,?,?,?,?)''',
-                (case_id, product_name, quantity, unit, purchase_price, now),
+            conn.execute(
+                'DELETE FROM order_items WHERE id=? AND case_id=?',
+                (order_id, case_id),
             )
-            _append_price_history(case_id, order_id, product_name, purchase_price, quantity, unit, created_at=now)
 
-    removed_ids = [order_id for order_id in existing if order_id not in seen_ids]
-    for order_id in removed_ids:
-        db.execute('DELETE FROM shipment_items WHERE case_id=? AND order_item_id=?', (case_id, order_id))
-        db.execute('DELETE FROM order_items WHERE id=? AND case_id=?', (order_id, case_id))
-
-    if removed_ids:
-        db.execute(
+        conn.execute(
+            '''DELETE FROM shipment_items
+               WHERE case_id=?
+                 AND (
+                     order_item_id IS NULL
+                     OR NOT EXISTS(
+                         SELECT 1
+                         FROM order_items o
+                         WHERE o.id=shipment_items.order_item_id
+                           AND o.case_id=shipment_items.case_id
+                     )
+                 )''',
+            (case_id,),
+        )
+        conn.execute(
             '''DELETE FROM boxes
                WHERE case_id=?
                  AND NOT EXISTS(
