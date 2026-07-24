@@ -69,8 +69,6 @@ def _append_price_history(
     *,
     created_at: str | None = None,
 ) -> None:
-    if purchase_price <= 0:
-        return
     db.execute(
         '''INSERT INTO purchase_price_history(
                case_id,order_item_id,product_name,normalized_name,purchase_price,quantity,unit,created_at
@@ -292,8 +290,6 @@ def save_order_items(case_id: int, edited) -> None:
     existing = {int(row['id']): row for row in existing_rows}
     seen_ids: set[int] = set()
     now = now_text()
-    case = db.row('SELECT case_type FROM export_cases WHERE id=?', (case_id,))
-    historical = bool(case and case['case_type'] == 'historical')
 
     for _, row in edited.iterrows():
         raw_id = row.get('_id')
@@ -315,7 +311,7 @@ def save_order_items(case_id: int, edited) -> None:
                    WHERE id=? AND case_id=?''',
                 (product_name, quantity, unit, purchase_price, order_id, case_id),
             )
-            if purchase_price > 0 and (
+            if (
                 float(previous['purchase_price'] or 0) != purchase_price
                 or str(previous['product_name']) != product_name
             ):
@@ -328,14 +324,22 @@ def save_order_items(case_id: int, edited) -> None:
             )
             _append_price_history(case_id, order_id, product_name, purchase_price, quantity, unit, created_at=now)
 
-    for order_id, row in existing.items():
-        if order_id in seen_ids:
-            continue
-        if not historical and int(row['linked_count'] or 0) > 0:
-            raise ValueError(
-                f"실출고가 연결된 주문품목 '{row['product_name']}'은 삭제할 수 없습니다. 수량·제품명 수정은 가능합니다."
-            )
+    removed_ids = [order_id for order_id in existing if order_id not in seen_ids]
+    for order_id in removed_ids:
         db.execute('DELETE FROM shipment_items WHERE case_id=? AND order_item_id=?', (case_id, order_id))
         db.execute('DELETE FROM order_items WHERE id=? AND case_id=?', (order_id, case_id))
+
+    if removed_ids:
+        db.execute(
+            '''DELETE FROM boxes
+               WHERE case_id=?
+                 AND NOT EXISTS(
+                     SELECT 1
+                     FROM shipment_items s
+                     WHERE s.case_id=boxes.case_id
+                       AND s.box_no=boxes.box_no
+                 )''',
+            (case_id,),
+        )
 
     sync_historical_shipments(case_id)
