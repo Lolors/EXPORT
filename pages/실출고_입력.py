@@ -26,7 +26,7 @@ def safe_number(value: object) -> float:
 
 
 st.title('수출대기 입고')
-st.caption('왼쪽에서 주문목록을 수정하거나 한 행을 선택하고, 오른쪽에서 실제 수출대기 입고제품을 입력합니다.')
+st.caption('왼쪽에서 주문목록을 수정하고, 오른쪽에서 주문을 선택해 실제 수출대기 입고제품을 입력합니다.')
 
 cases = export_service.active_cases()
 if not cases:
@@ -79,29 +79,6 @@ if unlinked_count:
             st.success('구형 미연결 입고 데이터를 삭제했습니다.')
             st.rerun()
 
-selected_order_key = f'linked_selected_order_{case_id}'
-order_ids = [int(order['id']) for order in orders]
-if order_ids and st.session_state.get(selected_order_key) not in order_ids:
-    st.session_state[selected_order_key] = order_ids[0]
-if not order_ids:
-    st.session_state.pop(selected_order_key, None)
-
-
-def choose_order(order_id: int) -> None:
-    checkbox_key = f'linked_order_check_{case_id}_{order_id}'
-    if st.session_state.get(checkbox_key):
-        st.session_state[selected_order_key] = order_id
-        for other_id in order_ids:
-            if other_id != order_id:
-                st.session_state[f'linked_order_check_{case_id}_{other_id}'] = False
-    elif st.session_state.get(selected_order_key) == order_id:
-        st.session_state[checkbox_key] = True
-
-
-for order_id in order_ids:
-    checkbox_key = f'linked_order_check_{case_id}_{order_id}'
-    st.session_state[checkbox_key] = st.session_state.get(selected_order_key) == order_id
-
 left, right = st.columns([1.05, 1.45], gap='large')
 
 with left:
@@ -132,42 +109,32 @@ with left:
             st.success('주문목록을 저장했습니다.')
             st.rerun()
 
-    st.divider()
-    st.caption('체크한 주문품목의 실제 입고 내역이 오른쪽에 표시됩니다.')
+with right:
+    st.markdown('### 실제 수출대기 입고제품')
 
     if not orders:
-        st.info('주문목록을 입력하고 저장하세요.')
+        st.info('왼쪽에서 주문목록을 입력하고 저장하세요.')
     else:
-        header = st.columns([0.45, 2.3, 0.8, 0.8])
-        for column, title in zip(header, ['선택', '제품명', '주문', '상태']):
-            column.markdown(f'**{title}**')
-
+        order_options: dict[str, int] = {}
         for order in orders:
             order_id = int(order['id'])
             order_qty = safe_number(order['quantity'])
             unit = str(order['unit'] or 'EA')
-            current = shipment_service.list_linked(case_id, order_id)
-            linked_qty = sum(safe_number(row['requested_qty']) for row in current)
+            current_rows = shipment_service.list_linked(case_id, order_id)
+            linked_qty = sum(safe_number(row['requested_qty']) for row in current_rows)
             icon, _ = order_state(order_qty, linked_qty)
-
-            row_cols = st.columns([0.45, 2.3, 0.8, 0.8])
-            row_cols[0].checkbox(
-                '선택',
-                key=f'linked_order_check_{case_id}_{order_id}',
-                label_visibility='collapsed',
-                on_change=choose_order,
-                args=(order_id,),
+            label = (
+                f"{icon} {order['product_name']} · "
+                f"{fmt_number(linked_qty)} / {fmt_number(order_qty)} {unit}"
             )
-            row_cols[1].write(str(order['product_name'] or '-'))
-            row_cols[2].write(f'{fmt_number(order_qty)} {unit}')
-            row_cols[3].write(icon)
+            order_options[label] = order_id
 
-with right:
-    if not orders or selected_order_key not in st.session_state:
-        st.markdown('### 실제 수출대기 입고제품')
-        st.info('왼쪽에서 주문목록을 입력하고 저장하세요.')
-    else:
-        selected_order_id = int(st.session_state[selected_order_key])
+        selected_label = st.selectbox(
+            '출고제품을 입력할 주문',
+            list(order_options),
+            key=f'linked_selected_order_{case_id}',
+        )
+        selected_order_id = order_options[selected_label]
         selected_order = next(order for order in orders if int(order['id']) == selected_order_id)
         order_qty = safe_number(selected_order['quantity'])
         unit = str(selected_order['unit'] or 'EA')
@@ -175,7 +142,6 @@ with right:
         linked_qty = sum(safe_number(row['requested_qty']) for row in current)
         icon, state = order_state(order_qty, linked_qty)
 
-        st.markdown('### 실제 수출대기 입고제품')
         st.markdown(f"**선택 주문:** {selected_order['product_name']}")
         st.caption(
             f'주문 {fmt_number(order_qty)} {unit} · 현재 입고 {fmt_number(linked_qty)} {unit} · {icon} {state}'
