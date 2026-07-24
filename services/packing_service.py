@@ -12,11 +12,14 @@ LAST_BOX_SETTING_KEY = 'packing_last_box_values'
 
 def list_items(case_id: int):
     return db.rows(
-        '''SELECT id, business_unit, product_name, lot_no, expiry_date,
-                  requested_qty, box_no
-           FROM shipment_items
-           WHERE case_id=?
-           ORDER BY CASE WHEN box_no IS NULL THEN 0 ELSE 1 END, box_no, id''',
+        '''SELECT s.id, s.business_unit, s.product_name, s.lot_no, s.expiry_date,
+                  s.requested_qty, s.box_no
+           FROM shipment_items s
+           JOIN order_items o
+             ON o.id=s.order_item_id
+            AND o.case_id=s.case_id
+           WHERE s.case_id=?
+           ORDER BY CASE WHEN s.box_no IS NULL THEN 0 ELSE 1 END, s.box_no, s.id''',
         (case_id,),
     )
 
@@ -27,6 +30,9 @@ def list_packed_rows(case_id: int):
                   s.expiry_date, s.requested_qty, b.weight_kg, b.length_cm,
                   b.width_cm, b.height_cm
            FROM shipment_items s
+           JOIN order_items o
+             ON o.id=s.order_item_id
+            AND o.case_id=s.case_id
            LEFT JOIN boxes b ON b.case_id=s.case_id AND b.box_no=s.box_no
            WHERE s.case_id=? AND s.box_no IS NOT NULL
            ORDER BY s.box_no, s.id''',
@@ -44,10 +50,13 @@ def list_boxes(case_id: int):
 
 def list_box_items(case_id: int, box_no: int):
     return db.rows(
-        '''SELECT business_unit, product_name, lot_no, expiry_date, requested_qty
-           FROM shipment_items
-           WHERE case_id=? AND box_no=?
-           ORDER BY id''',
+        '''SELECT s.business_unit, s.product_name, s.lot_no, s.expiry_date, s.requested_qty
+           FROM shipment_items s
+           JOIN order_items o
+             ON o.id=s.order_item_id
+            AND o.case_id=s.case_id
+           WHERE s.case_id=? AND s.box_no=?
+           ORDER BY s.id''',
         (case_id, box_no),
     )
 
@@ -60,9 +69,12 @@ def next_box_no(case_id: int) -> int:
 def _sync_packing_stage(case_id: int, now: str | None = None) -> None:
     timestamp = now or now_text()
     result = db.row(
-        '''SELECT COALESCE(SUM(CASE WHEN box_no IS NULL THEN requested_qty ELSE 0 END), 0) AS remaining_qty
-           FROM shipment_items
-           WHERE case_id=?''',
+        '''SELECT COALESCE(SUM(CASE WHEN s.box_no IS NULL THEN s.requested_qty ELSE 0 END), 0) AS remaining_qty
+           FROM shipment_items s
+           JOIN order_items o
+             ON o.id=s.order_item_id
+            AND o.case_id=s.case_id
+           WHERE s.case_id=?''',
         (case_id,),
     )
     remaining_qty = float(result['remaining_qty'] or 0) if result else 0.0
@@ -250,11 +262,14 @@ def clone_box(case_id: int, source_box_no: int, clone_count: int) -> list[int]:
         raise ValueError('복제할 CTN을 찾을 수 없습니다.')
 
     source_items = db.rows(
-        '''SELECT order_item_id, business_unit, location, product_name, lot_no,
-                  expiry_date, requested_qty, created_at
-           FROM shipment_items
-           WHERE case_id=? AND box_no=?
-           ORDER BY id''',
+        '''SELECT s.order_item_id, s.business_unit, s.location, s.product_name, s.lot_no,
+                  s.expiry_date, s.requested_qty, s.created_at
+           FROM shipment_items s
+           JOIN order_items o
+             ON o.id=s.order_item_id
+            AND o.case_id=s.case_id
+           WHERE s.case_id=? AND s.box_no=?
+           ORDER BY s.id''',
         (case_id, source_box_no),
     )
     if not source_items:
