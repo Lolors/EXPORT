@@ -31,4 +31,15 @@ def case_label(case, include_type: bool = False) -> str:
         case['stage'],
     ]
     parts = [str(value).strip() for value in values if str(value or '').strip()]
+
+    # 동일한 수출번호와 조건을 가진 수출 건이 여러 개 있어도
+    # selectbox 옵션 딕셔너리에서 서로 덮어쓰지 않도록 내부 ID를 포함한다.
+    case_id = ''
+    try:
+        case_id = str(case['id']).strip()
+    except (KeyError, TypeError, AttributeError):
+        case_id = ''
+    if case_id:
+        parts.append(f'ID {case_id}')
+
     return prefix + ' · '.join(parts)
