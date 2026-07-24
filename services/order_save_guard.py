@@ -24,6 +24,50 @@ def _safe_number(value: object, default: float = 0.0) -> float:
         return default
 
 
+def _duplicate_rows(cleaned: pd.DataFrame) -> tuple[list[list[str]], list[dict[str, object]]]:
+    normalized_names: dict[str, list[tuple[int, str]]] = {}
+
+    for position, (_, row) in enumerate(cleaned.iterrows(), start=1):
+        name = _clean_text(row.get('제품명'))
+        if not name:
+            continue
+
+        key = order_service.normalize_product_name(name)
+        if not key:
+            key = name.casefold()
+        normalized_names.setdefault(key, []).append((position, name))
+
+    duplicate_groups = [items for items in normalized_names.values() if len(items) > 1]
+    duplicate_names = [[name for _, name in items] for items in duplicate_groups]
+    duplicate_rows = [
+        {'행': position, '제품명': name}
+        for items in duplicate_groups
+        for position, name in items
+    ]
+    return duplicate_names, duplicate_rows
+
+
+def _show_duplicate_rows(rows: list[dict[str, object]]) -> None:
+    if not rows:
+        return
+
+    duplicate_frame = pd.DataFrame(rows)
+    styled = duplicate_frame.style.map(
+        lambda _: 'background-color: #ffd6e7; color: #7a173f; font-weight: 600;',
+        subset=['제품명'],
+    )
+    st.markdown('**중복된 주문 행**')
+    st.dataframe(
+        styled,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            '행': st.column_config.NumberColumn('행', format='%d', width='small'),
+            '제품명': st.column_config.TextColumn('제품명'),
+        },
+    )
+
+
 def save_order_items(case_id: int, edited) -> None:
     """Validate and normalize the order editor before using the existing save logic."""
     cleaned = edited.copy()
@@ -35,25 +79,14 @@ def save_order_items(case_id: int, edited) -> None:
     if '수량' in cleaned.columns:
         cleaned['수량'] = cleaned['수량'].map(lambda value: _safe_number(value, 0.0))
 
-    product_names = [
-        _clean_text(value)
-        for value in cleaned.get('제품명', [])
-        if _clean_text(value)
-    ]
-    normalized_names: dict[str, list[str]] = {}
-    for name in product_names:
-        key = order_service.normalize_product_name(name)
-        if not key:
-            key = name.casefold()
-        normalized_names.setdefault(key, []).append(name)
-
-    duplicates = [names for names in normalized_names.values() if len(names) > 1]
-    if duplicates:
-        duplicate_text = ', '.join(' / '.join(names) for names in duplicates)
+    duplicate_names, duplicate_rows = _duplicate_rows(cleaned)
+    if duplicate_names:
+        duplicate_text = ', '.join(' / '.join(names) for names in duplicate_names)
         st.warning(
             '같은 제품명이 주문 목록에 중복되어 있습니다. '
             f'중복 행을 합치거나 제품명을 구분한 뒤 다시 저장하세요: {duplicate_text}'
         )
+        _show_duplicate_rows(duplicate_rows)
         st.stop()
 
     _original_save_order_items(case_id, cleaned)
