@@ -15,10 +15,13 @@ def list_for_case(case_id: int):
 
 def list_actual(case_id: int):
     return db.rows(
-        '''SELECT business_unit, product_name, lot_no, expiry_date, requested_qty
-           FROM shipment_items
-           WHERE case_id=? AND order_item_id IS NOT NULL
-           ORDER BY id''',
+        '''SELECT s.business_unit, s.product_name, s.lot_no, s.expiry_date, s.requested_qty
+           FROM shipment_items s
+           JOIN order_items o
+             ON o.id=s.order_item_id
+            AND o.case_id=s.case_id
+           WHERE s.case_id=?
+           ORDER BY s.id''',
         (case_id,),
     )
 
@@ -27,11 +30,14 @@ def get_lot_expiry_dataframe(case_id: int):
     import pandas as pd
 
     rows = db.rows(
-        '''SELECT id AS _id, product_name AS 제품명, requested_qty AS 출고수량,
-                  box_no AS CTN번호, lot_no AS 제조번호, expiry_date AS 유통기한
-           FROM shipment_items
-           WHERE case_id=? AND order_item_id IS NOT NULL
-           ORDER BY CASE WHEN box_no IS NULL THEN 1 ELSE 0 END, box_no, id''',
+        '''SELECT s.id AS _id, s.product_name AS 제품명, s.requested_qty AS 출고수량,
+                  s.box_no AS CTN번호, s.lot_no AS 제조번호, s.expiry_date AS 유통기한
+           FROM shipment_items s
+           JOIN order_items o
+             ON o.id=s.order_item_id
+            AND o.case_id=s.case_id
+           WHERE s.case_id=?
+           ORDER BY CASE WHEN s.box_no IS NULL THEN 1 ELSE 0 END, s.box_no, s.id''',
         (case_id,),
     )
     return pd.DataFrame([dict(row) for row in rows])
@@ -43,7 +49,12 @@ def update_lot_expiry(case_id: int, edited) -> int:
     valid_ids = {
         int(row['id'])
         for row in db.rows(
-            'SELECT id FROM shipment_items WHERE case_id=? AND order_item_id IS NOT NULL',
+            '''SELECT s.id
+               FROM shipment_items s
+               JOIN order_items o
+                 ON o.id=s.order_item_id
+                AND o.case_id=s.case_id
+               WHERE s.case_id=?''',
             (case_id,),
         )
     }
@@ -154,7 +165,12 @@ def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
 
 def total_linked_quantity(case_id: int) -> float:
     result = db.row(
-        'SELECT COALESCE(SUM(requested_qty),0) AS quantity FROM shipment_items WHERE case_id=? AND order_item_id IS NOT NULL',
+        '''SELECT COALESCE(SUM(s.requested_qty),0) AS quantity
+           FROM shipment_items s
+           JOIN order_items o
+             ON o.id=s.order_item_id
+            AND o.case_id=s.case_id
+           WHERE s.case_id=?''',
         (case_id,),
     )
     return float(result['quantity'] or 0) if result else 0.0
