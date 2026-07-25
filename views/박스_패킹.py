@@ -4,6 +4,7 @@ import streamlit as st
 
 from components.case_selector import select_export_case
 from services import export_service, history_service, packing_service
+from services.packing_view_service import packing_summary
 from utils.formatters import fmt_number
 
 
@@ -32,16 +33,13 @@ if not items:
     st.warning('연결된 입고 제품이 없습니다. 먼저 수출대기 입고에서 제품을 입력하세요.')
     st.stop()
 
-unpacked_count = sum(1 for item in items if item['box_no'] is None)
-packed_count = len(items) - unpacked_count
-box_count = len({item['box_no'] for item in items if item['box_no'] is not None})
-total_qty = sum(float(item['requested_qty'] or 0) for item in items)
+summary = packing_summary(items)
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric('실제 출고 행', f'{len(items)}개')
-m2.metric('총 출고수량', fmt_number(total_qty))
-m3.metric('패킹 완료 행', f'{packed_count}개')
-m4.metric('사용 CTN', f'{box_count}개')
+m1.metric('실제 출고 행', f"{summary['row_count']}개")
+m2.metric('총 출고수량', fmt_number(summary['total_quantity']))
+m3.metric('패킹 완료 행', f"{summary['packed_count']}개")
+m4.metric('사용 CTN', f"{summary['box_count']}개")
 
 st.divider()
 st.markdown('#### 실제 출고제품 선택')
