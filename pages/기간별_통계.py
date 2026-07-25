@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import calendar
 from datetime import date, timedelta
 
 import pandas as pd
@@ -12,10 +11,6 @@ from utils.formatters import fmt_number
 
 def month_start(value: date) -> date:
     return value.replace(day=1)
-
-
-def month_end(value: date) -> date:
-    return value.replace(day=calendar.monthrange(value.year, value.month)[1])
 
 
 def previous_month_range(today: date) -> tuple[date, date]:
@@ -150,7 +145,7 @@ with summary_tab:
         st.markdown('#### 국가별 출고량')
         if country_totals['단위'].nunique() == 1:
             chart = country_totals.set_index('국가')[['출고수량']].head(15)
-            st.bar_chart(chart, horizontal=True)
+            st.bar_chart(chart)
         st.dataframe(
             country_totals,
             hide_index=True,
@@ -164,7 +159,7 @@ with summary_tab:
         st.markdown('#### 많이 출고된 제품')
         if product_totals['단위'].nunique() == 1:
             chart = product_totals.head(15).set_index('제품명')[['출고수량']]
-            st.bar_chart(chart, horizontal=True)
+            st.bar_chart(chart)
         st.dataframe(
             product_totals.head(30),
             hide_index=True,
