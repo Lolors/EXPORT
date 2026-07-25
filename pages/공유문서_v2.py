@@ -148,4 +148,28 @@ if patched.count(sort_marker) != 1:
     raise RuntimeError('공유용 자료 단계 정렬 구간을 찾지 못했습니다.')
 patched = patched.replace(sort_marker, sort_replacement, 1)
 
+lazy_old = """fresh_actual_rows = shipment_service.list_actual(case_id)
+actual_rows = document_service._aggregate_actual(fresh_actual_rows)
+selected_view = st.session_state.get('shared_document_view')
+if selected_view == 'final':
+    packed, _ = document_service.get_document_data(case_id)
+    render_document(case, packed)
+elif selected_view == 'shipment_products':
+    render_shipment_product_list(case, actual_rows)
+else:
+"""
+lazy_new = """selected_view = st.session_state.get('shared_document_view')
+if selected_view == 'final':
+    packed, _ = document_service.get_document_data(case_id)
+    render_document(case, packed)
+elif selected_view == 'shipment_products':
+    fresh_actual_rows = shipment_service.list_actual(case_id)
+    actual_rows = document_service._aggregate_actual(fresh_actual_rows)
+    render_shipment_product_list(case, actual_rows)
+else:
+"""
+if patched.count(lazy_old) != 1:
+    raise RuntimeError('공유용 자료 지연 조회 구간을 찾지 못했습니다.')
+patched = patched.replace(lazy_old, lazy_new, 1)
+
 exec(compile(patched, str(SOURCE_PATH), 'exec'), globals(), globals())
