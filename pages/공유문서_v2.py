@@ -135,11 +135,7 @@ stage_sort_order = {
     '국내배송': 99,
 }
 filtered_cases.sort(
-    key=lambda case: (
-        stage_sort_order.get(str(case['stage'] or '').strip(), 90),
-        str(case['updated_at'] or ''),
-    ),
-    reverse=False,
+    key=lambda case: stage_sort_order.get(str(case['stage'] or '').strip(), 90),
 )
 
 if not filtered_cases:
