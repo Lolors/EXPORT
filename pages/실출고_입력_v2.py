@@ -36,6 +36,33 @@ if patched.count(price_lookup_width_old) != 1:
 
 patched = patched.replace(price_lookup_width_old, price_lookup_width_new, 1)
 
+prefetch_old = '''orders = order_service.list_for_case(case_id)
+
+unlinked_count = shipment_service.count_unlinked(case_id)
+'''
+prefetch_new = '''orders = order_service.list_for_case(case_id)
+all_linked_rows = shipment_service.list_case_items(case_id)
+linked_rows_by_order: dict[int, list] = {}
+for linked_row in all_linked_rows:
+    linked_order_id = int(linked_row['order_item_id'])
+    linked_rows_by_order.setdefault(linked_order_id, []).append(linked_row)
+
+unlinked_count = shipment_service.count_unlinked(case_id)
+'''
+if patched.count(prefetch_old) != 1:
+    raise RuntimeError('수출대기 입고 일괄 조회 삽입 구간을 찾지 못했습니다.')
+patched = patched.replace(prefetch_old, prefetch_new, 1)
+
+linked_replacements = {
+    "shipment_service.list_linked(case_id, order_id)": "linked_rows_by_order.get(order_id, [])",
+    "shipment_service.list_linked(case_id, selected_order_id)": "linked_rows_by_order.get(selected_order_id, [])",
+    "shipment_service.list_linked(case_id, progress_order_id)": "linked_rows_by_order.get(progress_order_id, [])",
+}
+for old, new in linked_replacements.items():
+    if old not in patched:
+        raise RuntimeError(f'반복 입고 조회 구간을 찾지 못했습니다: {old}')
+    patched = patched.replace(old, new)
+
 progress_old = '''    total_order_qty = sum(safe_number(order['quantity']) for order in orders)
     total_received_qty = shipment_service.total_linked_quantity(case_id)
     progress_ratio = min(total_received_qty / total_order_qty, 1.0) if total_order_qty > 0 else 0.0
@@ -60,7 +87,7 @@ progress_new = '''    item_progress_ratios: list[float] = []
         progress_order_qty = safe_number(progress_order['quantity'])
         progress_received_qty = sum(
             safe_number(row['requested_qty'])
-            for row in shipment_service.list_linked(case_id, progress_order_id)
+            for row in linked_rows_by_order.get(progress_order_id, [])
         )
         if progress_order_qty > 0:
             item_ratio = min(progress_received_qty / progress_order_qty, 1.0)
