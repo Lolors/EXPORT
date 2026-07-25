@@ -144,6 +144,54 @@ if patched.count(sort_marker) != 1:
     raise RuntimeError('공유용 자료 단계 정렬 구간을 찾지 못했습니다.')
 patched = patched.replace(sort_marker, sort_replacement, 1)
 
+folder_old = """try:
+    case_folder = folder_service.ensure_case_folder(case_id)
+    action_cols = st.columns(5)
+    if action_cols[0].button('📂 폴더 열기', use_container_width=True):
+        open_selected_path(case_folder, '수출 폴더')
+    if action_cols[1].button('📄 수출진행내역', use_container_width=True):
+        open_selected_path(case_folder / '수출진행내역.xlsx', '수출진행내역')
+    if action_cols[2].button('🖼 출고제품사진', use_container_width=True):
+        open_selected_path(folder_service.category_folder(case_id, '출고사진'), '출고제품사진 폴더')
+    if action_cols[3].button('📑 CI', use_container_width=True):
+        open_selected_path(folder_service.category_folder(case_id, 'CI'), 'CI 폴더')
+    if action_cols[4].button('🚢 Shipping Mark', use_container_width=True):
+        open_selected_path(folder_service.category_folder(case_id, 'Shipping Mark'), 'Shipping Mark 폴더')
+    st.caption(str(case_folder))
+except Exception as exc:
+    st.warning(f'수출 폴더를 준비하지 못했습니다: {exc}')
+"""
+folder_new = """action_cols = st.columns(5)
+open_folder = action_cols[0].button('📂 폴더 열기', use_container_width=True)
+open_workbook = action_cols[1].button('📄 수출진행내역', use_container_width=True)
+open_photos = action_cols[2].button('🖼 출고제품사진', use_container_width=True)
+open_ci = action_cols[3].button('📑 CI', use_container_width=True)
+open_shipping_mark = action_cols[4].button('🚢 Shipping Mark', use_container_width=True)
+
+if any([open_folder, open_workbook, open_photos, open_ci, open_shipping_mark]):
+    try:
+        case_folder = folder_service.ensure_case_folder(case_id)
+        if open_folder:
+            open_selected_path(case_folder, '수출 폴더')
+        elif open_workbook:
+            open_selected_path(case_folder / '수출진행내역.xlsx', '수출진행내역')
+        elif open_photos:
+            open_selected_path(folder_service.category_folder(case_id, '출고사진'), '출고제품사진 폴더')
+        elif open_ci:
+            open_selected_path(folder_service.category_folder(case_id, 'CI'), 'CI 폴더')
+        elif open_shipping_mark:
+            open_selected_path(folder_service.category_folder(case_id, 'Shipping Mark'), 'Shipping Mark 폴더')
+    except Exception as exc:
+        st.warning(f'수출 폴더를 준비하지 못했습니다: {exc}')
+else:
+    stored_folder_path = str(case['folder_path'] or '').strip()
+    if stored_folder_path:
+        st.caption(stored_folder_path)
+"""
+if patched.count(folder_old) != 1:
+    raise RuntimeError('공유용 자료 폴더 지연 준비 구간을 찾지 못했습니다.')
+patched = patched.replace(folder_old, folder_new, 1)
+
 lazy_old = """fresh_actual_rows = shipment_service.list_actual(case_id)
 actual_rows = document_service._aggregate_actual(fresh_actual_rows)
 selected_view = st.session_state.get('shared_document_view')
