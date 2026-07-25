@@ -6,6 +6,7 @@ import streamlit as st
 from components.editors import historical_box_editor, historical_order_editor, order_editor
 from config import TRANSPORT_MODES
 from services import export_service, folder_service, history_service, order_service
+from services.case_merge_service import merge_case_into
 from services.order_edit_service import (
     box_items,
     date_value as dval,
@@ -51,6 +52,63 @@ idx=int(event.selection.rows[0])
 if idx<0 or idx>=len(df): st.stop()
 case_id=int(df.iloc[idx]['_id']); case=next(c for c in filtered if int(c['id'])==case_id); detail=export_service.get_case(case_id)
 is_his=txt(case['export_no']).upper().startswith('HIS')
+
+st.divider()
+st.markdown('#### 다른 주문으로 이관·병합')
+st.caption('현재 수출 건의 주문목록, 연결된 입고 상세정보와 CTN 정보를 대상 수출번호의 기존 내용에 추가한 뒤 현재 건을 취소합니다.')
+
+merge_targets = [candidate for candidate in cases if int(candidate['id']) != case_id]
+if merge_targets:
+    target_by_label = {
+        (
+            f"{candidate['export_no']} · {txt(candidate['country'], '-')} · "
+            f"{txt(candidate['buyer'], '바이어 미입력')} · {txt(candidate['stage'])}"
+        ): int(candidate['id'])
+        for candidate in merge_targets
+    }
+    merge_cols = st.columns([4, 3, 2])
+    selected_target_label = merge_cols[0].selectbox(
+        '병합할 대상 수출번호',
+        list(target_by_label),
+        key=f'merge_target_{case_id}',
+    )
+    target_case_id = target_by_label[selected_target_label]
+    target_case = next(candidate for candidate in merge_targets if int(candidate['id']) == target_case_id)
+    merge_confirm = merge_cols[1].checkbox(
+        f"{case['export_no']} → {target_case['export_no']} 이관 확인",
+        key=f'merge_confirm_{case_id}_{target_case_id}',
+    )
+    merge_clicked = merge_cols[2].button(
+        '이관 후 취소',
+        type='secondary',
+        disabled=not merge_confirm,
+        use_container_width=True,
+        key=f'merge_case_{case_id}_{target_case_id}',
+    )
+
+    if merge_clicked:
+        try:
+            result = merge_case_into(case_id, target_case_id)
+            order_service.clear_editable_cases_cache()
+            for folder_case_id in (target_case_id, case_id):
+                try:
+                    folder_service.sync_case_folder(folder_case_id)
+                except OSError:
+                    pass
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            for key in list(st.session_state):
+                if key in {'editable_case_table_v2', 'order_case_id'} or key.endswith(f'_{case_id}'):
+                    st.session_state.pop(key, None)
+            st.session_state['order_cancel_success_message'] = (
+                f"{result['source_export_no']}의 주문 {result['order_count']}행과 "
+                f"입고 상세 {result['shipment_count']}행을 {result['target_export_no']}에 병합하고 "
+                '원본 주문을 취소했습니다.'
+            )
+            st.rerun()
+else:
+    st.info('병합 대상으로 선택할 다른 수출 건이 없습니다.')
 
 st.divider()
 st.markdown('#### 주문 취소')
