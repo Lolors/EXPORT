@@ -1,90 +1,85 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from math import ceil
+from html import escape
 
 import streamlit as st
 
-from services.export_service import active_cases, get_order_items_with_actual
-from utils.formatters import fmt_number
+from services import export_service, overview_service
 
 
 st.title('오버뷰')
-st.caption('국가명을 눌러 해당 국가의 진행 중 주문과 입고상황을 한 번에 확인합니다.')
+st.caption('지금 진행 중인 수출 건과 직접 기록한 확인사항을 한 화면에서 관리합니다.')
 
 st.markdown(
     '''
     <style>
+    .overview-summary {
+        padding: 1rem 1.15rem;
+        border: 1px solid rgba(49, 51, 63, 0.16);
+        border-radius: 16px;
+        margin-bottom: 1rem;
+        background: rgba(247, 249, 252, 0.72);
+    }
+    .overview-summary-number {
+        font-size: 2rem;
+        line-height: 1;
+        font-weight: 850;
+        margin-bottom: 0.35rem;
+    }
+    .overview-summary-label {
+        font-size: 0.95rem;
+        opacity: 0.72;
+    }
     div[data-testid="stExpander"] {
-        width: 40vw;
-        max-width: 40vw;
-        margin-bottom: 0.85rem;
-        border: 1px solid rgba(49, 51, 63, 0.18);
         border-radius: 14px;
         overflow: hidden;
+        margin-bottom: 0.65rem;
     }
-    div[data-testid="stExpander"] summary {
-        font-size: 1.35rem;
-        font-weight: 800;
-        padding-top: 0.9rem;
-        padding-bottom: 0.9rem;
-    }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.overview-order-anchor) {
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-card-anchor) {
         border: 1px solid rgba(49, 51, 63, 0.14);
-        border-radius: 14px;
-        padding: 1rem 1.15rem 1.05rem;
-        margin: 0.35rem 0 0.9rem;
+        border-radius: 13px;
+        padding: 0.85rem 1rem 0.8rem;
+        margin: 0.25rem 0 0.65rem;
     }
-    .overview-order-anchor {
+    .export-card-anchor,
+    .sticky-note-anchor {
         height: 0;
         margin: 0;
         padding: 0;
         overflow: hidden;
     }
-    .overview-buyer {
-        font-size: 1.12rem;
+    .export-card-title {
+        font-size: 1.02rem;
         font-weight: 800;
-        margin-bottom: 0.2rem;
+        margin-bottom: 0.3rem;
     }
-    .overview-export-no {
-        font-size: 0.96rem;
-        font-weight: 700;
-        margin-bottom: 0.65rem;
+    .export-card-detail {
+        font-size: 0.93rem;
         opacity: 0.82;
     }
-    .overview-progress-row {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin: 0.2rem 0 0.75rem;
-    }
-    .overview-progress-track {
-        width: 100%;
-        height: 0.8rem;
-        background: rgba(49, 51, 63, 0.14);
+    .stage-chip {
+        display: inline-flex;
+        padding: 0.22rem 0.55rem;
         border-radius: 999px;
-        overflow: hidden;
-    }
-    .overview-progress-fill {
-        height: 100%;
-        background: #4f8bf9;
-        border-radius: 999px;
-    }
-    .overview-progress-label {
-        min-width: 3.5rem;
-        font-weight: 700;
-        text-align: left;
-    }
-    .overview-order-details {
+        background: #edf3ff;
+        color: #234f9b;
+        font-weight: 750;
+        font-size: 0.86rem;
         margin-top: 0.55rem;
-        padding-top: 0.75rem;
-        border-top: 1px solid rgba(49, 51, 63, 0.12);
     }
-    @media (max-width: 900px) {
-        div[data-testid="stExpander"] {
-            width: 100%;
-            max-width: 100%;
-        }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.sticky-note-anchor) {
+        min-height: 160px;
+        padding: 1rem 1rem 0.7rem;
+        border: 1px solid rgba(133, 105, 20, 0.24);
+        border-radius: 4px 15px 5px 13px;
+        background: linear-gradient(145deg, #fff7ad 0%, #ffef82 100%);
+        box-shadow: 0 6px 16px rgba(81, 63, 7, 0.10);
+        transform: rotate(-0.25deg);
+    }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.sticky-note-anchor) p,
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.sticky-note-anchor) label {
+        color: #4d410c;
     }
     </style>
     ''',
@@ -92,79 +87,116 @@ st.markdown(
 )
 
 
-def render_progress_bar(progress: float) -> None:
-    bounded = min(max(progress, 0.0), 1.0)
-    percent = ceil(bounded * 100) if bounded > 0 else 0
-    st.markdown(
+cases = export_service.active_cases()
+country_groups: dict[str, list] = defaultdict(list)
+for case in cases:
+    country = str(case['country'] or '').strip() or '국가 미입력'
+    country_groups[country].append(case)
+
+country_count = len(country_groups)
+buyer_count = len({str(case['buyer'] or '').strip() or '바이어 미입력' for case in cases})
+transport_count = len({str(case['transport_mode'] or '').strip() or '운송방식 미입력' for case in cases})
+
+summary_cols = st.columns(4)
+summary_values = [
+    ('완료되지 않은 수출 건', f'{len(cases):,}건'),
+    ('진행 국가', f'{country_count:,}개'),
+    ('관련 바이어', f'{buyer_count:,}곳'),
+    ('운송방식', f'{transport_count:,}종'),
+]
+for column, (label, value) in zip(summary_cols, summary_values):
+    column.markdown(
         f'''
-        <div class="overview-progress-row">
-            <div class="overview-progress-track">
-                <div class="overview-progress-fill" style="width: {bounded * 100:.4f}%;"></div>
-            </div>
-            <div class="overview-progress-label">{percent}%</div>
+        <div class="overview-summary">
+            <div class="overview-summary-number">{escape(value)}</div>
+            <div class="overview-summary-label">{escape(label)}</div>
         </div>
         ''',
         unsafe_allow_html=True,
     )
 
-
-def order_status_icon(order_qty: float, received_qty: float) -> str:
-    if order_qty > 0 and received_qty >= order_qty:
-        return '🟢'
-    if received_qty > 0:
-        return '🟡'
-    return '🔴'
-
-
-cases = active_cases()
+st.markdown('### 진행 중 수출 건')
 if not cases:
-    st.info('현재 진행 중인 주문이 없습니다.')
-    st.stop()
+    st.success('현재 완료되지 않은 수출 건이 없습니다.')
+else:
+    st.caption('국가별로 묶어서 바이어·운송방식·현재 단계를 보여줍니다.')
+    for country in sorted(country_groups, key=str.casefold):
+        country_cases = sorted(
+            country_groups[country],
+            key=lambda case: (
+                str(case['stage'] or ''),
+                str(case['buyer'] or ''),
+                str(case['export_no'] or ''),
+            ),
+        )
+        with st.expander(f'{country} · {len(country_cases)}건', expanded=True):
+            for case in country_cases:
+                buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
+                transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
+                export_no = str(case['export_no'] or '').strip() or '수출번호 미입력'
+                stage = str(case['stage'] or '').strip() or '단계 미입력'
+                with st.container():
+                    st.markdown('<div class="export-card-anchor"></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'''
+                        <div class="export-card-title">{escape(buyer)}</div>
+                        <div class="export-card-detail">
+                            수출번호 <b>{escape(export_no)}</b> · 운송방식 <b>{escape(transport)}</b>
+                        </div>
+                        <div class="stage-chip">{escape(stage)}</div>
+                        ''',
+                        unsafe_allow_html=True,
+                    )
 
-country_groups: dict[str, list] = defaultdict(list)
-for case in cases:
-    country = str(case['country'] or '').strip() or '국가 미지정'
-    country_groups[country].append(case)
+st.divider()
+st.markdown('### 내가 체크할 일')
+st.caption('확인할 내용을 포스트잇처럼 추가하고, 끝난 일은 체크하거나 삭제할 수 있습니다.')
 
-for country in sorted(country_groups):
-    country_cases = country_groups[country]
-    with st.expander(f'{country}  ·  {len(country_cases)}건', expanded=False):
-        for case in country_cases:
-            case_id = int(case['id'])
-            orders = get_order_items_with_actual(case_id)
-            order_total = sum(float(order['quantity'] or 0) for order in orders)
-            received_total = sum(float(order['actual_qty'] or 0) for order in orders)
-            progress = received_total / order_total if order_total > 0 else 0.0
+with st.form('overview_add_task_form', clear_on_submit=True):
+    add_cols = st.columns([5, 1])
+    task_text = add_cols[0].text_input(
+        '새 메모',
+        placeholder='예: 일본 바이어 패킹리스트 최종 확인',
+        label_visibility='collapsed',
+    )
+    add_task = add_cols[1].form_submit_button('메모 추가', type='primary', use_container_width=True)
 
-            buyer = str(case['buyer'] or '').strip()
-            if not buyer or buyer.casefold() == '미지정':
-                buyer = '바이어 미지정'
+if add_task:
+    try:
+        overview_service.add_task(task_text)
+    except ValueError as exc:
+        st.warning(str(exc))
+    else:
+        st.rerun()
 
-            export_no = str(case['export_no'] or '').strip() or '수출번호 미지정'
-
+tasks = overview_service.list_tasks()
+if not tasks:
+    st.info('아직 등록한 메모가 없습니다.')
+else:
+    note_columns = st.columns(3)
+    for index, task in enumerate(tasks):
+        column = note_columns[index % 3]
+        with column:
             with st.container():
-                st.markdown('<div class="overview-order-anchor"></div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="overview-buyer">{buyer}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="overview-export-no">{export_no}</div>', unsafe_allow_html=True)
-                render_progress_bar(progress)
-
-                st.markdown('<div class="overview-order-details">', unsafe_allow_html=True)
-                st.markdown('#### 주문목록 및 입고상황')
-                st.caption(
-                    f"주문수량 {fmt_number(order_total)} / 입고수량 {fmt_number(received_total)}"
-                    f" · 단계 {case['stage']}"
+                st.markdown('<div class="sticky-note-anchor"></div>', unsafe_allow_html=True)
+                done = st.checkbox(
+                    '확인 완료',
+                    value=bool(task['done']),
+                    key=f"overview_task_done_{task['id']}",
                 )
-
-                if not orders:
-                    st.caption('주문품목이 아직 입력되지 않았습니다.')
-                else:
-                    for index, order in enumerate(orders, start=1):
-                        order_qty = float(order['quantity'] or 0)
-                        received_qty = float(order['actual_qty'] or 0)
-                        status_icon = order_status_icon(order_qty, received_qty)
-                        st.markdown(
-                            f"{status_icon} {index}. **{order['product_name']}**  "
-                            f"주문 {fmt_number(order_qty)} {order['unit']} · "
-                            f"입고 {fmt_number(received_qty)} {order['unit']}"
-                        )
-                st.markdown('</div>', unsafe_allow_html=True)
+                text_style = 'text-decoration: line-through; opacity: 0.58;' if done else ''
+                st.markdown(
+                    f'<div style="font-size:1.02rem;font-weight:700;line-height:1.55;{text_style}">'
+                    f'{escape(task["text"])}</div>',
+                    unsafe_allow_html=True,
+                )
+                if done != bool(task['done']):
+                    overview_service.set_done(task['id'], done)
+                    st.rerun()
+                if st.button(
+                    '삭제',
+                    key=f"overview_task_delete_{task['id']}",
+                    use_container_width=True,
+                ):
+                    overview_service.delete_task(task['id'])
+                    st.rerun()
