@@ -46,6 +46,7 @@ class PythonSyntaxTests(unittest.TestCase):
             'quantity_text',
             'filter_and_sort_cases',
             'order_products_summary',
+            'packing_summary',
         }
         violations: list[str] = []
         for path in sorted((ROOT / 'views').glob('*.py')):
@@ -59,6 +60,7 @@ class PythonSyntaxTests(unittest.TestCase):
         expected = {
             'dashboard_view_service.py',
             'order_edit_service.py',
+            'packing_view_service.py',
             'shared_document_view_service.py',
             'shipment_intake_view_service.py',
             'statistics_view_service.py',
