@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import streamlit as st
 
 import db
@@ -69,10 +71,34 @@ def check_usb_restore_before_start() -> None:
     st.stop()
 
 
+def initialize_document_filter_defaults() -> None:
+    now = datetime.now()
+    cases = order_service.list_editable_cases()
+    available_years = {
+        int(str(case['actual_ship_date'] or case['created_at'])[:4])
+        for case in cases
+        if str(case['actual_ship_date'] or case['created_at'])[:4].isdigit()
+    }
+    default_year: str | int = now.year if now.year in available_years else '전체'
+
+    available_months = {
+        int(str(case['actual_ship_date'] or case['created_at'])[5:7])
+        for case in cases
+        if str(case['actual_ship_date'] or case['created_at']).startswith(str(now.year))
+        and str(case['actual_ship_date'] or case['created_at'])[5:7].isdigit()
+    }
+    default_month: str | int = now.month if default_year == now.year and now.month in available_months else '전체'
+
+    st.session_state.setdefault('document_case_year', default_year)
+    st.session_state.setdefault('document_case_month', default_month)
+    st.session_state.setdefault('document_case_country', '전체')
+
+
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
     check_usb_restore_before_start()
     db.init_db()
+    initialize_document_filter_defaults()
 
     st.markdown(
         '''
