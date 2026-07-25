@@ -8,7 +8,6 @@ from pathlib import Path
 
 import db
 from services import usb_storage_service
-from services.workbook_service import write_case_workbook
 from utils.dates import now_text, parse_date
 from utils.formatters import sanitize_folder_part
 
@@ -271,12 +270,19 @@ def _workbook_needs_update(case_id: int, folder: Path) -> bool:
     return max(timestamps) > workbook_time
 
 
+def _write_case_workbook(case_id: int, folder: Path) -> None:
+    # openpyxl is expensive to import, so load it only when a workbook is actually rebuilt.
+    from services.workbook_service import write_case_workbook
+
+    write_case_workbook(case_id, folder)
+
+
 def _prepare_folder(case, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     write_case_marker(folder, case)
     ensure_category_folders(folder)
     if _workbook_needs_update(int(case['id']), folder):
-        write_case_workbook(int(case['id']), folder)
+        _write_case_workbook(int(case['id']), folder)
     return folder
 
 
