@@ -24,7 +24,7 @@ PAGES = {
     '': [
         st.Page('views/오버뷰.py', title='대시보드', icon='📊', default=True),
         st.Page('views/수출_주문_입력_및_수정.py', title='주문 입력', icon='📝'),
-        st.Page('views/주문_검색_및_수정_v2.py', title='주문 검색 및 수정', icon='🔎'),
+        st.Page('views/주문_검색_및_수정.py', title='주문 검색 및 수정', icon='🔎'),
         st.Page('views/실출고_입력.py', title='수출대기 입고', icon='📦'),
         st.Page('views/박스_패킹.py', title='박스 패킹', icon='📦'),
         st.Page('views/국내배송.py', title='국내배송', icon='🚚'),
