@@ -7,10 +7,15 @@ import streamlit as st
 from services import export_service, overview_service
 
 
+STAGE_LABELS = {
+    '출고 대기': '패킹 대기',
+}
+
 STAGE_CLASS = {
     '주문 접수': 'stage-order',
     '제품 준비': 'stage-product',
     '출고 대기': 'stage-shipment',
+    '패킹 대기': 'stage-shipment',
     '패킹 완료': 'stage-packed',
     '완료': 'stage-complete',
 }
@@ -42,6 +47,18 @@ st.markdown(
         line-height: 1;
         font-weight: 850;
     }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-table-anchor) {
+        width: 40vw;
+        max-width: 40vw;
+    }
+    .export-table-anchor,
+    .todo-section-anchor,
+    .sticky-note-anchor {
+        height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
     .export-table-wrap {
         width: 100%;
         overflow-x: auto;
@@ -51,7 +68,7 @@ st.markdown(
     .export-table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 680px;
+        min-width: 760px;
     }
     .export-table th {
         padding: 0.78rem 0.9rem;
@@ -60,11 +77,13 @@ st.markdown(
         font-weight: 800;
         background: rgba(247, 249, 252, 0.96);
         border-bottom: 1px solid rgba(49, 51, 63, 0.14);
+        white-space: nowrap;
     }
     .export-table td {
         padding: 0.78rem 0.9rem;
         border-bottom: 1px solid rgba(49, 51, 63, 0.09);
         vertical-align: middle;
+        white-space: nowrap;
     }
     .export-table tr:last-child td {
         border-bottom: 0;
@@ -106,13 +125,6 @@ st.markdown(
         width: 40vw;
         max-width: 40vw;
     }
-    .todo-section-anchor,
-    .sticky-note-anchor {
-        height: 0;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-    }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.sticky-note-anchor) {
         min-height: 160px;
         padding: 1rem 1rem 0.7rem;
@@ -127,6 +139,7 @@ st.markdown(
         color: #4d410c;
     }
     @media (max-width: 900px) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-table-anchor),
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.todo-section-anchor) {
             width: 100%;
             max-width: 100%;
@@ -143,6 +156,7 @@ cases = sorted(
         str(case['country'] or '').casefold(),
         str(case['buyer'] or '').casefold(),
         str(case['transport_mode'] or '').casefold(),
+        str(case['export_no'] or '').casefold(),
     ),
 )
 
@@ -165,39 +179,45 @@ else:
         country = str(case['country'] or '').strip() or '국가 미입력'
         buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
         transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
-        stage = str(case['stage'] or '').strip() or '단계 미입력'
+        export_no = str(case['export_no'] or '').strip() or '수출번호 미입력'
+        raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
+        stage = STAGE_LABELS.get(raw_stage, raw_stage)
         stage_class = STAGE_CLASS.get(stage, 'stage-default')
         rows.append(
             '<tr>'
             f'<td>{escape(country)}</td>'
             f'<td>{escape(buyer)}</td>'
             f'<td>{escape(transport)}</td>'
+            f'<td>{escape(export_no)}</td>'
             f'<td><span class="stage-badge {stage_class}">{escape(stage)}</span></td>'
             '</tr>'
         )
 
-    st.markdown(
-        '''
-        <div class="export-table-wrap">
-            <table class="export-table">
-                <thead>
-                    <tr>
-                        <th>국가</th>
-                        <th>바이어</th>
-                        <th>운송방식</th>
-                        <th>현재 단계</th>
-                    </tr>
-                </thead>
-                <tbody>
-        '''
-        + ''.join(rows)
-        + '''
-                </tbody>
-            </table>
-        </div>
-        ''',
-        unsafe_allow_html=True,
-    )
+    with st.container():
+        st.markdown('<div class="export-table-anchor"></div>', unsafe_allow_html=True)
+        st.markdown(
+            '''
+            <div class="export-table-wrap">
+                <table class="export-table">
+                    <thead>
+                        <tr>
+                            <th>국가</th>
+                            <th>바이어</th>
+                            <th>운송방식</th>
+                            <th>수출번호</th>
+                            <th>현재 단계</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            + ''.join(rows)
+            + '''
+                    </tbody>
+                </table>
+            </div>
+            ''',
+            unsafe_allow_html=True,
+        )
 
 st.divider()
 with st.container():
