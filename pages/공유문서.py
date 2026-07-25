@@ -4,6 +4,7 @@ import html
 import os
 import re
 import subprocess
+import time
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -268,7 +269,10 @@ def open_selected_path(path: Path, label: str) -> None:
 st.title('공유용 자료')
 st.caption('수출 건을 선택한 뒤 필요한 자료를 출력하거나 관련 폴더를 열 수 있습니다.')
 
+page_started = time.perf_counter()
+case_load_started = time.perf_counter()
 cases = order_service.list_editable_cases()
+case_load_ms = (time.perf_counter() - case_load_started) * 1000
 if not cases:
     st.info('표시할 수출 건이 없습니다.')
     st.stop()
@@ -347,28 +351,8 @@ if not filtered_cases:
     st.warning('조건에 맞는 수출 건이 없습니다.')
     st.stop()
 
-page_size = 50
-total_case_count = len(filtered_cases)
-page_count = max(1, (total_case_count + page_size - 1) // page_size)
-page_filter_signature = (
-    f"{selected_year}_{selected_month}_{selected_country}_"
-    f"{product_query}_{total_case_count}"
-)
-selected_page = st.selectbox(
-    '목록 페이지',
-    list(range(1, page_count + 1)),
-    format_func=lambda page: f'{page} / {page_count}',
-    key=f'document_case_page_{page_filter_signature}',
-)
-page_start = (int(selected_page) - 1) * page_size
-page_cases = filtered_cases[page_start:page_start + page_size]
-st.caption(
-    f'검색 결과 {total_case_count:,}건 · '
-    f'{page_start + 1:,}~{page_start + len(page_cases):,}건 표시'
-)
-
 selection_rows = []
-for case in page_cases:
+for case in filtered_cases:
     selection_rows.append(
         {
             '_case_id': int(case['id']),
@@ -383,6 +367,7 @@ for case in page_cases:
     )
 
 selection_df = pd.DataFrame(selection_rows)
+table_render_started = time.perf_counter()
 selected_rows = st.dataframe(
     selection_df,
     hide_index=True,
@@ -399,7 +384,13 @@ selected_rows = st.dataframe(
         '단계': st.column_config.TextColumn('단계'),
         '주문제품': st.column_config.TextColumn('주문제품'),
     },
-    key=f'document_case_table_{page_filter_signature}_{selected_page}',
+    key='document_case_table',
+)
+table_render_ms = (time.perf_counter() - table_render_started) * 1000
+server_total_ms = (time.perf_counter() - page_started) * 1000
+st.caption(
+    f'로딩 진단 · 목록 {case_load_ms:.0f}ms · '
+    f'표 준비 {table_render_ms:.0f}ms · 서버 합계 {server_total_ms:.0f}ms'
 )
 
 selected_indexes = selected_rows.selection.rows
