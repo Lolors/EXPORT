@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from html import escape
+
 import pandas as pd
 import streamlit as st
 
@@ -24,7 +26,8 @@ def _safe_number(value: object, default: float = 0.0) -> float:
         return default
 
 
-def _duplicate_rows(cleaned: pd.DataFrame) -> tuple[list[list[str]], list[dict[str, object]]]:
+def find_duplicate_rows(cleaned: pd.DataFrame) -> list[dict[str, object]]:
+    """Return every editor row whose normalized product name appears more than once."""
     normalized_names: dict[str, list[tuple[int, str]]] = {}
 
     for position, (_, row) in enumerate(cleaned.iterrows(), start=1):
@@ -37,34 +40,51 @@ def _duplicate_rows(cleaned: pd.DataFrame) -> tuple[list[list[str]], list[dict[s
             key = name.casefold()
         normalized_names.setdefault(key, []).append((position, name))
 
-    duplicate_groups = [items for items in normalized_names.values() if len(items) > 1]
-    duplicate_names = [[name for _, name in items] for items in duplicate_groups]
-    duplicate_rows = [
+    return [
         {'행': position, '제품명': name}
-        for items in duplicate_groups
+        for items in normalized_names.values()
+        if len(items) > 1
         for position, name in items
     ]
-    return duplicate_names, duplicate_rows
 
 
-def _show_duplicate_rows(rows: list[dict[str, object]]) -> None:
+def render_duplicate_notice(rows: list[dict[str, object]]) -> None:
+    """Show compact duplicate feedback directly beneath the order editor."""
     if not rows:
         return
 
-    duplicate_frame = pd.DataFrame(rows)
-    styled = duplicate_frame.style.map(
-        lambda _: 'background-color: #ffd6e7; color: #7a173f; font-weight: 600;',
-        subset=['제품명'],
+    grouped: dict[str, list[int]] = {}
+    for row in rows:
+        name = _clean_text(row.get('제품명'))
+        position = int(row.get('행', 0))
+        grouped.setdefault(name, []).append(position)
+
+    chips = ''.join(
+        (
+            '<span style="display:inline-flex;align-items:center;gap:0.35rem;'
+            'padding:0.28rem 0.55rem;margin:0.18rem 0.22rem 0 0;'
+            'border:1px solid #f3a8c5;border-radius:999px;'
+            'background:#ffd6e7;color:#7a173f;font-weight:650;">'
+            f'{escape(name)} · {", ".join(f"{position}행" for position in positions)}'
+            '</span>'
+        )
+        for name, positions in grouped.items()
     )
-    st.markdown('**중복된 주문 행**')
-    st.dataframe(
-        styled,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            '행': st.column_config.NumberColumn('행', format='%d', width='small'),
-            '제품명': st.column_config.TextColumn('제품명'),
-        },
+
+    st.markdown(
+        (
+            '<div style="margin:0.35rem 0 0.65rem;padding:0.72rem 0.82rem;'
+            'border:1px solid #f3a8c5;border-radius:0.65rem;background:#fff0f6;">'
+            '<div style="color:#7a173f;font-weight:750;margin-bottom:0.28rem;">'
+            '같은 제품명이 주문 목록에 중복되어 있습니다.'
+            '</div>'
+            '<div style="color:#8f3157;font-size:0.9rem;margin-bottom:0.25rem;">'
+            '아래 제품명 셀의 행을 합치거나 제품명을 구분한 뒤 저장하세요.'
+            '</div>'
+            f'<div>{chips}</div>'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
     )
 
 
@@ -79,14 +99,9 @@ def save_order_items(case_id: int, edited) -> None:
     if '수량' in cleaned.columns:
         cleaned['수량'] = cleaned['수량'].map(lambda value: _safe_number(value, 0.0))
 
-    duplicate_names, duplicate_rows = _duplicate_rows(cleaned)
-    if duplicate_names:
-        duplicate_text = ', '.join(' / '.join(names) for names in duplicate_names)
-        st.warning(
-            '같은 제품명이 주문 목록에 중복되어 있습니다. '
-            f'중복 행을 합치거나 제품명을 구분한 뒤 다시 저장하세요: {duplicate_text}'
-        )
-        _show_duplicate_rows(duplicate_rows)
+    duplicate_rows = find_duplicate_rows(cleaned)
+    if duplicate_rows:
+        render_duplicate_notice(duplicate_rows)
         st.stop()
 
     _original_save_order_items(case_id, cleaned)
