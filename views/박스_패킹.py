@@ -529,4 +529,4 @@ def render_ctn_management() -> None:
 
 render_ctn_management()
 
-st.caption(f'현재 미패킹 실제 출고 행: {unpacked_count}개')
+st.caption(f"현재 미패킹 실제 출고 행: {summary['unpacked_count']}개")
