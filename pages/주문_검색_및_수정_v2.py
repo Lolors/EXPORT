@@ -123,9 +123,11 @@ if not cases:
     st.info('수정할 수출 건이 없습니다.'); st.stop()
 
 cols=st.columns([1.5,1.5,3,4])
-years=sorted({int(txt(c['actual_ship_date'])[:4]) for c in cases if txt(c['actual_ship_date'])[:4].isdigit()},reverse=True)
-year=cols[0].selectbox('연도',['전체']+years)
-month=cols[1].selectbox('월',['전체']+list(range(1,13)))
+today=date.today()
+years=sorted({today.year, *{int(txt(c['actual_ship_date'])[:4]) for c in cases if txt(c['actual_ship_date'])[:4].isdigit()}},reverse=True)
+year_options=['전체']+years
+year=cols[0].selectbox('연도',year_options,index=year_options.index(today.year))
+month=cols[1].selectbox('월',['전체']+list(range(1,13)),index=today.month)
 country_filter=cols[2].selectbox('국가',['전체']+sorted({txt(c['country']) for c in cases if txt(c['country'])}))
 query=cols[3].text_input('제품명 검색').strip().casefold()
 filtered=[]
