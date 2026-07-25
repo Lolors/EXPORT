@@ -4,7 +4,13 @@ import streamlit as st
 
 import db
 from config import APP_ICON, APP_LAYOUT, APP_TITLE
-from services import order_save_guard, packing_service, shipment_service
+from services import (
+    order_save_guard,
+    order_service,
+    packing_service,
+    product_name_match_service,
+    shipment_service,
+)
 
 PAGES = {
     '': [
@@ -25,6 +31,7 @@ def main() -> None:
     db.init_db()
 
     # 주문 수정 저장 전 빈 매입가를 0으로 정리하고 중복 제품명을 검사한다.
+    order_service.normalize_product_name = product_name_match_service.normalize_for_match
     order_save_guard.install()
 
     # 수출대기 입고와 박스 패킹은 반드시 같은 현재 출고행 목록을 사용한다.
