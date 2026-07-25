@@ -3,6 +3,9 @@ from __future__ import annotations
 import streamlit as st
 
 
+UNIT_OPTIONS = ['BOX', 'PK', 'EA']
+
+
 def order_editor(dataframe, *, key: str, dynamic: bool = True):
     return st.data_editor(
         dataframe,
@@ -17,7 +20,13 @@ def order_editor(dataframe, *, key: str, dynamic: bool = True):
             '행번호': st.column_config.NumberColumn('행', format='%d', width='small'),
             '제품명': st.column_config.TextColumn('제품명', required=True),
             '수량': st.column_config.NumberColumn('수량', min_value=0.0, step=1.0, width=30),
-            '단위': st.column_config.TextColumn('단위', width=30),
+            '단위': st.column_config.SelectboxColumn(
+                '단위',
+                options=UNIT_OPTIONS,
+                default='EA',
+                required=True,
+                width=30,
+            ),
             '매입가': st.column_config.NumberColumn(
                 '매입가',
                 min_value=0.0,
@@ -43,7 +52,12 @@ def historical_order_editor(dataframe, *, key: str):
             '제조번호': st.column_config.TextColumn('제조번호'),
             '유효기간': st.column_config.TextColumn('유효기간', help='예: 2028-06-30'),
             '수량': st.column_config.NumberColumn('수량', min_value=0.0, step=1.0),
-            '단위': st.column_config.TextColumn('단위'),
+            '단위': st.column_config.SelectboxColumn(
+                '단위',
+                options=UNIT_OPTIONS,
+                default='EA',
+                required=True,
+            ),
             '매입가': st.column_config.NumberColumn(
                 '매입가',
                 min_value=0.0,
