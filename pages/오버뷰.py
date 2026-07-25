@@ -27,27 +27,8 @@ st.caption('지금 진행 중인 수출 건과 직접 기록한 확인사항을 
 st.markdown(
     '''
     <style>
-    .dashboard-summary {
-        display: inline-flex;
-        align-items: baseline;
-        gap: 0.55rem;
-        padding: 0.95rem 1.15rem;
-        border: 1px solid rgba(49, 51, 63, 0.16);
-        border-radius: 16px;
-        margin-bottom: 1rem;
-        background: rgba(247, 249, 252, 0.72);
-    }
-    .dashboard-summary-label {
-        font-size: 1rem;
-        font-weight: 700;
-        opacity: 0.76;
-    }
-    .dashboard-summary-value {
-        font-size: 1.8rem;
-        line-height: 1;
-        font-weight: 850;
-    }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-table-anchor) {
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-table-anchor),
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.todo-section-anchor) {
         width: 40vw;
         max-width: 40vw;
     }
@@ -68,7 +49,7 @@ st.markdown(
     .export-table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 760px;
+        min-width: 800px;
     }
     .export-table th {
         padding: 0.78rem 0.9rem;
@@ -88,6 +69,12 @@ st.markdown(
     .export-table tr:last-child td {
         border-bottom: 0;
     }
+    .row-number {
+        width: 3rem;
+        text-align: center;
+        font-weight: 750;
+        color: #667085;
+    }
     .stage-badge {
         display: inline-flex;
         align-items: center;
@@ -97,34 +84,12 @@ st.markdown(
         font-weight: 800;
         white-space: nowrap;
     }
-    .stage-order {
-        background: #eef1f5;
-        color: #46505f;
-    }
-    .stage-product {
-        background: #fff2cc;
-        color: #7a5a00;
-    }
-    .stage-shipment {
-        background: #dff3ff;
-        color: #075f85;
-    }
-    .stage-packed {
-        background: #e7e0ff;
-        color: #5637a5;
-    }
-    .stage-complete {
-        background: #dff5e7;
-        color: #17683a;
-    }
-    .stage-default {
-        background: #f1f1f1;
-        color: #555;
-    }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.todo-section-anchor) {
-        width: 40vw;
-        max-width: 40vw;
-    }
+    .stage-order { background: #eef1f5; color: #46505f; }
+    .stage-product { background: #fff2cc; color: #7a5a00; }
+    .stage-shipment { background: #dff3ff; color: #075f85; }
+    .stage-packed { background: #e7e0ff; color: #5637a5; }
+    .stage-complete { background: #dff5e7; color: #17683a; }
+    .stage-default { background: #f1f1f1; color: #555; }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.sticky-note-anchor) {
         min-height: 160px;
         padding: 1rem 1rem 0.7rem;
@@ -160,22 +125,12 @@ cases = sorted(
     ),
 )
 
-st.markdown(
-    f'''
-    <div class="dashboard-summary">
-        <span class="dashboard-summary-label">진행중인 수출</span>
-        <span class="dashboard-summary-value">{len(cases):,}건</span>
-    </div>
-    ''',
-    unsafe_allow_html=True,
-)
-
 st.markdown('### 진행 중 수출 건')
 if not cases:
     st.success('현재 진행 중인 수출 건이 없습니다.')
 else:
     rows = []
-    for case in cases:
+    for index, case in enumerate(cases, start=1):
         country = str(case['country'] or '').strip() or '국가 미입력'
         buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
         transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
@@ -185,6 +140,7 @@ else:
         stage_class = STAGE_CLASS.get(stage, 'stage-default')
         rows.append(
             '<tr>'
+            f'<td class="row-number">{index}</td>'
             f'<td>{escape(country)}</td>'
             f'<td>{escape(buyer)}</td>'
             f'<td>{escape(transport)}</td>'
@@ -201,6 +157,7 @@ else:
                 <table class="export-table">
                     <thead>
                         <tr>
+                            <th>구분</th>
                             <th>국가</th>
                             <th>바이어</th>
                             <th>운송방식</th>
