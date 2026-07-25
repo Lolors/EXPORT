@@ -123,6 +123,7 @@ def create_order_items(
                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
                 (case_id, order_id, '', '', product_name, '', '', quantity, None, now, now),
             )
+    clear_editable_cases_cache()
 
 
 def create_historical_case_details(
@@ -182,6 +183,7 @@ def create_historical_case_details(
             case_id,
         ),
     )
+    clear_editable_cases_cache()
 
 
 def find_similar_purchase_prices(product_name: str, limit: int = 8):
