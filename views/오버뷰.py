@@ -84,7 +84,7 @@ else:
                 '바이어': str(case['buyer'] or '').strip() or '바이어 미입력',
                 '운송방식': str(case['transport_mode'] or '').strip() or '운송방식 미입력',
                 '수출번호': str(case['export_no'] or '').strip() or '수출번호 미입력',
-                '현재 단계': STAGE_LABELS.get(raw_stage, raw_stage),
+                '현재 단계': stage_label(raw_stage),
                 '주문제품': _order_products_summary(int(case['id'])),
             }
         )
