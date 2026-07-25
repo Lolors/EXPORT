@@ -259,7 +259,6 @@ def save_box_preset(name: str, length: float, width: float, height: float, weigh
     presets[clean_name] = _normalize_box_values(length, width, height, weight)
     db.set_setting(PRESET_SETTING_KEY, json.dumps(presets, ensure_ascii=False))
     list_box_presets.clear()
-    list_box_presets.clear()
 
 
 @db.backup_batch
@@ -267,6 +266,7 @@ def delete_box_preset(name: str) -> None:
     presets = list_box_presets()
     presets.pop(name, None)
     db.set_setting(PRESET_SETTING_KEY, json.dumps(presets, ensure_ascii=False))
+    list_box_presets.clear()
 
 
 @st.cache_data(persist='disk', show_spinner=False)
