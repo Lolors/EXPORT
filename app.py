@@ -73,24 +73,8 @@ def check_usb_restore_before_start() -> None:
 
 def initialize_document_filter_defaults() -> None:
     now = datetime.now()
-    cases = order_service.list_editable_cases()
-    ship_dates = [str(case['actual_ship_date'] or '').strip() for case in cases]
-    available_years = {
-        int(ship_date[:4])
-        for ship_date in ship_dates
-        if ship_date[:4].isdigit()
-    }
-    default_year: str | int = now.year if now.year in available_years else '전체'
-
-    available_months = {
-        int(ship_date[5:7])
-        for ship_date in ship_dates
-        if ship_date.startswith(str(now.year)) and ship_date[5:7].isdigit()
-    }
-    default_month: str | int = now.month if default_year == now.year and now.month in available_months else '전체'
-
-    st.session_state.setdefault('document_case_year', default_year)
-    st.session_state.setdefault('document_case_month', default_month)
+    st.session_state.setdefault('document_case_year', now.year)
+    st.session_state.setdefault('document_case_month', now.month)
     st.session_state.setdefault('document_case_country', '전체')
 
 
