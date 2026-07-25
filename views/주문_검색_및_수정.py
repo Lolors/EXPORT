@@ -57,7 +57,10 @@ st.divider()
 st.markdown('#### 다른 주문으로 이관·병합')
 st.caption('현재 수출 건의 주문목록, 연결된 입고 상세정보와 CTN 정보를 대상 수출번호의 기존 내용에 추가한 뒤 현재 건을 취소합니다.')
 
-merge_targets = [candidate for candidate in cases if int(candidate['id']) != case_id]
+merge_targets = [
+    candidate for candidate in cases
+    if int(candidate['id']) != case_id and candidate['case_type'] == case['case_type']
+]
 if merge_targets:
     target_by_label = {
         (
