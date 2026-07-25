@@ -40,7 +40,13 @@ def summarize_product_names(raw_names: object) -> str:
     names = [name.strip() for name in re.split(r'[,\n]+', str(raw_names or '')) if name.strip()]
     if len(names) <= 2:
         return ', '.join(names)
-    return f"{', '.join(names[:2])} ~ 외 {len(names) - 2}품목"
+    return f"{', '.join(names[:2])} 외 {len(names) - 2}품목"
+
+
+def quantity_with_unit(row) -> str:
+    quantity = fmt_number(row['requested_qty'])
+    unit = str(row.get('unit', '') or '').strip() if isinstance(row, dict) else str(row['unit'] or '').strip()
+    return f'{quantity} {unit}'.strip()
 
 
 def render_document(case, packed, actual_rows) -> None:
@@ -89,7 +95,6 @@ def render_document(case, packed, actual_rows) -> None:
             f'<td class="center"><b>{fmt_number(total_weight)} kg</b></td><td></td></tr>'
         )
         table_header = '<tr><th>CTN No.</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>GW (kg)</th><th>CTN 사이즈</th></tr>'
-        section_title = 'PACKING LIST'
         first_summary = f'{len({row["box_no"] for row in packed})} CTN'
         first_label = '총 CTN 수'
         display_rows = packed
@@ -98,11 +103,10 @@ def render_document(case, packed, actual_rows) -> None:
             rows_html.append('<tr>')
             for value in [row['business_unit'], row['product_name'], row['lot_no'], row['expiry_date']]:
                 rows_html.append(f'<td>{html.escape(str(value or ""))}</td>')
-            rows_html.append(f'<td class="right">{fmt_number(row["requested_qty"])}</td></tr>')
+            rows_html.append(f'<td class="right">{quantity_with_unit(row)}</td></tr>')
         if not rows_html:
-            rows_html.append('<tr><td colspan="5" class="empty">입력된 실제 출고제품이 없습니다.</td></tr>')
+            rows_html.append('<tr><td colspan="5" class="empty">입력된 출고제품이 없습니다.</td></tr>')
         table_header = '<tr><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr>'
-        section_title = 'PACKING LIST'
         first_summary = '패킹 전'
         first_label = '진행 상태'
         display_rows = actual_rows
@@ -113,8 +117,7 @@ def render_document(case, packed, actual_rows) -> None:
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{{box-sizing:border-box}} @page{{size:A4 portrait;margin:6mm}}
-html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif}}
-body{{padding:8px}}
+html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif}} body{{padding:8px}}
 .toolbar{{max-width:1180px;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:8px;background:#173b5f;color:#fff;font-weight:700;padding:10px 18px;cursor:pointer}}
 .document{{max-width:1180px;margin:auto;background:#fff;border:1px solid #d8dee8;border-radius:14px;overflow:hidden;box-shadow:0 12px 34px rgba(30,45,70,.08)}}
 .header{{padding:30px 38px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:18px}} .title{{font-size:28px;font-weight:800}} .sub{{font-size:12px;opacity:.8}} .number{{text-align:right}}
@@ -123,7 +126,7 @@ body{{padding:8px}}
 .summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:19px}} .card{{border:1px solid #dce3eb;border-radius:8px;padding:12px 14px;background:#f8fafc}} .card b{{font-size:18px;color:#214f76}}
 .wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:8px}} table{{border-collapse:collapse;width:100%;min-width:{'900px' if has_packing else '680px'};font-size:10.5px}} th{{background:#294f71;color:#fff;padding:8px 9px;text-align:left}} td{{padding:8px 9px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .empty{{text-align:center;color:#8993a0;padding:24px}} .total-row td{{background:#eef3f8;font-weight:700}}
 .note-box{{margin-top:15px;padding:11px 13px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:10.5px}}
-@media print{{html,body{{width:210mm;min-height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:198mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}} .header{{padding:25px 30px}} .title{{font-size:25px}} .body{{padding:22px 30px 24px}} .grid{{margin-bottom:14px}} .cell{{padding:9px 11px}} .summary{{margin-bottom:15px}} .card{{padding:10px 12px}} .card b{{font-size:16px}} .section{{margin-bottom:6px}} .wrap{{overflow:visible}} table{{min-width:0;width:100%;height:auto;font-size:9.5px;table-layout:auto}} thead,tbody,tr{{height:auto}} th{{padding:6px 7px}} td{{padding:6px 7px;line-height:1.35}} .note-box{{margin-top:10px;padding:8px 10px}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+@media print{{html,body{{width:210mm;min-height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:198mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}} .header{{padding:25px 30px}} .title{{font-size:25px}} .body{{padding:22px 30px 24px}} .grid{{margin-bottom:14px}} .cell{{padding:9px 11px}} .summary{{margin-bottom:15px}} .card{{padding:10px 12px}} .card b{{font-size:16px}} .section{{margin-bottom:6px}} .wrap{{overflow:visible}} table{{min-width:0;width:100%;font-size:9.5px;table-layout:auto}} th{{padding:6px 7px}} td{{padding:6px 7px;line-height:1.35}} .note-box{{margin-top:10px;padding:8px 10px}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b></div></div>
@@ -138,9 +141,52 @@ body{{padding:8px}}
 <div class="cell"><div class="label">수하인명</div><div class="value">{html.escape(case['consignee_name'] or '-')}</div></div>
 <div class="cell"><div class="label">수하인주소</div><div class="value">{html.escape(case['consignee_address'] or '-')}</div></div></div>
 <div class="section">{'PACKING SUMMARY' if has_packing else 'SHIPPING SUMMARY'}</div><div class="summary"><div class="card"><small>{first_label}</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
-<div class="section">{section_title}</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}</div></div></body></html>'''
-    visible_rows = len(display_rows)
-    components.html(document, height=min(1800, max(850, 760 + visible_rows * 44)), scrolling=True)
+<div class="section">PACKING LIST</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}</div></div></body></html>'''
+    components.html(document, height=min(1800, max(850, 760 + len(display_rows) * 44)), scrolling=True)
+
+
+def render_shipment_product_list(case, actual_rows) -> None:
+    grouped: dict[str, list] = {}
+    for row in actual_rows:
+        grouped.setdefault(str(row['product_name'] or '').strip() or '-', []).append(row)
+
+    rows_html: list[str] = []
+    for product_name, rows in grouped.items():
+        rowspan = len(rows)
+        for index, row in enumerate(rows):
+            rows_html.append('<tr>')
+            rows_html.append(f'<td class="center">{html.escape(str(row["business_unit"] or "-"))}</td>')
+            if index == 0:
+                rows_html.append(f'<td rowspan="{rowspan}" class="product merged">{html.escape(product_name)}</td>')
+            rows_html.append(f'<td class="center lot">{html.escape(str(row["lot_no"] or "-"))}</td>')
+            rows_html.append(f'<td class="center expiry">{html.escape(str(row["expiry_date"] or "-"))}</td>')
+            rows_html.append(f'<td class="right qty">{html.escape(quantity_with_unit(row))}</td></tr>')
+    if not rows_html:
+        rows_html.append('<tr><td colspan="5" class="empty">입력된 출고제품이 없습니다.</td></tr>')
+
+    item_count = len(grouped)
+    total_lines = len(actual_rows)
+    document = f'''<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{{box-sizing:border-box}} @page{{size:A4 portrait;margin:10mm}}
+html,body{{margin:0;padding:0;background:#eef2f6;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif}} body{{padding:10px}}
+.toolbar{{max-width:900px;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:7px;background:#173b5f;color:white;font-weight:700;padding:9px 16px;cursor:pointer}}
+.sheet{{max-width:900px;margin:auto;background:white;border:1px solid #d7dee7;box-shadow:0 10px 28px rgba(30,45,70,.08)}}
+.header{{padding:23px 28px 19px;border-bottom:3px solid #234f75;display:flex;justify-content:space-between;gap:20px;align-items:flex-end}} .title{{font-size:23px;font-weight:850;color:#173b5f;letter-spacing:.02em}} .subtitle{{font-size:10px;color:#758294;margin-top:3px;letter-spacing:.12em}} .export-no{{text-align:right;font-size:10px;color:#758294}} .export-no b{{display:block;font-size:14px;color:#172033;margin-top:3px}}
+.meta{{display:grid;grid-template-columns:repeat(4,1fr);margin:17px 28px 16px;border:1px solid #dce3eb}} .meta div{{padding:8px 10px;border-right:1px solid #e3e8ee}} .meta div:last-child{{border-right:0}} .label{{font-size:8.5px;color:#7c8797}} .value{{font-size:11px;font-weight:700;margin-top:2px;word-break:break-word}}
+.content{{padding:0 28px 23px}} .summary{{font-size:9.5px;color:#697586;text-align:right;margin-bottom:6px}}
+table{{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.7px;border:1px solid #cfd8e2}} col.destination{{width:14%}} col.product{{width:35%}} col.lot{{width:19%}} col.expiry{{width:16%}} col.qty{{width:16%}}
+th{{background:#294f71;color:white;padding:7px 6px;text-align:center;font-weight:750}} td{{padding:6px 7px;border-right:1px solid #dce3ea;border-bottom:1px solid #dce3ea;vertical-align:middle;line-height:1.35}} .center{{text-align:center}} .right{{text-align:right}} .product{{white-space:normal;overflow-wrap:anywhere;word-break:keep-all;font-weight:700}} .merged{{background:#f5f8fb}} .lot,.expiry{{white-space:nowrap}} .qty{{white-space:nowrap;font-weight:650}} .empty{{text-align:center;color:#8993a0;padding:24px}}
+.notice{{padding:12px 28px 18px;font-size:8.7px;color:#788493;border-top:1px solid #e0e6ed}}
+@media print{{html,body{{width:210mm;min-height:297mm;background:white;padding:0}} .toolbar{{display:none!important}} .sheet{{width:190mm;max-width:none;margin:0 auto;border:0;box-shadow:none}} .header{{padding:15px 18px 13px}} .title{{font-size:20px}} .meta{{margin:12px 18px}} .content{{padding:0 18px 15px}} table{{font-size:8.8px}} th{{padding:5px}} td{{padding:5px 6px}} .notice{{padding:9px 18px 0}} th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+</style></head><body>
+<div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
+<div class="sheet"><div class="header"><div><div class="title">출고 예정 제품 리스트</div><div class="subtitle">SHIPMENT PRODUCT LIST</div></div><div class="export-no">EXPORT NO.<b>{html.escape(case['export_no'] or '-')}</b></div></div>
+<div class="meta"><div><span class="label">국가 / Country</span><div class="value">{html.escape(case['country'] or '-')}</div></div><div><span class="label">바이어 / Buyer</span><div class="value">{html.escape(case['buyer'] or '-')}</div></div><div><span class="label">운송방식 / Transport</span><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div><div><span class="label">작성일 / Date</span><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
+<div class="content"><div class="summary">총 {item_count}품목 · 제조번호 기준 {total_lines}행</div><table><colgroup><col class="destination"><col class="product"><col class="lot"><col class="expiry"><col class="qty"></colgroup><thead><tr><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr></thead><tbody>{''.join(rows_html)}</tbody></table></div>
+<div class="notice">본 문서는 패킹 완료 전 작성된 출고 예정 제품 목록이며, 최종 수량 및 패킹 정보는 변경될 수 있습니다.</div></div></body></html>'''
+    components.html(document, height=min(1800, max(700, 500 + len(actual_rows) * 38)), scrolling=True)
 
 
 def open_selected_path(path: Path, label: str) -> None:
@@ -150,8 +196,8 @@ def open_selected_path(path: Path, label: str) -> None:
         st.error(f'{label}을(를) 열 수 없습니다: {exc}')
 
 
-st.title('공유문서')
-st.caption('검색 결과에서 출력하거나 폴더를 열 수출 건 한 건을 선택하세요.')
+st.title('공유용 자료')
+st.caption('수출 건을 선택한 뒤 필요한 자료를 출력하거나 관련 폴더를 열 수 있습니다.')
 
 cases = order_service.list_editable_cases()
 if not cases:
@@ -197,7 +243,7 @@ if not filtered_cases:
 selection_rows = []
 for case in filtered_cases:
     raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
-    selection_rows.append({'_case_id': int(case['id']), '등록일자': raw_date[:10], '수출번호': case['export_no'], '국가': case['country'], '바이어': case['buyer'] or '', '운송방식': case['transport_mode'], '단계': case['stage'], '주문제품': summarize_product_names(case['product_names'])})
+    selection_rows.append({'_case_id': int(case['id']), '등록일자': raw_date[:10], '수출번호': case['export_no'], '국가': case['country'], '바이어': case['buyer'] or '', '운송방식': case['transport_mode'], '단계': display_stage(case['stage']), '주문제품': summarize_product_names(case['product_names'])})
 
 selection_df = pd.DataFrame(selection_rows)
 selected_rows = st.dataframe(
@@ -213,12 +259,15 @@ selected_rows = st.dataframe(
 selected_indexes = selected_rows.selection.rows
 if not selected_indexes:
     st.session_state.pop('document_case_id', None)
-    st.info('공유문서를 출력할 수출 건의 행을 선택하세요.')
+    st.session_state.pop('shared_document_view', None)
+    st.info('공유용 자료를 만들 수출 건의 행을 선택하세요.')
     st.stop()
 
-selected_index = int(selected_indexes[0])
-case_id = int(selection_df.iloc[selected_index]['_case_id'])
-st.session_state['document_case_id'] = case_id
+case_id = int(selection_df.iloc[int(selected_indexes[0])]['_case_id'])
+previous_case_id = st.session_state.get('document_case_id')
+if previous_case_id != case_id:
+    st.session_state['document_case_id'] = case_id
+    st.session_state.pop('shared_document_view', None)
 case = export_service.get_case(case_id)
 
 try:
@@ -238,7 +287,19 @@ try:
 except Exception as exc:
     st.warning(f'수출 폴더를 준비하지 못했습니다: {exc}')
 
+output_cols = st.columns(2)
+if output_cols[0].button('최종문서 출력하기', type='primary', use_container_width=True):
+    st.session_state['shared_document_view'] = 'final'
+if output_cols[1].button('출고 예정 제품 리스트', use_container_width=True):
+    st.session_state['shared_document_view'] = 'shipment_products'
+
 fresh_actual_rows = shipment_service.list_actual(case_id)
 actual_rows = document_service._aggregate_actual(fresh_actual_rows)
-packed, _ = document_service.get_document_data(case_id)
-render_document(case, packed, actual_rows)
+selected_view = st.session_state.get('shared_document_view')
+if selected_view == 'final':
+    packed, _ = document_service.get_document_data(case_id)
+    render_document(case, packed, actual_rows)
+elif selected_view == 'shipment_products':
+    render_shipment_product_list(case, actual_rows)
+else:
+    st.info('출력할 문서 종류를 선택하세요.')
