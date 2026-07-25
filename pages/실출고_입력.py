@@ -92,14 +92,47 @@ with left:
     st.markdown('### 주문목록')
     st.caption('제품명·주문수량·단위·매입가를 수정한 뒤 저장할 수 있습니다.')
 
-    order_source = order_service.get_order_items_dataframe(case_id)
-    if order_source.empty:
-        order_source = pd.DataFrame([
-            {'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}
-        ])
-    edited_orders = order_editor(order_source, key=f'shipment_orders_{case_id}')
-    duplicate_order_rows = order_save_guard.find_duplicate_rows(edited_orders)
-    order_save_guard.render_duplicate_notice(duplicate_order_rows)
+    draft_key = f'shipment_order_draft_{case_id}'
+    version_key = f'shipment_order_editor_version_{case_id}'
+    merge_message_key = f'shipment_order_merge_message_{case_id}'
+
+    if merge_message := st.session_state.pop(merge_message_key, None):
+        st.success(merge_message)
+
+    if draft_key not in st.session_state:
+        order_source = order_service.get_order_items_dataframe(case_id)
+        if order_source.empty:
+            order_source = pd.DataFrame([
+                {'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}
+            ])
+        st.session_state[draft_key] = order_save_guard.with_row_numbers(order_source)
+
+    editor_version = int(st.session_state.get(version_key, 0))
+    edited_orders = order_editor(
+        st.session_state[draft_key],
+        key=f'shipment_orders_{case_id}_{editor_version}',
+    )
+    numbered_orders = order_save_guard.with_row_numbers(
+        edited_orders.drop(columns=['행번호'], errors='ignore')
+    )
+    duplicate_order_rows = order_save_guard.find_duplicate_rows(numbered_orders)
+
+    if duplicate_order_rows:
+        order_save_guard.render_duplicate_notice(duplicate_order_rows)
+        st.markdown('**중복된 행끼리 수량을 합칠까요?**')
+        st.caption('가장 먼저 생성된 행의 제품명·단위·매입가를 보존하고, 수량만 모두 더한 뒤 나중 행을 삭제합니다.')
+        if st.button(
+            '중복 행 수량 합치기',
+            type='secondary',
+            use_container_width=True,
+            key=f'merge_duplicate_orders_{case_id}_{editor_version}',
+        ):
+            merged_orders = order_save_guard.merge_duplicate_rows(numbered_orders)
+            st.session_state[draft_key] = merged_orders
+            st.session_state[version_key] = editor_version + 1
+            st.session_state[merge_message_key] = '중복 행을 합쳤습니다. 합산된 수량을 확인한 뒤 주문목록을 저장하세요.'
+            st.rerun()
+
     st.caption('주문행을 삭제하고 저장하면 그 주문에 연결된 실제 출고제품도 함께 삭제됩니다.')
 
     if st.button(
@@ -110,12 +143,14 @@ with left:
         key=f'save_shipment_orders_{case_id}',
     ):
         try:
-            order_service.save_order_items(case_id, edited_orders)
+            order_service.save_order_items(case_id, numbered_orders)
         except ValueError as exc:
             st.error(str(exc))
         else:
+            st.session_state.pop(draft_key, None)
+            st.session_state[version_key] = editor_version + 1
             folder_service.sync_case_folder(case_id)
-            history_service.add(case_id, '출고 단계 주문목록 수정', f'{len(edited_orders)}개 행')
+            history_service.add(case_id, '출고 단계 주문목록 수정', f'{len(numbered_orders)}개 행')
             st.success('주문목록을 저장했습니다.')
             st.rerun()
 
