@@ -4,9 +4,12 @@ import re
 import unicodedata
 from pathlib import Path
 
+from utils.page_patch_cache import compile_cached, read_text_cached
+
 
 SOURCE_PATH = Path(__file__).with_name('공유문서.py')
-source = SOURCE_PATH.read_text(encoding='utf-8')
+SOURCE_VERSION = SOURCE_PATH.stat().st_mtime_ns
+source = read_text_cached(str(SOURCE_PATH), SOURCE_VERSION)
 
 replacement = r"""def render_shipment_product_list(case, actual_rows) -> None:
     destination_order = {
@@ -216,4 +219,5 @@ if patched.count(lazy_old) != 1:
     raise RuntimeError('공유용 자료 지연 조회 구간을 찾지 못했습니다.')
 patched = patched.replace(lazy_old, lazy_new, 1)
 
-exec(compile(patched, str(SOURCE_PATH), 'exec'), globals(), globals())
+code = compile_cached(patched, str(SOURCE_PATH), f'shared-v2-{SOURCE_VERSION}')
+exec(code, globals(), globals())
