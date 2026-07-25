@@ -26,6 +26,15 @@ def _safe_number(value: object, default: float = 0.0) -> float:
         return default
 
 
+def _safe_row_number(value: object, fallback: int) -> int:
+    if value is None or pd.isna(value) or value == '':
+        return fallback
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
 def with_row_numbers(frame: pd.DataFrame) -> pd.DataFrame:
     numbered = frame.copy().reset_index(drop=True)
     numbered['행번호'] = range(1, len(numbered) + 1)
@@ -56,7 +65,7 @@ def find_duplicate_rows(cleaned: pd.DataFrame) -> list[dict[str, object]]:
         for position in positions:
             row = cleaned.iloc[position]
             rows.append({
-                '행': int(row.get('행번호') or position + 1),
+                '행': _safe_row_number(row.get('행번호'), position + 1),
                 '제품명': _clean_text(row.get('제품명')),
             })
     return rows
