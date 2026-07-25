@@ -4,7 +4,14 @@ import pandas as pd
 import streamlit as st
 
 from components.editors import order_editor, shipment_editor
-from services import export_service, folder_service, history_service, order_service, shipment_service
+from services import (
+    export_service,
+    folder_service,
+    history_service,
+    order_save_guard,
+    order_service,
+    shipment_service,
+)
 from utils.formatters import case_label, fmt_number
 
 
@@ -91,12 +98,15 @@ with left:
             {'_id': None, '제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}
         ])
     edited_orders = order_editor(order_source, key=f'shipment_orders_{case_id}')
+    duplicate_order_rows = order_save_guard.find_duplicate_rows(edited_orders)
+    order_save_guard.render_duplicate_notice(duplicate_order_rows)
     st.caption('주문행을 삭제하고 저장하면 그 주문에 연결된 실제 출고제품도 함께 삭제됩니다.')
 
     if st.button(
         '주문목록 저장',
         type='primary',
         use_container_width=True,
+        disabled=bool(duplicate_order_rows),
         key=f'save_shipment_orders_{case_id}',
     ):
         try:
