@@ -33,8 +33,73 @@ def safe_number(value: object) -> float:
         return 0.0
 
 
+def render_similar_price_lookup(*, key: str) -> None:
+    st.markdown('#### 유사 제품 매입가 조회')
+    query = st.text_input(
+        '제품명 검색',
+        key=key,
+        placeholder='예: 리드카인 1% 10Am',
+    ).strip()
+    st.caption('공백·기호와 일부 표현 차이를 보정해 과거 매입가 이력을 찾습니다.')
+
+    if not query:
+        st.info('제품명을 입력하면 유사한 과거 매입가가 표시됩니다.')
+        return
+
+    similar_prices = order_service.find_similar_purchase_prices(query)
+    if not similar_prices:
+        st.info('유사한 제품명의 매입가 이력이 없습니다.')
+        return
+
+    history_df = pd.DataFrame([
+        {
+            '유사 제품명': item['product_name'],
+            '매입가': item['purchase_price'],
+            '수량': item['quantity'],
+            '단위': item['unit'],
+            '수출번호': item['export_no'],
+            '바이어': item['buyer'] or '',
+            '등록일': str(item['created_at'])[:10],
+            '유사도': f"{item['similarity'] * 100:.0f}%",
+        }
+        for item in similar_prices
+    ])
+    st.dataframe(
+        history_df,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            '매입가': st.column_config.NumberColumn('매입가', format='₩ %,.0f'),
+        },
+    )
+
+
 st.title('수출대기 입고')
 st.caption('왼쪽에서 주문목록을 수정하고, 오른쪽에서 주문을 선택해 실제 수출대기 입고제품을 입력합니다.')
+
+st.markdown(
+    '''
+    <style>
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
+        width: 40vw;
+        max-width: 40vw;
+    }
+    .shipment-price-lookup-anchor {
+        height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+    @media (max-width: 900px) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
+            width: 100%;
+            max-width: 100%;
+        }
+    }
+    </style>
+    ''',
+    unsafe_allow_html=True,
+)
 
 cases = export_service.active_cases()
 if not cases:
@@ -259,3 +324,8 @@ st.caption(
     f'현재 주문품목에 연결된 전체 입고 수량: '
     f'{fmt_number(shipment_service.total_linked_quantity(case_id))}'
 )
+
+st.divider()
+with st.container():
+    st.markdown('<div class="shipment-price-lookup-anchor"></div>', unsafe_allow_html=True)
+    render_similar_price_lookup(key=f'shipment_price_lookup_query_{case_id}')
