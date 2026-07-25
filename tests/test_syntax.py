@@ -58,6 +58,7 @@ class PythonSyntaxTests(unittest.TestCase):
 
     def test_calculation_service_modules_exist(self) -> None:
         expected = {
+            'case_merge_service.py',
             'dashboard_view_service.py',
             'order_edit_service.py',
             'packing_view_service.py',
