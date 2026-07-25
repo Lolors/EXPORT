@@ -6,6 +6,10 @@ import db
 from utils.dates import now_text
 
 
+LEGACY_PACKING_STAGE = '출고 대기'
+PACKING_STAGE = '패킹 대기'
+
+
 def get_case(case_id: int):
     return db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
 
@@ -23,7 +27,14 @@ def active_cases(country: str | None = None):
     if country:
         sql += ' AND country=?'
         params = (country,)
-    return db.rows(sql + ' ORDER BY created_at', params)
+    rows = db.rows(sql + ' ORDER BY created_at', params)
+    results = []
+    for row in rows:
+        item = dict(row)
+        if str(item.get('stage') or '').strip() == PACKING_STAGE:
+            item['stage'] = LEGACY_PACKING_STAGE
+        results.append(item)
+    return results
 
 
 def get_order_items(case_id: int):
