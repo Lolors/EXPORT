@@ -116,7 +116,6 @@ def main() -> None:
     shipment_service.sync_case_stage = stage_service.sync_case_stage
     shipment_service.sync_active_case_stages = stage_service.sync_active_case_stages
     packing_service._sync_packing_stage = stage_service.sync_case_stage
-    stage_service.sync_active_case_stages()
 
     st.navigation(PAGES, position='sidebar').run()
 
