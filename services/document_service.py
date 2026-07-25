@@ -93,14 +93,18 @@ def _aggregate_packed(rows, boxes_by_no: dict[int, object]) -> list[dict]:
     )
 
 
-def get_document_data(case_id: int):
-    """최종문서 버튼을 누른 경우에만 CTN 및 현재 입고 데이터를 조회한다."""
+def get_packed_document_data(case_id: int) -> list[dict]:
     packed_rows = packing_service.list_packed_rows(case_id)
     boxes_by_no = {
         int(box['box_no']): box
         for box in packing_service.list_boxes(case_id)
     }
-    packed = _aggregate_packed(packed_rows, boxes_by_no)
+    return _aggregate_packed(packed_rows, boxes_by_no)
+
+
+def get_document_data(case_id: int):
+    """최종문서 버튼을 누른 경우에만 CTN 및 현재 입고 데이터를 조회한다."""
+    packed = get_packed_document_data(case_id)
 
     current_rows = shipment_service.list_case_items(case_id)
     actual = _aggregate_actual(current_rows)
