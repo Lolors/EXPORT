@@ -205,6 +205,9 @@ def init_db() -> None:
         _add_column(conn, 'shipment_items', 'order_item_id INTEGER')
         _add_column(conn, 'order_items', 'purchase_price REAL NOT NULL DEFAULT 0')
 
+        conn.execute("UPDATE export_cases SET stage='패킹 대기' WHERE stage='출고 대기'")
+        conn.execute("UPDATE export_cases SET previous_stage='패킹 대기' WHERE previous_stage='출고 대기'")
+
         conn.executescript('''
         CREATE INDEX IF NOT EXISTS idx_export_cases_status_stage
             ON export_cases(status, stage);
