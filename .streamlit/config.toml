@@ -6,3 +6,7 @@ runOnSave = true
 
 [browser]
 gatherUsageStats = false
+
+[client]
+# pages 폴더의 자동 사이드바 메뉴를 숨기고 app.py의 st.navigation 메뉴만 사용합니다.
+showSidebarNavigation = false
