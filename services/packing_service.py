@@ -78,7 +78,7 @@ def _sync_packing_stage(case_id: int, now: str | None = None) -> None:
         (case_id,),
     )
     remaining_qty = float(result['remaining_qty'] or 0) if result else 0.0
-    stage = '패킹 완료' if remaining_qty <= 0 else '패킹 진행'
+    stage = '패킹 완료' if remaining_qty <= 0 else '출고 대기'
     db.execute(
         'UPDATE export_cases SET stage=?, updated_at=? WHERE id=?',
         (stage, timestamp, case_id),
