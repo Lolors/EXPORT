@@ -240,6 +240,8 @@ def init_db() -> None:
             ON shipment_items(case_id);
         CREATE INDEX IF NOT EXISTS idx_shipment_items_order_item_id
             ON shipment_items(order_item_id);
+        CREATE INDEX IF NOT EXISTS idx_shipment_items_case_order
+            ON shipment_items(case_id, order_item_id);
         CREATE INDEX IF NOT EXISTS idx_shipment_items_case_box
             ON shipment_items(case_id, box_no);
         CREATE INDEX IF NOT EXISTS idx_boxes_case_box
