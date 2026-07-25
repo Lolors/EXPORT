@@ -15,7 +15,7 @@ MANAGED_STAGES = {
 
 
 def sync_case_stage(case_id: int, now: str | None = None) -> str:
-    """주문품목별 입고율과 미패킹 수량을 기준으로 단계를 다시 계산합니다."""
+    """주문품목별 입고 완료 여부와 미패킹 수량을 기준으로 단계를 계산합니다."""
     case = db.row(
         'SELECT case_type, status, stage FROM export_cases WHERE id=?',
         (case_id,),
@@ -32,7 +32,14 @@ def sync_case_stage(case_id: int, now: str | None = None) -> str:
     intake = db.row(
         '''SELECT
                COUNT(*) AS order_count,
-               COALESCE(SUM(COALESCE(received.received_qty, 0)), 0) AS total_received_qty,
+               SUM(
+                   CASE
+                       WHEN COALESCE(received.received_qty, 0) + 0.000001 >= COALESCE(o.quantity, 0)
+                            AND COALESCE(o.quantity, 0) > 0
+                       THEN 1
+                       ELSE 0
+                   END
+               ) AS completed_order_count,
                SUM(
                    CASE
                        WHEN COALESCE(received.received_qty, 0) + 0.000001 < COALESCE(o.quantity, 0)
@@ -52,13 +59,13 @@ def sync_case_stage(case_id: int, now: str | None = None) -> str:
     )
 
     order_count = int(intake['order_count'] or 0) if intake else 0
-    total_received_qty = float(intake['total_received_qty'] or 0) if intake else 0.0
+    completed_order_count = int(intake['completed_order_count'] or 0) if intake else 0
     incomplete_order_count = int(intake['incomplete_order_count'] or 0) if intake else 0
 
-    if order_count == 0 or total_received_qty <= 0.000001:
+    if order_count == 0 or completed_order_count == 0:
         stage = '주문 접수'
     elif incomplete_order_count > 0:
-        stage = '입고 진행'
+        stage = '패킹 대기'
     else:
         packing = db.row(
             '''SELECT COALESCE(
