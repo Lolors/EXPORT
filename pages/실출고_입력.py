@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from difflib import SequenceMatcher
+
 import pandas as pd
 import streamlit as st
 
@@ -14,6 +16,9 @@ from services import (
     shipment_service,
 )
 from utils.formatters import fmt_number
+
+
+PRODUCT_NAME_WARNING_THRESHOLD = 0.45
 
 
 def order_state(order_qty: float, linked_qty: float) -> tuple[str, str]:
@@ -31,6 +36,97 @@ def safe_number(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def product_name_similarity(order_name: str, actual_name: str) -> float:
+    normalized_order = order_service.normalize_product_name(order_name)
+    normalized_actual = order_service.normalize_product_name(actual_name)
+    if not normalized_order or not normalized_actual:
+        return 0.0
+    if normalized_order == normalized_actual:
+        return 1.0
+    if normalized_order in normalized_actual or normalized_actual in normalized_order:
+        return 0.92
+    return SequenceMatcher(None, normalized_order, normalized_actual).ratio()
+
+
+def find_product_name_mismatches(order_name: str, values: list[dict]) -> list[dict]:
+    mismatches = []
+    for index, value in enumerate(values, start=1):
+        actual_name = str(value.get('product_name', '') or '').strip()
+        if not actual_name:
+            continue
+        similarity = product_name_similarity(order_name, actual_name)
+        if similarity < PRODUCT_NAME_WARNING_THRESHOLD:
+            mismatches.append({
+                '행': index,
+                '주문 제품명': order_name,
+                '입력 제품명': actual_name,
+                '유사도': f'{similarity * 100:.0f}%',
+            })
+    return mismatches
+
+
+def save_linked_order(
+    *,
+    case_id: int,
+    selected_order_id: int,
+    selected_order_name: str,
+    preview_qty: float,
+    order_qty: float,
+    unit: str,
+    values: list[dict],
+) -> None:
+    shipment_service.save_for_order(case_id, selected_order_id, values)
+    st.session_state['actual_packing_case_id'] = case_id
+    folder_service.sync_case_folder(case_id)
+    history_service.add(
+        case_id,
+        '주문품목별 입고 저장',
+        f'{selected_order_name} · {fmt_number(preview_qty)} / {fmt_number(order_qty)} {unit}',
+    )
+    st.session_state['shipment_intake_success_message'] = '저장했습니다. 박스 패킹에 바로 반영됩니다.'
+
+
+@st.dialog('입력한 제품명을 확인해 주세요')
+def product_name_warning_dialog(
+    *,
+    case_id: int,
+    selected_order_id: int,
+    selected_order_name: str,
+    preview_qty: float,
+    order_qty: float,
+    unit: str,
+    values: list[dict],
+    mismatches: list[dict],
+) -> None:
+    st.warning('주문목록의 제품명과 크게 다른 입고 제품명이 있습니다.')
+    st.dataframe(
+        pd.DataFrame(mismatches),
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.caption('다른 주문품목의 제품을 잘못 입력한 것이 아닌지 확인하세요.')
+
+    confirm_col, cancel_col = st.columns(2)
+    if confirm_col.button('그래도 저장', type='primary', use_container_width=True):
+        try:
+            save_linked_order(
+                case_id=case_id,
+                selected_order_id=selected_order_id,
+                selected_order_name=selected_order_name,
+                preview_qty=preview_qty,
+                order_qty=order_qty,
+                unit=unit,
+                values=values,
+            )
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            st.rerun()
+
+    if cancel_col.button('돌아가서 수정', use_container_width=True):
+        st.rerun()
 
 
 def render_similar_price_lookup(*, key: str) -> None:
@@ -76,6 +172,9 @@ def render_similar_price_lookup(*, key: str) -> None:
 
 st.title('수출대기 입고')
 st.caption('왼쪽에서 주문목록을 수정하고, 오른쪽에서 주문을 선택해 실제 수출대기 입고제품을 입력합니다.')
+
+if success_message := st.session_state.pop('shipment_intake_success_message', None):
+    st.success(success_message)
 
 st.markdown(
     '''
@@ -229,7 +328,7 @@ with right:
             icon, _ = order_state(order_qty, linked_qty)
             label = (
                 f"{icon} {order['product_name']} · "
-                f"{fmt_number(linked_qty)} / {fmt_number(order_qty)} {unit}"
+                f'{fmt_number(linked_qty)} / {fmt_number(order_qty)} {unit}'
             )
             order_options[label] = order_id
 
@@ -240,11 +339,12 @@ with right:
         )
         selected_order_id = order_options[selected_label]
         selected_order = next(order for order in orders if int(order['id']) == selected_order_id)
+        selected_order_name = str(selected_order['product_name'] or '').strip()
         order_qty = safe_number(selected_order['quantity'])
         unit = str(selected_order['unit'] or 'EA')
         current = shipment_service.list_linked(case_id, selected_order_id)
 
-        st.markdown(f"**선택 주문:** {selected_order['product_name']}")
+        st.markdown(f'**선택 주문:** {selected_order_name}')
 
         if current:
             source = pd.DataFrame([
@@ -260,7 +360,7 @@ with right:
         else:
             source = pd.DataFrame([{
                 '사업장': '',
-                '실제 제품명': selected_order['product_name'] or '',
+                '실제 제품명': selected_order_name,
                 '제조번호': '',
                 '유통기한': '',
                 '출고수량': 0.0,
@@ -298,20 +398,33 @@ with right:
                     'requested_qty': quantity,
                 })
 
-            try:
-                shipment_service.save_for_order(case_id, selected_order_id, values)
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                st.session_state['actual_packing_case_id'] = case_id
-                folder_service.sync_case_folder(case_id)
-                history_service.add(
-                    case_id,
-                    '주문품목별 입고 저장',
-                    f"{selected_order['product_name']} · {fmt_number(preview_qty)} / {fmt_number(order_qty)} {unit}",
+            mismatches = find_product_name_mismatches(selected_order_name, values)
+            if mismatches:
+                product_name_warning_dialog(
+                    case_id=case_id,
+                    selected_order_id=selected_order_id,
+                    selected_order_name=selected_order_name,
+                    preview_qty=preview_qty,
+                    order_qty=order_qty,
+                    unit=unit,
+                    values=values,
+                    mismatches=mismatches,
                 )
-                st.success('저장했습니다. 박스 패킹에 바로 반영됩니다.')
-                st.rerun()
+            else:
+                try:
+                    save_linked_order(
+                        case_id=case_id,
+                        selected_order_id=selected_order_id,
+                        selected_order_name=selected_order_name,
+                        preview_qty=preview_qty,
+                        order_qty=order_qty,
+                        unit=unit,
+                        values=values,
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    st.rerun()
 
     total_order_qty = sum(safe_number(order['quantity']) for order in orders)
     total_received_qty = shipment_service.total_linked_quantity(case_id)
