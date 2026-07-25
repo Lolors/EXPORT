@@ -45,7 +45,6 @@ def integer_quantities(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def quantity_before_unit(frame: pd.DataFrame) -> pd.DataFrame:
-    """Place 출고수량 immediately before 단위 while preserving other columns."""
     result = frame.copy()
     if '출고수량' not in result.columns or '단위' not in result.columns:
         return result
@@ -78,7 +77,7 @@ def csv_bytes(frame: pd.DataFrame) -> bytes:
 
 
 st.title('기간별 통계')
-st.caption('실제 출고일과 실제 출고수량을 기준으로 국가별·제품별 수출 실적을 확인합니다.')
+st.caption('실제 출고일을 기준으로 CTN 수량과 제품별 실제 출고수량을 확인합니다.')
 
 today = date.today()
 filter_cols = st.columns([1.15, 1, 1, 1.5])
@@ -132,12 +131,13 @@ if filtered.empty:
 case_count = int(filtered['case_id'].nunique())
 country_count = int(filtered['국가'].nunique())
 product_count = int(filtered['제품명'].nunique())
+ctn_count = len(statistics_service.packed_ctn_rows(filtered))
 
 metrics = st.columns(4)
 metrics[0].metric('수출 건수', f'{case_count:,}건')
 metrics[1].metric('국가 수', f'{country_count:,}개')
 metrics[2].metric('제품 수', f'{product_count:,}개')
-metrics[3].metric('실제 출고수량', quantity_text(filtered))
+metrics[3].metric('패킹 CTN 수량', f'{ctn_count:,} CTN')
 
 answer_parts: list[str] = []
 if selected_countries:
@@ -151,7 +151,7 @@ else:
 
 st.success(
     f"{start_date.isoformat()} ~ {end_date.isoformat()} · "
-    f"{' · '.join(answer_parts)}의 실제 출고량은 {quantity_text(filtered)}이며, "
+    f"{' · '.join(answer_parts)}에 해당하는 패킹 CTN은 {ctn_count:,}개이며, "
     f"총 {case_count:,}건의 수출에 포함되었습니다."
 )
 
@@ -162,11 +162,7 @@ summary_tab, country_tab, product_tab, detail_tab = st.tabs(
 with summary_tab:
     left, right = st.columns(2)
 
-    country_totals = integer_quantity_table(
-        filtered.groupby(['국가', '단위'], as_index=False)['출고수량']
-        .sum()
-        .sort_values('출고수량', ascending=False)
-    )
+    country_totals = statistics_service.country_ctn_summary(filtered)
     product_totals = integer_quantity_table(
         filtered.groupby(['제품명', '단위'], as_index=False)['출고수량']
         .sum()
@@ -174,16 +170,15 @@ with summary_tab:
     )
 
     with left:
-        st.markdown('#### 국가별 출고량')
-        if country_totals['단위'].nunique() == 1:
-            chart = country_totals.set_index('국가')[['출고수량']].head(15)
-            st.bar_chart(chart)
+        st.markdown('#### 국가별 CTN 수량')
+        if not country_totals.empty:
+            st.bar_chart(country_totals.set_index('국가')[['CTN 수량']].head(15))
         st.dataframe(
             country_totals,
             hide_index=True,
             use_container_width=True,
             column_config={
-                '출고수량': st.column_config.NumberColumn('출고수량', format='%,d'),
+                'CTN 수량': st.column_config.NumberColumn('CTN 수량', format='%d CTN'),
             },
         )
 
@@ -201,17 +196,16 @@ with summary_tab:
             },
         )
 
-    monthly = integer_quantity_table(statistics_service.monthly_summary(filtered))
+    monthly = statistics_service.monthly_ctn_summary(filtered)
     if len(monthly['월'].unique()) > 1:
-        st.markdown('#### 월별 출고 추이')
-        if monthly['단위'].nunique() == 1:
-            st.line_chart(monthly.set_index('월')[['출고수량']])
+        st.markdown('#### 월별 CTN 출고 추이')
+        st.line_chart(monthly.set_index('월')[['CTN 수량']])
         st.dataframe(
             monthly,
             hide_index=True,
             use_container_width=True,
             column_config={
-                '출고수량': st.column_config.NumberColumn('출고수량', format='%,d'),
+                'CTN 수량': st.column_config.NumberColumn('CTN 수량', format='%d CTN'),
             },
         )
 
