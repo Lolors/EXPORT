@@ -44,6 +44,25 @@ def integer_quantities(frame: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def quantity_before_unit(frame: pd.DataFrame) -> pd.DataFrame:
+    """Place 출고수량 immediately before 단위 while preserving other columns."""
+    result = frame.copy()
+    if '출고수량' not in result.columns or '단위' not in result.columns:
+        return result
+    columns = [column for column in result.columns if column not in {'출고수량', '단위'}]
+    insert_at = len(columns)
+    for index, column in enumerate(columns):
+        if column == '출고건수':
+            insert_at = index
+            break
+    columns[insert_at:insert_at] = ['출고수량', '단위']
+    return result[columns]
+
+
+def integer_quantity_table(frame: pd.DataFrame) -> pd.DataFrame:
+    return quantity_before_unit(integer_quantities(frame))
+
+
 def quantity_text(frame: pd.DataFrame) -> str:
     if frame.empty:
         return '0'
@@ -55,7 +74,7 @@ def quantity_text(frame: pd.DataFrame) -> str:
 
 
 def csv_bytes(frame: pd.DataFrame) -> bytes:
-    return integer_quantities(frame).to_csv(index=False).encode('utf-8-sig')
+    return integer_quantity_table(frame).to_csv(index=False).encode('utf-8-sig')
 
 
 st.title('기간별 통계')
@@ -143,12 +162,12 @@ summary_tab, country_tab, product_tab, detail_tab = st.tabs(
 with summary_tab:
     left, right = st.columns(2)
 
-    country_totals = integer_quantities(
+    country_totals = integer_quantity_table(
         filtered.groupby(['국가', '단위'], as_index=False)['출고수량']
         .sum()
         .sort_values('출고수량', ascending=False)
     )
-    product_totals = integer_quantities(
+    product_totals = integer_quantity_table(
         filtered.groupby(['제품명', '단위'], as_index=False)['출고수량']
         .sum()
         .sort_values('출고수량', ascending=False)
@@ -182,7 +201,7 @@ with summary_tab:
             },
         )
 
-    monthly = integer_quantities(statistics_service.monthly_summary(filtered))
+    monthly = integer_quantity_table(statistics_service.monthly_summary(filtered))
     if len(monthly['월'].unique()) > 1:
         st.markdown('#### 월별 출고 추이')
         if monthly['단위'].nunique() == 1:
@@ -197,7 +216,7 @@ with summary_tab:
         )
 
 with country_tab:
-    country_summary = integer_quantities(statistics_service.country_product_summary(filtered))
+    country_summary = integer_quantity_table(statistics_service.country_product_summary(filtered))
     st.caption('각 국가에서 어떤 제품이 많이 출고되었는지 출고수량 순으로 보여줍니다.')
     st.dataframe(
         country_summary,
@@ -217,7 +236,7 @@ with country_tab:
     )
 
 with product_tab:
-    product_summary = integer_quantities(statistics_service.product_country_summary(filtered))
+    product_summary = integer_quantity_table(statistics_service.product_country_summary(filtered))
     st.caption('각 제품이 어느 국가로 얼마나 출고되었는지 출고수량 순으로 보여줍니다.')
     st.dataframe(
         product_summary,
@@ -247,7 +266,7 @@ with detail_tab:
         '출고수량',
         '단위',
     ]
-    detail = integer_quantities(filtered[detail_columns].copy())
+    detail = integer_quantity_table(filtered[detail_columns].copy())
     st.caption('집계에 포함된 실제 출고행을 확인합니다.')
     st.dataframe(
         detail,
