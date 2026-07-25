@@ -4,9 +4,9 @@ from datetime import date
 
 import streamlit as st
 
+from components.case_selector import select_export_case
 from services import delivery_service, export_service, folder_service, history_service
 from utils.dates import parse_date
-from utils.formatters import case_label
 
 
 def date_value(value: str | None):
@@ -22,8 +22,11 @@ if not cases:
     st.info('국내배송 처리할 수출 건이 없습니다.')
     st.stop()
 
-options = {case_label(case): int(case['id']) for case in cases}
-case_id = options[st.selectbox('수출 건 선택', list(options), key='delivery_case')]
+case_id = select_export_case(
+    cases,
+    key_prefix='delivery_export_selector',
+    saved_case_id=st.session_state.get('actual_packing_case_id'),
+)
 case = export_service.get_case(case_id)
 
 method = st.radio(
