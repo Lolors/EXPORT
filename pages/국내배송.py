@@ -2,16 +2,69 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from components.case_selector import select_export_case
-from services import delivery_service, export_service, folder_service, history_service
+from services import delivery_service, export_service, folder_service, history_service, packing_service
 from utils.dates import parse_date
+from utils.formatters import fmt_number
 
 
 def date_value(value: str | None):
     parsed = parse_date(value)
     return parsed.date() if parsed else date.today()
+
+
+def render_packed_details(case_id: int) -> None:
+    packed_rows = packing_service.list_packed_rows(case_id)
+    st.markdown('### 패킹 완료 내역')
+
+    if not packed_rows:
+        st.info('표시할 패킹 완료 내역이 없습니다.')
+        return
+
+    rows = []
+    seen_boxes: set[int] = set()
+    total_qty = 0.0
+    total_weight = 0.0
+
+    for row in packed_rows:
+        box_no = int(row['box_no'])
+        total_qty += float(row['requested_qty'] or 0)
+        if box_no not in seen_boxes:
+            total_weight += float(row['weight_kg'] or 0)
+            seen_boxes.add(box_no)
+
+        size_values = [row['length_cm'], row['width_cm'], row['height_cm']]
+        box_size = (
+            ' × '.join(fmt_number(value) for value in size_values) + ' cm'
+            if all(float(value or 0) > 0 for value in size_values)
+            else '-'
+        )
+        rows.append({
+            'CTN No.': f'CTN {box_no}',
+            '출고처': row['business_unit'] or '',
+            '제품명': row['product_name'] or '',
+            '제조번호': row['lot_no'] or '',
+            '유통기한': row['expiry_date'] or '',
+            '수량': float(row['requested_qty'] or 0),
+            'GW (kg)': float(row['weight_kg'] or 0) if box_no not in {int(r['box_no']) for r in packed_rows[:packed_rows.index(row)]} else None,
+            'CTN 사이즈': box_size,
+        })
+
+    st.dataframe(
+        pd.DataFrame(rows),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            '수량': st.column_config.NumberColumn('수량', format='%.0f'),
+            'GW (kg)': st.column_config.NumberColumn('GW (kg)', format='%.2f'),
+        },
+    )
+    st.caption(
+        f'총 {len(seen_boxes)} CTN · 출고수량 {fmt_number(total_qty)} · 총중량 {fmt_number(total_weight)} kg'
+    )
 
 
 st.title('국내배송')
@@ -32,6 +85,9 @@ case_id = select_export_case(
     show_stage=False,
 )
 case = export_service.get_case(case_id)
+
+render_packed_details(case_id)
+st.divider()
 
 method = st.radio(
     '배송 방식',
