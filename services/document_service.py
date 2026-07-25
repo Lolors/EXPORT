@@ -94,7 +94,14 @@ def _aggregate_packed(rows, boxes_by_no: dict[int, object]) -> list[dict]:
 
 
 def get_document_data(case_id: int):
-    """공유문서는 현재 수출대기 입고 목록만 표시한다."""
+    """최종문서 버튼을 누른 경우에만 CTN 및 현재 입고 데이터를 조회한다."""
+    packed_rows = packing_service.list_packed_rows(case_id)
+    boxes_by_no = {
+        int(box['box_no']): box
+        for box in packing_service.list_boxes(case_id)
+    }
+    packed = _aggregate_packed(packed_rows, boxes_by_no)
+
     current_rows = shipment_service.list_case_items(case_id)
     actual = _aggregate_actual(current_rows)
-    return [], actual
+    return packed, actual
