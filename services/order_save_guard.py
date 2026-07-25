@@ -26,26 +26,58 @@ def _safe_number(value: object, default: float = 0.0) -> float:
         return default
 
 
+def with_row_numbers(frame: pd.DataFrame) -> pd.DataFrame:
+    numbered = frame.copy().reset_index(drop=True)
+    numbered['행번호'] = range(1, len(numbered) + 1)
+    columns = ['행번호'] + [column for column in numbered.columns if column != '행번호']
+    return numbered[columns]
+
+
+def _normalized_name(value: object) -> str:
+    name = _clean_text(value)
+    if not name:
+        return ''
+    return order_service.normalize_product_name(name) or name.casefold()
+
+
+def duplicate_groups(cleaned: pd.DataFrame) -> list[list[int]]:
+    grouped: dict[str, list[int]] = {}
+    for position, (_, row) in enumerate(cleaned.iterrows()):
+        key = _normalized_name(row.get('제품명'))
+        if key:
+            grouped.setdefault(key, []).append(position)
+    return [positions for positions in grouped.values() if len(positions) > 1]
+
+
 def find_duplicate_rows(cleaned: pd.DataFrame) -> list[dict[str, object]]:
     """Return every editor row whose normalized product name appears more than once."""
-    normalized_names: dict[str, list[tuple[int, str]]] = {}
+    rows: list[dict[str, object]] = []
+    for positions in duplicate_groups(cleaned):
+        for position in positions:
+            row = cleaned.iloc[position]
+            rows.append({
+                '행': int(row.get('행번호') or position + 1),
+                '제품명': _clean_text(row.get('제품명')),
+            })
+    return rows
 
-    for position, (_, row) in enumerate(cleaned.iterrows(), start=1):
-        name = _clean_text(row.get('제품명'))
-        if not name:
-            continue
 
-        key = order_service.normalize_product_name(name)
-        if not key:
-            key = name.casefold()
-        normalized_names.setdefault(key, []).append((position, name))
+def merge_duplicate_rows(cleaned: pd.DataFrame) -> pd.DataFrame:
+    """Keep the first duplicate row, sum quantities, and remove later rows."""
+    merged = cleaned.copy().reset_index(drop=True)
+    remove_positions: set[int] = set()
 
-    return [
-        {'행': position, '제품명': name}
-        for items in normalized_names.values()
-        if len(items) > 1
-        for position, name in items
-    ]
+    for positions in duplicate_groups(merged):
+        first_position = positions[0]
+        total_quantity = sum(_safe_number(merged.iloc[position].get('수량')) for position in positions)
+        merged.at[first_position, '수량'] = total_quantity
+        remove_positions.update(positions[1:])
+
+    if remove_positions:
+        merged = merged.drop(index=sorted(remove_positions)).reset_index(drop=True)
+
+    merged = merged.drop(columns=['행번호'], errors='ignore')
+    return with_row_numbers(merged)
 
 
 def render_duplicate_notice(rows: list[dict[str, object]]) -> None:
@@ -73,13 +105,13 @@ def render_duplicate_notice(rows: list[dict[str, object]]) -> None:
 
     st.markdown(
         (
-            '<div style="margin:0.35rem 0 0.65rem;padding:0.72rem 0.82rem;'
+            '<div style="margin:0.35rem 0 0.5rem;padding:0.72rem 0.82rem;'
             'border:1px solid #f3a8c5;border-radius:0.65rem;background:#fff0f6;">'
             '<div style="color:#7a173f;font-weight:750;margin-bottom:0.28rem;">'
             '같은 제품명이 주문 목록에 중복되어 있습니다.'
             '</div>'
             '<div style="color:#8f3157;font-size:0.9rem;margin-bottom:0.25rem;">'
-            '아래 제품명 셀의 행을 합치거나 제품명을 구분한 뒤 저장하세요.'
+            '먼저 생성된 행의 제품명·단위·매입가를 유지하고 수량만 합칠 수 있습니다.'
             '</div>'
             f'<div>{chips}</div>'
             '</div>'
@@ -90,7 +122,7 @@ def render_duplicate_notice(rows: list[dict[str, object]]) -> None:
 
 def save_order_items(case_id: int, edited) -> None:
     """Validate and normalize the order editor before using the existing save logic."""
-    cleaned = edited.copy()
+    cleaned = edited.copy().drop(columns=['행번호'], errors='ignore')
 
     if '매입가' not in cleaned.columns:
         cleaned['매입가'] = 0.0
