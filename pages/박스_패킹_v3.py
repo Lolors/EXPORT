@@ -73,7 +73,10 @@ else:
         selected_box_label = st.selectbox('CTN 선택', box_labels, key=selector_key)
         selected_box_no = box_options[selected_box_label]
         box = next(box for box in boxes if int(box['box_no']) == selected_box_no)
-        box_items = packing_service.list_box_items(case_id, selected_box_no)
+        box_items = [
+            item for item in items
+            if item['box_no'] is not None and int(item['box_no']) == selected_box_no
+        ]
         box_qty = sum(float(item['requested_qty'] or 0) for item in box_items)
 
         st.caption(f'{selected_box_label} · {len(box_items)}개 행 · 수량 {fmt_number(box_qty)}')
