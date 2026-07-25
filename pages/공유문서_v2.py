@@ -18,8 +18,8 @@ replacement = r"""def render_shipment_product_list(case, actual_rows) -> None:
 
     def normalize_product_group_name(value: object) -> str:
         text = unicodedata.normalize('NFKC', str(value or ''))
-        text = text.replace('\u200b', '').replace('\ufeff', '')
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = text.replace('\\u200b', '').replace('\\ufeff', '')
+        text = re.sub(r'\\s+', ' ', text).strip()
         return text.casefold()
 
     sorted_rows = sorted(
@@ -49,7 +49,7 @@ replacement = r"""def render_shipment_product_list(case, actual_rows) -> None:
             product_key = normalize_product_group_name(raw_product_name) or '-'
             if product_key not in product_groups:
                 product_groups[product_key] = {
-                    'display_name': re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', raw_product_name)).strip() or '-',
+                    'display_name': re.sub(r'\\s+', ' ', unicodedata.normalize('NFKC', raw_product_name)).strip() or '-',
                     'rows': [],
                 }
             product_groups[product_key]['rows'].append(row)
@@ -114,7 +114,7 @@ th{{background:#294f71;color:white;padding:6px 4px;text-align:center;font-weight
 """
 
 pattern = r'def render_shipment_product_list\(case, actual_rows\) -> None:.*?(?=def open_selected_path\()'
-patched, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
+patched, count = re.subn(pattern, lambda _match: replacement, source, count=1, flags=re.S)
 if count != 1:
     raise RuntimeError('출고 예정 제품 리스트 렌더링 함수를 교체하지 못했습니다.')
 
