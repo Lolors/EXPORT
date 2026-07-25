@@ -7,6 +7,8 @@ import streamlit as st
 import db
 from config import APP_ICON, APP_LAYOUT, APP_TITLE
 from services import (
+    folder_name_policy,
+    folder_service,
     order_save_guard,
     order_service,
     packing_service,
@@ -107,6 +109,7 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
+    folder_name_policy.install(folder_service)
     order_service.normalize_product_name = product_name_match_service.normalize_for_match
     order_save_guard.install()
     packing_service.list_items = shipment_service.list_case_items
