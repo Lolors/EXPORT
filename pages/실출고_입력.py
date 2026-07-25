@@ -180,8 +180,14 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
-        width: 100vw;
-        max-width: 100vw;
+        width: 60vw;
+        max-width: 60vw;
+    }
+    @media (max-width: 900px) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
+            width: 100%;
+            max-width: 100%;
+        }
     }
     .shipment-price-lookup-anchor {
         height: 0;
@@ -209,6 +215,11 @@ st.session_state['actual_packing_case_id'] = case_id
 
 shipment_service.cleanup_invalid_links(case_id)
 orders = order_service.list_for_case(case_id)
+all_linked_rows = shipment_service.list_case_items(case_id)
+linked_rows_by_order: dict[int, list] = {}
+for linked_row in all_linked_rows:
+    linked_order_id = int(linked_row['order_item_id'])
+    linked_rows_by_order.setdefault(linked_order_id, []).append(linked_row)
 
 unlinked_count = shipment_service.count_unlinked(case_id)
 if unlinked_count:
@@ -323,7 +334,7 @@ with right:
             order_id = int(order['id'])
             order_qty = safe_number(order['quantity'])
             unit = str(order['unit'] or 'EA')
-            current_rows = shipment_service.list_linked(case_id, order_id)
+            current_rows = linked_rows_by_order.get(order_id, [])
             linked_qty = sum(safe_number(row['requested_qty']) for row in current_rows)
             icon, _ = order_state(order_qty, linked_qty)
             label = (
@@ -342,7 +353,7 @@ with right:
         selected_order_name = str(selected_order['product_name'] or '').strip()
         order_qty = safe_number(selected_order['quantity'])
         unit = str(selected_order['unit'] or 'EA')
-        current = shipment_service.list_linked(case_id, selected_order_id)
+        current = linked_rows_by_order.get(selected_order_id, [])
 
         st.markdown(f'**선택 주문:** {selected_order_name}')
 
@@ -360,7 +371,7 @@ with right:
         else:
             source = pd.DataFrame([{
                 '사업장': '',
-                '실제 제품명': selected_order_name,
+                '실제 제품명': '',
                 '제조번호': '',
                 '유통기한': '',
                 '출고수량': 0.0,
@@ -426,21 +437,46 @@ with right:
                 else:
                     st.rerun()
 
-    total_order_qty = sum(safe_number(order['quantity']) for order in orders)
-    total_received_qty = shipment_service.total_linked_quantity(case_id)
-    progress_ratio = min(total_received_qty / total_order_qty, 1.0) if total_order_qty > 0 else 0.0
+    item_progress_ratios: list[float] = []
+    completed_item_count = 0
+    for progress_order in orders:
+        progress_order_id = int(progress_order['id'])
+        progress_order_qty = safe_number(progress_order['quantity'])
+        progress_received_qty = sum(
+            safe_number(row['requested_qty'])
+            for row in linked_rows_by_order.get(progress_order_id, [])
+        )
+        if progress_order_qty > 0:
+            item_ratio = min(progress_received_qty / progress_order_qty, 1.0)
+            item_progress_ratios.append(item_ratio)
+            if progress_received_qty + 0.000001 >= progress_order_qty:
+                completed_item_count += 1
+        else:
+            item_progress_ratios.append(0.0)
+
+    order_item_count = len(item_progress_ratios)
+    progress_ratio = (
+        sum(item_progress_ratios) / order_item_count
+        if order_item_count > 0
+        else 0.0
+    )
+    all_items_received = (
+        order_item_count > 0
+        and completed_item_count == order_item_count
+    )
 
     st.divider()
     st.markdown('#### 전체 입고 진행률')
     st.progress(
         progress_ratio,
         text=(
-            f'{fmt_number(total_received_qty)} / {fmt_number(total_order_qty)} '
+            f'완료 품목 {completed_item_count} / {order_item_count}개 '
             f'({progress_ratio * 100:.1f}%)'
         ),
     )
-    if total_order_qty > 0 and total_received_qty >= total_order_qty:
-        st.success('🎉 모든 제품이 입고되었습니다!')
+    st.caption('각 주문품목의 입고율을 최대 100%로 계산한 뒤 품목별 입고율의 평균을 표시합니다.')
+    if all_items_received:
+        st.success('🎉 모든 주문품목이 각각 100% 입고되었습니다!')
 
 st.divider()
 with st.container():
