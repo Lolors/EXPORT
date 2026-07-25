@@ -19,6 +19,7 @@ LAST_USB_BACKUP_PATH = ''
 
 _BACKUP_BATCH_DEPTH: ContextVar[int] = ContextVar('backup_batch_depth', default=0)
 _BACKUP_BATCH_PENDING: ContextVar[bool] = ContextVar('backup_batch_pending', default=False)
+_PAGE_CONNECTION: ContextVar[sqlite3.Connection | None] = ContextVar('page_connection', default=None)
 
 
 @lru_cache(maxsize=1)
@@ -41,13 +42,45 @@ def _configure_connection(conn: sqlite3.Connection) -> None:
 
 
 @contextmanager
+def connection_session() -> Iterable[sqlite3.Connection]:
+    """Reuse one SQLite connection during a single Streamlit page execution."""
+    existing = _PAGE_CONNECTION.get()
+    if existing is not None:
+        yield existing
+        return
+
+    _initialize_database_runtime()
+    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+    _configure_connection(conn)
+    token = _PAGE_CONNECTION.set(conn)
+    try:
+        yield conn
+    finally:
+        _PAGE_CONNECTION.reset(token)
+        conn.close()
+
+
+@contextmanager
 def connect() -> Iterable[sqlite3.Connection]:
+    existing = _PAGE_CONNECTION.get()
+    if existing is not None:
+        try:
+            yield existing
+            existing.commit()
+        except Exception:
+            existing.rollback()
+            raise
+        return
+
     _initialize_database_runtime()
     conn = sqlite3.connect(DB_PATH, timeout=5.0)
     _configure_connection(conn)
     try:
         yield conn
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
