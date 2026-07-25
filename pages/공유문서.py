@@ -4,12 +4,10 @@ import html
 import os
 import re
 import subprocess
-import time
 import unicodedata
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -269,10 +267,7 @@ def open_selected_path(path: Path, label: str) -> None:
 st.title('공유용 자료')
 st.caption('수출 건을 선택한 뒤 필요한 자료를 출력하거나 관련 폴더를 열 수 있습니다.')
 
-page_started = time.perf_counter()
-case_load_started = time.perf_counter()
 cases = order_service.list_editable_cases()
-case_load_ms = (time.perf_counter() - case_load_started) * 1000
 if not cases:
     st.info('표시할 수출 건이 없습니다.')
     st.stop()
@@ -351,56 +346,41 @@ if not filtered_cases:
     st.warning('조건에 맞는 수출 건이 없습니다.')
     st.stop()
 
-selection_rows = []
-for case in filtered_cases:
-    selection_rows.append(
-        {
-            '_case_id': int(case['id']),
-            '출고일자': _shipment_date(case),
-            '수출번호': case['export_no'],
-            '국가': case['country'],
-            '바이어': case['buyer'] or '',
-            '운송방식': case['transport_mode'],
-            '단계': display_stage(case['stage']),
-            '주문제품': summarize_product_names(case['product_names']),
-        }
+case_by_id = {int(case['id']): case for case in filtered_cases}
+case_options: list[int | None] = [None, *case_by_id.keys()]
+
+
+def format_case_option(selected_case_id: int | None) -> str:
+    if selected_case_id is None:
+        return '수출 건을 선택하세요'
+    selected_case = case_by_id[int(selected_case_id)]
+    ship_date = _shipment_date(selected_case) or '미출고'
+    buyer = str(selected_case['buyer'] or '').strip() or '바이어 미입력'
+    products = summarize_product_names(selected_case['product_names'])
+    return (
+        f"{display_stage(selected_case['stage'])} · {ship_date} · "
+        f"{selected_case['export_no']} · {selected_case['country']} · "
+        f"{buyer} · {products}"
     )
 
-selection_df = pd.DataFrame(selection_rows)
-table_render_started = time.perf_counter()
-selected_rows = st.dataframe(
-    selection_df,
-    hide_index=True,
-    use_container_width=True,
-    on_select='rerun',
-    selection_mode='single-row',
-    column_config={
-        '_case_id': None,
-        '출고일자': st.column_config.TextColumn('출고일자'),
-        '수출번호': st.column_config.TextColumn('수출번호'),
-        '국가': st.column_config.TextColumn('국가'),
-        '바이어': st.column_config.TextColumn('바이어'),
-        '운송방식': st.column_config.TextColumn('운송방식'),
-        '단계': st.column_config.TextColumn('단계'),
-        '주문제품': st.column_config.TextColumn('주문제품'),
-    },
-    key='document_case_table',
-)
-table_render_ms = (time.perf_counter() - table_render_started) * 1000
-server_total_ms = (time.perf_counter() - page_started) * 1000
-st.caption(
-    f'로딩 진단 · 목록 {case_load_ms:.0f}ms · '
-    f'표 준비 {table_render_ms:.0f}ms · 서버 합계 {server_total_ms:.0f}ms'
-)
 
-selected_indexes = selected_rows.selection.rows
-if not selected_indexes:
+case_filter_key = (
+    f"{selected_year}_{selected_month}_{selected_country}_{product_query}_"
+    f"{len(filtered_cases)}"
+)
+selected_case_id = st.selectbox(
+    '수출 건 선택',
+    case_options,
+    format_func=format_case_option,
+    key=f'document_case_select_{case_filter_key}',
+)
+if selected_case_id is None:
     st.session_state.pop('document_case_id', None)
     st.session_state.pop('shared_document_view', None)
-    st.info('공유용 자료를 만들 수출 건의 행을 선택하세요.')
+    st.info('공유용 자료를 만들 수출 건을 선택하세요.')
     st.stop()
 
-case_id = int(selection_df.iloc[int(selected_indexes[0])]['_case_id'])
+case_id = int(selected_case_id)
 previous_case_id = st.session_state.get('document_case_id')
 if previous_case_id != case_id:
     st.session_state['document_case_id'] = case_id
