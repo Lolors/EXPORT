@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import streamlit as st
+
 import db
 from utils.dates import now_text
 
@@ -227,6 +229,7 @@ def _normalize_box_values(length: float, width: float, height: float, weight: fl
     }
 
 
+@st.cache_data(persist='disk', show_spinner=False)
 def list_box_presets() -> dict[str, dict[str, float]]:
     raw = db.get_setting(PRESET_SETTING_KEY, '{}')
     try:
@@ -255,6 +258,8 @@ def save_box_preset(name: str, length: float, width: float, height: float, weigh
     presets = list_box_presets()
     presets[clean_name] = _normalize_box_values(length, width, height, weight)
     db.set_setting(PRESET_SETTING_KEY, json.dumps(presets, ensure_ascii=False))
+    list_box_presets.clear()
+    list_box_presets.clear()
 
 
 @db.backup_batch
@@ -264,6 +269,7 @@ def delete_box_preset(name: str) -> None:
     db.set_setting(PRESET_SETTING_KEY, json.dumps(presets, ensure_ascii=False))
 
 
+@st.cache_data(persist='disk', show_spinner=False)
 def get_last_box_values() -> dict[str, float] | None:
     raw = db.get_setting(LAST_BOX_SETTING_KEY, '')
     if not raw:
@@ -286,6 +292,7 @@ def get_last_box_values() -> dict[str, float] | None:
 def save_last_box_values(length: float, width: float, height: float, weight: float) -> None:
     values = _normalize_box_values(length, width, height, weight)
     db.set_setting(LAST_BOX_SETTING_KEY, json.dumps(values, ensure_ascii=False))
+    get_last_box_values.clear()
 
 
 @db.backup_batch
