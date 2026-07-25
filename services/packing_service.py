@@ -68,17 +68,48 @@ def next_box_no(case_id: int) -> int:
 
 def _sync_packing_stage(case_id: int, now: str | None = None) -> None:
     timestamp = now or now_text()
-    result = db.row(
-        '''SELECT COALESCE(SUM(CASE WHEN s.box_no IS NULL THEN s.requested_qty ELSE 0 END), 0) AS remaining_qty
-           FROM shipment_items s
-           JOIN order_items o
-             ON o.id=s.order_item_id
-            AND o.case_id=s.case_id
-           WHERE s.case_id=?''',
-        (case_id,),
+
+    intake_status = db.row(
+        '''SELECT
+               COUNT(*) AS order_count,
+               SUM(
+                   CASE
+                       WHEN COALESCE(received.received_qty, 0) + 0.000001 < COALESCE(o.quantity, 0)
+                       THEN 1
+                       ELSE 0
+                   END
+               ) AS incomplete_order_count
+           FROM order_items o
+           LEFT JOIN (
+               SELECT order_item_id, SUM(COALESCE(requested_qty, 0)) AS received_qty
+               FROM shipment_items
+               WHERE case_id=?
+               GROUP BY order_item_id
+           ) received ON received.order_item_id=o.id
+           WHERE o.case_id=?''',
+        (case_id, case_id),
     )
-    remaining_qty = float(result['remaining_qty'] or 0) if result else 0.0
-    stage = '패킹 완료' if remaining_qty <= 0 else '패킹 대기'
+    order_count = int(intake_status['order_count'] or 0) if intake_status else 0
+    incomplete_order_count = int(intake_status['incomplete_order_count'] or 0) if intake_status else 0
+
+    if order_count == 0 or incomplete_order_count > 0:
+        stage = '출고 대기'
+    else:
+        packing_status = db.row(
+            '''SELECT COALESCE(
+                       SUM(CASE WHEN s.box_no IS NULL THEN s.requested_qty ELSE 0 END),
+                       0
+                   ) AS remaining_qty
+               FROM shipment_items s
+               JOIN order_items o
+                 ON o.id=s.order_item_id
+                AND o.case_id=s.case_id
+               WHERE s.case_id=?''',
+            (case_id,),
+        )
+        remaining_qty = float(packing_status['remaining_qty'] or 0) if packing_status else 0.0
+        stage = '패킹 완료' if remaining_qty <= 0 else '패킹 대기'
+
     db.execute(
         'UPDATE export_cases SET stage=?, updated_at=? WHERE id=?',
         (stage, timestamp, case_id),
