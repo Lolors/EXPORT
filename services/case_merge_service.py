@@ -17,7 +17,7 @@ def merge_case_into(source_case_id: int, target_case_id: int) -> dict:
             (source_case_id,),
         ).fetchone()
         target = connection.execute(
-            'SELECT id, export_no, status, stage FROM export_cases WHERE id=?',
+            'SELECT id, export_no, status, stage, case_type FROM export_cases WHERE id=?',
             (target_case_id,),
         ).fetchone()
         if source is None or target is None:
