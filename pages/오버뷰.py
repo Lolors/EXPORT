@@ -27,7 +27,10 @@ st.caption('지금 진행 중인 수출 건과 직접 기록한 확인사항을 
 st.markdown(
     '''
     <style>
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-table-anchor),
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-table-anchor) {
+        width: 70vw;
+        max-width: 70vw;
+    }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.todo-section-anchor) {
         width: 40vw;
         max-width: 40vw;
