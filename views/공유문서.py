@@ -178,7 +178,7 @@ if selected_view == 'final':
     from components.shared_document_renderer import render_document
     from services import document_service
 
-    packed, _ = document_service.get_document_data(case_id)
+    packed = document_service.get_packed_document_data(case_id)
     render_document(case, packed)
 elif selected_view == 'shipment_products':
     from components.shared_document_renderer import render_shipment_product_list
