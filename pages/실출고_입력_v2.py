@@ -56,7 +56,6 @@ patched = patched.replace(prefetch_old, prefetch_new, 1)
 linked_replacements = {
     "shipment_service.list_linked(case_id, order_id)": "linked_rows_by_order.get(order_id, [])",
     "shipment_service.list_linked(case_id, selected_order_id)": "linked_rows_by_order.get(selected_order_id, [])",
-    "shipment_service.list_linked(case_id, progress_order_id)": "linked_rows_by_order.get(progress_order_id, [])",
 }
 for old, new in linked_replacements.items():
     if old not in patched:
