@@ -118,4 +118,34 @@ patched, count = re.subn(pattern, lambda _match: replacement, source, count=1, f
 if count != 1:
     raise RuntimeError('출고 예정 제품 리스트 렌더링 함수를 교체하지 못했습니다.')
 
+sort_marker = """    filtered_cases.append(case)
+
+if not filtered_cases:
+"""
+sort_replacement = """    filtered_cases.append(case)
+
+stage_sort_order = {
+    '패킹 완료': 0,
+    '패킹 대기': 1,
+    '입고 진행': 2,
+    '제품 준비': 2,
+    '출고 대기': 2,
+    '주문 접수': 3,
+    '주문 입력': 3,
+    '국내배송': 99,
+}
+filtered_cases.sort(
+    key=lambda case: (
+        stage_sort_order.get(str(case['stage'] or '').strip(), 90),
+        str(case['updated_at'] or ''),
+    ),
+    reverse=False,
+)
+
+if not filtered_cases:
+"""
+if patched.count(sort_marker) != 1:
+    raise RuntimeError('공유용 자료 단계 정렬 구간을 찾지 못했습니다.')
+patched = patched.replace(sort_marker, sort_replacement, 1)
+
 exec(compile(patched, str(SOURCE_PATH), 'exec'), globals(), globals())
