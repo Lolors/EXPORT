@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import string
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,9 @@ USB_STORAGE_ID = 'NOHTUS_EXPORT_USB'
 USB_DB_DIR = 'EXPORT_DB'
 USB_DB_NAME = 'export.db'
 DB_VERSION = 1
+_USB_CACHE_SECONDS = 5.0
+_USB_CACHE_CHECKED_AT = 0.0
+_USB_CACHE_ROOT: Path | None = None
 
 
 def _candidate_roots() -> list[Path]:
@@ -41,11 +45,27 @@ def is_export_usb(root: Path) -> bool:
     return read_usb_marker(root).get('storage_id') == USB_STORAGE_ID
 
 
+def clear_usb_search_cache() -> None:
+    global _USB_CACHE_CHECKED_AT, _USB_CACHE_ROOT
+    _USB_CACHE_CHECKED_AT = 0.0
+    _USB_CACHE_ROOT = None
+
+
 def find_export_usb() -> Path | None:
+    """Cache the expensive Windows drive scan briefly within repeated reruns."""
+    global _USB_CACHE_CHECKED_AT, _USB_CACHE_ROOT
+    checked_at = time.monotonic()
+    if checked_at - _USB_CACHE_CHECKED_AT < _USB_CACHE_SECONDS:
+        return _USB_CACHE_ROOT
+
+    found = None
     for root in _candidate_roots():
         if is_export_usb(root):
-            return root
-    return None
+            found = root
+            break
+    _USB_CACHE_ROOT = found
+    _USB_CACHE_CHECKED_AT = checked_at
+    return found
 
 
 def drive_root_for(path: Path) -> Path | None:
@@ -72,6 +92,9 @@ def register_export_usb(path: Path) -> Path:
         ),
         encoding='utf-8',
     )
+    global _USB_CACHE_CHECKED_AT, _USB_CACHE_ROOT
+    _USB_CACHE_ROOT = root
+    _USB_CACHE_CHECKED_AT = time.monotonic()
     return root
 
 
