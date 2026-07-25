@@ -254,28 +254,21 @@ st.markdown(
 
 with st.container():
     st.markdown('<span id="document-case-filter-anchor"></span>', unsafe_allow_html=True)
+    now = datetime.now()
     years = sorted(
         {
-            int(_shipment_date(case)[:4])
-            for case in cases
-            if _shipment_date(case)[:4].isdigit()
+            now.year,
+            *{
+                int(_shipment_date(case)[:4])
+                for case in cases
+                if _shipment_date(case)[:4].isdigit()
+            },
         },
         reverse=True,
     )
     filter_cols = st.columns([1.5, 1.5, 3, 4])
     selected_year = filter_cols[0].selectbox('연도', ['전체'] + years, key='document_case_year')
-    if selected_year == '전체':
-        month_options: list[str | int] = ['전체']
-    else:
-        month_values = sorted(
-            {
-                int(_shipment_date(case)[5:7])
-                for case in cases
-                if _shipment_date(case).startswith(str(selected_year))
-                and _shipment_date(case)[5:7].isdigit()
-            }
-        )
-        month_options = ['전체'] + month_values
+    month_options: list[str | int] = ['전체'] + list(range(1, 13))
     selected_month = filter_cols[1].selectbox('월', month_options, key='document_case_month')
     countries = sorted({str(case['country']).strip() for case in cases if str(case['country']).strip()})
     selected_country = filter_cols[2].selectbox('국가', ['전체'] + countries, key='document_case_country')
@@ -286,10 +279,13 @@ for case in cases:
     raw_date = _shipment_date(case)
     case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
     case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
-    if selected_year != '전체' and case_year != selected_year:
-        continue
-    if selected_month != '전체' and case_month != selected_month:
-        continue
+
+    # 출고일 미입력 건은 연도·월 필터와 관계없이 항상 표시한다.
+    if raw_date:
+        if selected_year != '전체' and case_year != selected_year:
+            continue
+        if selected_month != '전체' and case_month != selected_month:
+            continue
     if selected_country != '전체' and str(case['country']).strip() != selected_country:
         continue
     if product_query and product_query not in str(case['product_names'] or '').casefold():
