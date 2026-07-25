@@ -6,6 +6,8 @@ import streamlit as st
 
 import db
 from config import APP_ICON, APP_LAYOUT, APP_TITLE
+from utils.performance import measure
+
 from services import (
     folder_name_policy,
     folder_service,
@@ -117,7 +119,8 @@ def main() -> None:
     shipment_service.sync_active_case_stages = stage_service.sync_active_case_stages
     packing_service._sync_packing_stage = stage_service.sync_case_stage
 
-    st.navigation(PAGES, position='sidebar').run()
+    with measure('streamlit.page.run', slow_ms=0):
+        st.navigation(PAGES, position='sidebar').run()
 
 
 if __name__ == '__main__':
