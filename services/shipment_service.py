@@ -104,6 +104,7 @@ def list_for_case(case_id: int):
     )
 
 
+@db.backup_batch
 def cleanup_invalid_links(case_id: int) -> int:
     invalid_rows = db.rows(
         '''SELECT s.id
@@ -173,6 +174,7 @@ def get_lot_expiry_dataframe(case_id: int):
     ])
 
 
+@db.backup_batch
 def update_lot_expiry(case_id: int, edited) -> int:
     now = now_text()
     updated = 0
@@ -229,6 +231,7 @@ def list_unlinked(case_id: int):
     )
 
 
+@db.backup_batch
 def delete_unlinked(case_id: int) -> None:
     db.execute('DELETE FROM shipment_items WHERE case_id=? AND order_item_id IS NULL', (case_id,))
     db.execute(
@@ -243,6 +246,7 @@ def delete_unlinked(case_id: int) -> None:
     sync_case_stage(case_id)
 
 
+@db.backup_batch
 def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
     cleanup_invalid_links(case_id)
     order = db.row('SELECT id FROM order_items WHERE id=? AND case_id=?', (order_item_id, case_id))
@@ -298,6 +302,7 @@ def total_linked_quantity(case_id: int) -> float:
     return sum(float(row['requested_qty'] or 0) for row in list_case_items(case_id))
 
 
+@db.backup_batch
 def sync_historical(case_id: int) -> None:
     case = db.row('SELECT case_type FROM export_cases WHERE id=?', (case_id,))
     if not case or case['case_type'] != 'historical':
