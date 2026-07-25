@@ -102,13 +102,33 @@ def _case_date(case) -> datetime:
     return created or datetime.now()
 
 
+def _actual_ship_date(case) -> datetime | None:
+    if 'actual_ship_date' not in case.keys():
+        return None
+    return parse_date(case['actual_ship_date'])
+
+
+def _is_missing_label(value: str, *missing_labels: str) -> bool:
+    normalized = value.replace(' ', '').casefold()
+    return not normalized or normalized in {label.replace(' ', '').casefold() for label in missing_labels}
+
+
 def case_folder_name(case) -> str:
-    case_date = _case_date(case)
-    buyer = sanitize_folder_part(case['buyer'], '바이어미입력')
-    transport = sanitize_folder_part(case['transport_mode'], '운송방식미입력')
-    buyer_transport = f'[{buyer} - {transport}]'
+    actual_ship_date = _actual_ship_date(case)
+    buyer = sanitize_folder_part(case['buyer'], '')
+    transport = sanitize_folder_part(case['transport_mode'], '')
     summary = order_item_summary(int(case['id']))
-    name = f'{case_date.strftime("%m%d")}_{buyer_transport}_{summary}'
+
+    label_parts: list[str] = []
+    if not _is_missing_label(buyer, '바이어미입력'):
+        label_parts.append(buyer)
+    if not _is_missing_label(transport, '운송방식미입력'):
+        label_parts.append(transport)
+
+    date_prefix = f'{actual_ship_date.strftime("%m%d")}_' if actual_ship_date else ''
+    detail_prefix = f'[{" ".join(label_parts)}] ' if label_parts else ''
+    name = f'{date_prefix}{detail_prefix}{summary}'
+
     if str(case['status']) == '취소' or str(case['stage']) == '취소':
         return name if name.startswith('[취소]') else f'[취소]{name}'
     return name.removeprefix('[취소]')
