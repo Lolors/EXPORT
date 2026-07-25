@@ -17,15 +17,19 @@ def date_value(value: str | None):
 st.title('국내배송')
 st.caption('국내배송 방식, 수하인 정보와 송장 또는 배송기사 정보를 입력합니다.')
 
-cases = export_service.active_cases()
+cases = [
+    case for case in export_service.active_cases()
+    if str(case['stage'] or '').strip() == '패킹 완료'
+]
 if not cases:
-    st.info('국내배송 처리할 수출 건이 없습니다.')
+    st.info('패킹 완료된 수출 건이 없습니다.')
     st.stop()
 
 case_id = select_export_case(
     cases,
     key_prefix='delivery_export_selector',
     saved_case_id=st.session_state.get('actual_packing_case_id'),
+    show_stage=False,
 )
 case = export_service.get_case(case_id)
 
