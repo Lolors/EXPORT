@@ -8,7 +8,7 @@ from services import order_save_guard, packing_service, shipment_service
 
 PAGES = {
     '': [
-        st.Page('pages/오버뷰.py', title='오버뷰', icon='📊', default=True),
+        st.Page('pages/오버뷰.py', title='대시보드', icon='📊', default=True),
         st.Page('pages/수출_주문_입력_및_수정.py', title='주문 입력', icon='📝'),
         st.Page('pages/주문_검색_및_수정_v2.py', title='주문 검색 및 수정', icon='🔎'),
         st.Page('pages/실출고_입력.py', title='수출대기 입고', icon='📦'),
