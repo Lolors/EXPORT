@@ -31,25 +31,27 @@ def render_packed_details(case_id: int) -> None:
 
     for row in packed_rows:
         box_no = int(row['box_no'])
+        first_box_row = box_no not in seen_boxes
         total_qty += float(row['requested_qty'] or 0)
-        if box_no not in seen_boxes:
+
+        if first_box_row:
             total_weight += float(row['weight_kg'] or 0)
             seen_boxes.add(box_no)
 
         size_values = [row['length_cm'], row['width_cm'], row['height_cm']]
         box_size = (
             ' × '.join(fmt_number(value) for value in size_values) + ' cm'
-            if all(float(value or 0) > 0 for value in size_values)
-            else '-'
+            if first_box_row and all(float(value or 0) > 0 for value in size_values)
+            else ('' if not first_box_row else '-')
         )
         rows.append({
-            'CTN No.': f'CTN {box_no}',
+            'CTN No.': f'CTN {box_no}' if first_box_row else '',
             '출고처': row['business_unit'] or '',
             '제품명': row['product_name'] or '',
             '제조번호': row['lot_no'] or '',
             '유통기한': row['expiry_date'] or '',
             '수량': float(row['requested_qty'] or 0),
-            'GW (kg)': float(row['weight_kg'] or 0) if box_no not in {int(r['box_no']) for r in packed_rows[:packed_rows.index(row)]} else None,
+            'GW (kg)': float(row['weight_kg'] or 0) if first_box_row else None,
             'CTN 사이즈': box_size,
         })
 
