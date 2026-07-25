@@ -399,7 +399,7 @@ selected_rows = st.dataframe(
         '단계': st.column_config.TextColumn('단계'),
         '주문제품': st.column_config.TextColumn('주문제품'),
     },
-    key='document_case_table',
+    key=f'document_case_table_{page_filter_signature}_{selected_page}',
 )
 
 selected_indexes = selected_rows.selection.rows
