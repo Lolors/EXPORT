@@ -5,9 +5,19 @@ from collections.abc import Iterable
 import streamlit as st
 
 
+STAGE_LABELS = {
+    '출고 대기': '패킹 대기',
+}
+
+
 def _text(value: object, fallback: str = '') -> str:
     text = str(value or '').strip()
     return text or fallback
+
+
+def _stage_text(value: object, fallback: str = '') -> str:
+    text = _text(value, fallback)
+    return STAGE_LABELS.get(text, text)
 
 
 def _set_valid_state(key: str, options: list, preferred=None) -> None:
@@ -62,10 +72,15 @@ def select_export_case(
     ]
 
     if show_stage:
-        stages = sorted({_text(case['stage'], '단계 미입력') for case in country_cases})
+        stage_values = sorted({_text(case['stage'], '단계 미입력') for case in country_cases})
         preferred_stage = _text(saved_case['stage'], '단계 미입력') if saved_case in country_cases else None
-        _set_valid_state(stage_key, stages, preferred_stage)
-        selected_stage = stage_col.selectbox('단계', stages, key=stage_key)
+        _set_valid_state(stage_key, stage_values, preferred_stage)
+        selected_stage = stage_col.selectbox(
+            '단계',
+            stage_values,
+            key=stage_key,
+            format_func=lambda stage: _stage_text(stage, '단계 미입력'),
+        )
         filtered_cases = [
             case for case in country_cases
             if _text(case['stage'], '단계 미입력') == selected_stage
