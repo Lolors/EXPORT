@@ -21,6 +21,23 @@ _USB_CACHE_ROOT: Path | None = None
 def _candidate_roots() -> list[Path]:
     if os.name != 'nt':
         return []
+
+    # Asking every drive letter whether it exists can pause on disconnected
+    # network drives. Windows exposes the mounted-drive bitmask in one call.
+    try:
+        import ctypes
+
+        drive_mask = int(ctypes.windll.kernel32.GetLogicalDrives())
+    except (AttributeError, OSError, ValueError):
+        drive_mask = 0
+
+    if drive_mask:
+        return [
+            Path(f'{letter}:\\')
+            for index, letter in enumerate(string.ascii_uppercase)
+            if drive_mask & (1 << index)
+        ]
+
     roots: list[Path] = []
     for letter in string.ascii_uppercase:
         root = Path(f'{letter}:\\')
