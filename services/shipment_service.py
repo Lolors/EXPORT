@@ -197,7 +197,7 @@ def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
              )''',
         (case_id,),
     )
-    db.execute("UPDATE export_cases SET stage='출고 대기', updated_at=? WHERE id=?", (now, case_id))
+    db.execute("UPDATE export_cases SET stage='패킹 대기', updated_at=? WHERE id=?", (now, case_id))
     return total
 
 
