@@ -22,7 +22,7 @@ def _invisible_case_suffix(case_id: str) -> str:
     """Keep selectbox labels unique without exposing the internal database ID."""
     if not case_id:
         return ''
-    return '\u2063' + ''.join('\u200b' if digit == '0' else '\u200c' * int(digit) for digit in case_id)
+    return '\u2063' + ''.join(chr(0xFE00 + int(digit)) for digit in case_id if digit.isdigit())
 
 
 def case_label(case, include_type: bool = False) -> str:
