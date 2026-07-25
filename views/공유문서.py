@@ -8,11 +8,12 @@ from pathlib import Path
 import streamlit as st
 from services import export_service, folder_service, order_service
 from services.shared_document_view_service import (
-    display_stage,
     filter_and_sort_cases,
     format_case_option as build_case_option_label,
     shipment_date,
 )
+
+
 def open_selected_path(path: Path, label: str) -> None:
     try:
         path = Path(path)
