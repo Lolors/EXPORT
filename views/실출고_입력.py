@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from difflib import SequenceMatcher
-
 import pandas as pd
 import streamlit as st
 
@@ -18,53 +16,12 @@ from services import (
 from utils.formatters import fmt_number
 
 
-PRODUCT_NAME_WARNING_THRESHOLD = 0.45
-
-
-def order_state(order_qty: float, linked_qty: float) -> tuple[str, str]:
-    if order_qty > 0 and linked_qty >= order_qty:
-        return '🟢', '입고 완료'
-    if linked_qty > 0:
-        return '🟡', '일부 입고'
-    return '🔴', '미입고'
-
-
-def safe_number(value: object) -> float:
-    try:
-        if value is None or pd.isna(value) or value == '':
-            return 0.0
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def product_name_similarity(order_name: str, actual_name: str) -> float:
-    normalized_order = order_service.normalize_product_name(order_name)
-    normalized_actual = order_service.normalize_product_name(actual_name)
-    if not normalized_order or not normalized_actual:
-        return 0.0
-    if normalized_order == normalized_actual:
-        return 1.0
-    if normalized_order in normalized_actual or normalized_actual in normalized_order:
-        return 0.92
-    return SequenceMatcher(None, normalized_order, normalized_actual).ratio()
-
-
-def find_product_name_mismatches(order_name: str, values: list[dict]) -> list[dict]:
-    mismatches = []
-    for index, value in enumerate(values, start=1):
-        actual_name = str(value.get('product_name', '') or '').strip()
-        if not actual_name:
-            continue
-        similarity = product_name_similarity(order_name, actual_name)
-        if similarity < PRODUCT_NAME_WARNING_THRESHOLD:
-            mismatches.append({
-                '행': index,
-                '주문 제품명': order_name,
-                '입력 제품명': actual_name,
-                '유사도': f'{similarity * 100:.0f}%',
-            })
-    return mismatches
+from services.shipment_intake_view_service import (
+    find_product_name_mismatches,
+    intake_progress,
+    order_state,
+    safe_number,
+)
 
 
 def save_linked_order(
@@ -437,33 +394,11 @@ with right:
                 else:
                     st.rerun()
 
-    item_progress_ratios: list[float] = []
-    completed_item_count = 0
-    for progress_order in orders:
-        progress_order_id = int(progress_order['id'])
-        progress_order_qty = safe_number(progress_order['quantity'])
-        progress_received_qty = sum(
-            safe_number(row['requested_qty'])
-            for row in linked_rows_by_order.get(progress_order_id, [])
-        )
-        if progress_order_qty > 0:
-            item_ratio = min(progress_received_qty / progress_order_qty, 1.0)
-            item_progress_ratios.append(item_ratio)
-            if progress_received_qty + 0.000001 >= progress_order_qty:
-                completed_item_count += 1
-        else:
-            item_progress_ratios.append(0.0)
-
-    order_item_count = len(item_progress_ratios)
-    progress_ratio = (
-        sum(item_progress_ratios) / order_item_count
-        if order_item_count > 0
-        else 0.0
-    )
-    all_items_received = (
-        order_item_count > 0
-        and completed_item_count == order_item_count
-    )
+    progress = intake_progress(orders, linked_rows_by_order)
+    progress_ratio = progress['ratio']
+    completed_item_count = progress['completed_count']
+    order_item_count = progress['item_count']
+    all_items_received = progress['all_received']
 
     st.divider()
     st.markdown('#### 전체 입고 진행률')
