@@ -113,8 +113,7 @@ st.code(
 └─ 미국
    └─ 2026
       ├─ 미국_AIR_제품A
-      ├─ 0715_미국_바이어_AIR_제품A, 제품B 외 1품목
-      └─ [취소]0715_미국_AIR_제품A'''
+      └─ 0715_미국_바이어_AIR_제품A, 제품B 외 1품목'''
 )
 
 st.caption(
@@ -124,14 +123,17 @@ st.caption(
 
 st.divider()
 st.markdown('#### 수출 폴더 관리')
-st.caption('모든 수출 건의 폴더를 현재 국가 / 연도 / 폴더명 규칙에 맞게 다시 생성하거나 정리합니다.')
+st.caption(
+    '취소되지 않은 수출 건만 현재 국가 / 연도 / 폴더명 규칙에 맞게 다시 생성하거나 정리합니다. '
+    '취소된 과거 내역은 폴더 재생성 대상에서 제외됩니다.'
+)
 folder_confirm = st.checkbox(
     '기존 폴더를 현재 구조로 이동·정리하는 것에 동의합니다.',
     key='folder_rebuild_confirm',
 )
 
 if st.button('모든 수출 폴더 재생성·정리', type='primary', disabled=not folder_confirm):
-    all_cases = export_service.list_cases(include_cancelled=True)
+    all_cases = export_service.list_cases(include_cancelled=False)
     successes: list[str] = []
     failures: list[str] = []
     progress = st.progress(0, text='수출 폴더를 확인하고 있습니다.')
@@ -147,7 +149,13 @@ if st.button('모든 수출 폴더 재생성·정리', type='primary', disabled=
 
     progress.empty()
     if successes:
-        history_service.add_history(None, '전체 수출 폴더 재정리', f'{len(successes)}건 완료 / {len(failures)}건 실패')
-        st.success(f'{len(successes)}건의 폴더를 생성·정리했습니다.')
+        history_service.add_history(
+            None,
+            '전체 수출 폴더 재정리',
+            f'유효 수출 {len(successes)}건 완료 / {len(failures)}건 실패 / 취소 건 제외',
+        )
+        st.success(f'취소 건을 제외하고 {len(successes)}건의 폴더를 생성·정리했습니다.')
+    elif not failures:
+        st.info('재생성할 유효한 수출 건이 없습니다.')
     if failures:
         st.error('일부 폴더를 처리하지 못했습니다.\n\n' + '\n'.join(f'- {item}' for item in failures))
