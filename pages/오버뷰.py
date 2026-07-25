@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from html import escape
 
+import pandas as pd
 import streamlit as st
 
 from services import export_service, overview_service
@@ -11,14 +12,22 @@ STAGE_LABELS = {
     '출고 대기': '패킹 대기',
 }
 
-STAGE_CLASS = {
-    '주문 접수': 'stage-order',
-    '제품 준비': 'stage-product',
-    '출고 대기': 'stage-shipment',
-    '패킹 대기': 'stage-shipment',
-    '패킹 완료': 'stage-packed',
-    '완료': 'stage-complete',
-}
+
+def _order_products_summary(case_id: int) -> str:
+    product_names = [
+        str(item['product_name'] or '').strip()
+        for item in export_service.get_order_items(case_id)
+        if str(item['product_name'] or '').strip()
+    ]
+    if not product_names:
+        return '-'
+
+    visible_names = product_names[:2]
+    summary = ', '.join(visible_names)
+    remaining_count = len(product_names) - len(visible_names)
+    if remaining_count > 0:
+        summary += f' + 그 외 {remaining_count}품목'
+    return summary
 
 
 st.title('대시보드')
@@ -43,56 +52,6 @@ st.markdown(
         padding: 0;
         overflow: hidden;
     }
-    .export-table-wrap {
-        width: 100%;
-        overflow-x: auto;
-        border: 1px solid rgba(49, 51, 63, 0.14);
-        border-radius: 14px;
-    }
-    .export-table {
-        width: 100%;
-        border-collapse: collapse;
-        min-width: 800px;
-    }
-    .export-table th {
-        padding: 0.78rem 0.9rem;
-        text-align: left;
-        font-size: 0.9rem;
-        font-weight: 800;
-        background: rgba(247, 249, 252, 0.96);
-        border-bottom: 1px solid rgba(49, 51, 63, 0.14);
-        white-space: nowrap;
-    }
-    .export-table td {
-        padding: 0.78rem 0.9rem;
-        border-bottom: 1px solid rgba(49, 51, 63, 0.09);
-        vertical-align: middle;
-        white-space: nowrap;
-    }
-    .export-table tr:last-child td {
-        border-bottom: 0;
-    }
-    .row-number {
-        width: 3rem;
-        text-align: center;
-        font-weight: 750;
-        color: #667085;
-    }
-    .stage-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.24rem 0.6rem;
-        border-radius: 999px;
-        font-size: 0.84rem;
-        font-weight: 800;
-        white-space: nowrap;
-    }
-    .stage-order { background: #eef1f5; color: #46505f; }
-    .stage-product { background: #fff2cc; color: #7a5a00; }
-    .stage-shipment { background: #dff3ff; color: #075f85; }
-    .stage-packed { background: #e7e0ff; color: #5637a5; }
-    .stage-complete { background: #dff5e7; color: #17683a; }
-    .stage-default { background: #f1f1f1; color: #555; }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.sticky-note-anchor) {
         min-height: 160px;
         padding: 1rem 1rem 0.7rem;
@@ -132,51 +91,36 @@ st.markdown('### 진행 중 수출 건')
 if not cases:
     st.success('현재 진행 중인 수출 건이 없습니다.')
 else:
-    rows = []
+    table_rows = []
     for index, case in enumerate(cases, start=1):
-        country = str(case['country'] or '').strip() or '국가 미입력'
-        buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
-        transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
-        export_no = str(case['export_no'] or '').strip() or '수출번호 미입력'
         raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
-        stage = STAGE_LABELS.get(raw_stage, raw_stage)
-        stage_class = STAGE_CLASS.get(stage, 'stage-default')
-        rows.append(
-            '<tr>'
-            f'<td class="row-number">{index}</td>'
-            f'<td>{escape(country)}</td>'
-            f'<td>{escape(buyer)}</td>'
-            f'<td>{escape(transport)}</td>'
-            f'<td>{escape(export_no)}</td>'
-            f'<td><span class="stage-badge {stage_class}">{escape(stage)}</span></td>'
-            '</tr>'
+        table_rows.append(
+            {
+                '구분': index,
+                '국가': str(case['country'] or '').strip() or '국가 미입력',
+                '바이어': str(case['buyer'] or '').strip() or '바이어 미입력',
+                '운송방식': str(case['transport_mode'] or '').strip() or '운송방식 미입력',
+                '수출번호': str(case['export_no'] or '').strip() or '수출번호 미입력',
+                '현재 단계': STAGE_LABELS.get(raw_stage, raw_stage),
+                '주문제품': _order_products_summary(int(case['id'])),
+            }
         )
 
     with st.container():
         st.markdown('<div class="export-table-anchor"></div>', unsafe_allow_html=True)
-        st.markdown(
-            '''
-            <div class="export-table-wrap">
-                <table class="export-table">
-                    <thead>
-                        <tr>
-                            <th>구분</th>
-                            <th>국가</th>
-                            <th>바이어</th>
-                            <th>운송방식</th>
-                            <th>수출번호</th>
-                            <th>현재 단계</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            '''
-            + ''.join(rows)
-            + '''
-                    </tbody>
-                </table>
-            </div>
-            ''',
-            unsafe_allow_html=True,
+        st.dataframe(
+            pd.DataFrame(table_rows),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                '구분': st.column_config.NumberColumn(width='small'),
+                '국가': st.column_config.TextColumn(width='small'),
+                '바이어': st.column_config.TextColumn(width='medium'),
+                '운송방식': st.column_config.TextColumn(width='small'),
+                '수출번호': st.column_config.TextColumn(width='medium'),
+                '현재 단계': st.column_config.TextColumn(width='small'),
+                '주문제품': st.column_config.TextColumn(width='large'),
+            },
         )
 
 st.divider()
