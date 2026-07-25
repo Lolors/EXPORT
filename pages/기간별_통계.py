@@ -237,7 +237,17 @@ with product_tab:
     )
 
 with detail_tab:
-    detail = integer_quantities(filtered.drop(columns=['case_id']).copy())
+    detail_columns = [
+        '출고일자',
+        '국가',
+        '바이어',
+        '제품명',
+        '제조번호',
+        '유통기한',
+        '출고수량',
+        '단위',
+    ]
+    detail = integer_quantities(filtered[detail_columns].copy())
     st.caption('집계에 포함된 실제 출고행을 확인합니다.')
     st.dataframe(
         detail,
