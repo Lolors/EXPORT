@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from functools import lru_cache
+from contextvars import ContextVar
+from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -14,6 +15,9 @@ DB_PATH = BASE_DIR / 'export.db'
 UPLOAD_DIR = BASE_DIR / 'uploads'
 LAST_USB_BACKUP_ERROR = ''
 LAST_USB_BACKUP_PATH = ''
+
+_BACKUP_BATCH_DEPTH: ContextVar[int] = ContextVar('backup_batch_depth', default=0)
+_BACKUP_BATCH_PENDING: ContextVar[bool] = ContextVar('backup_batch_pending', default=False)
 
 
 @lru_cache(maxsize=1)
@@ -59,6 +63,36 @@ def backup_to_usb() -> Path | None:
         LAST_USB_BACKUP_PATH = ''
         return None
 
+
+
+def _request_usb_backup() -> None:
+    if _BACKUP_BATCH_DEPTH.get() > 0:
+        _BACKUP_BATCH_PENDING.set(True)
+        return
+    backup_to_usb()
+
+
+@contextmanager
+def defer_usb_backup():
+    """Run one USB backup after a logical group of database writes."""
+    depth = _BACKUP_BATCH_DEPTH.get()
+    depth_token = _BACKUP_BATCH_DEPTH.set(depth + 1)
+    try:
+        yield
+    finally:
+        _BACKUP_BATCH_DEPTH.reset(depth_token)
+        if depth == 0 and _BACKUP_BATCH_PENDING.get():
+            _BACKUP_BATCH_PENDING.set(False)
+            backup_to_usb()
+
+
+def backup_batch(func):
+    """Decorate a service operation that contains multiple DB writes."""
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        with defer_usb_backup():
+            return func(*args, **kwargs)
+    return wrapped
 
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}
@@ -267,14 +301,14 @@ def execute(query: str, params: tuple[Any, ...] = ()) -> int:
     with connect() as conn:
         cursor = conn.execute(query, params)
         result = int(cursor.lastrowid or 0)
-    backup_to_usb()
+    _request_usb_backup()
     return result
 
 
 def executemany(query: str, values: list[tuple[Any, ...]]) -> None:
     with connect() as conn:
         conn.executemany(query, values)
-    backup_to_usb()
+    _request_usb_backup()
 
 
 def get_setting(key: str, default: str = '') -> str:
