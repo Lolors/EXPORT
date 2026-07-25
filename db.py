@@ -6,11 +6,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
+from services import usb_storage_service
 from utils.dates import now_text
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / 'export.db'
 UPLOAD_DIR = BASE_DIR / 'uploads'
+LAST_USB_BACKUP_ERROR = ''
+LAST_USB_BACKUP_PATH = ''
 
 
 @lru_cache(maxsize=1)
@@ -19,6 +22,7 @@ def _initialize_database_runtime() -> None:
     try:
         conn.execute('PRAGMA journal_mode = WAL')
         conn.execute('PRAGMA synchronous = NORMAL')
+        conn.execute(f'PRAGMA user_version = {usb_storage_service.DB_VERSION}')
         conn.commit()
     finally:
         conn.close()
@@ -43,6 +47,19 @@ def connect() -> Iterable[sqlite3.Connection]:
         conn.close()
 
 
+def backup_to_usb() -> Path | None:
+    global LAST_USB_BACKUP_ERROR, LAST_USB_BACKUP_PATH
+    try:
+        destination = usb_storage_service.safe_backup_database(DB_PATH)
+        LAST_USB_BACKUP_ERROR = ''
+        LAST_USB_BACKUP_PATH = str(destination or '')
+        return destination
+    except Exception as exc:
+        LAST_USB_BACKUP_ERROR = str(exc)
+        LAST_USB_BACKUP_PATH = ''
+        return None
+
+
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}
 
@@ -56,7 +73,6 @@ def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> None:
 def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
     if 'expected_ship_date' not in _columns(conn, 'export_cases'):
         return
-
     conn.executescript('''
     PRAGMA foreign_keys = OFF;
     CREATE TABLE export_cases_new (
@@ -104,7 +120,6 @@ def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
 @lru_cache(maxsize=1)
 def init_db() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
     with connect() as conn:
         conn.executescript('''
         CREATE TABLE IF NOT EXISTS export_cases (
@@ -183,49 +198,30 @@ def init_db() -> None:
             updated_at TEXT NOT NULL
         );
         ''')
-
         for definition in [
-            "domestic_method TEXT DEFAULT ''",
-            "tracking_no TEXT DEFAULT ''",
-            "driver_name TEXT DEFAULT ''",
-            "driver_phone TEXT DEFAULT ''",
-            "consignee_name TEXT DEFAULT ''",
-            "consignee_address TEXT DEFAULT ''",
-            "note TEXT DEFAULT ''",
-            "actual_ship_date TEXT DEFAULT ''",
-            "folder_path TEXT DEFAULT ''",
-            "cancel_reason TEXT DEFAULT ''",
-            "cancelled_at TEXT DEFAULT ''",
-            "previous_stage TEXT DEFAULT ''",
+            "domestic_method TEXT DEFAULT ''", "tracking_no TEXT DEFAULT ''",
+            "driver_name TEXT DEFAULT ''", "driver_phone TEXT DEFAULT ''",
+            "consignee_name TEXT DEFAULT ''", "consignee_address TEXT DEFAULT ''",
+            "note TEXT DEFAULT ''", "actual_ship_date TEXT DEFAULT ''",
+            "folder_path TEXT DEFAULT ''", "cancel_reason TEXT DEFAULT ''",
+            "cancelled_at TEXT DEFAULT ''", "previous_stage TEXT DEFAULT ''",
             "case_type TEXT DEFAULT 'current'",
         ]:
             _add_column(conn, 'export_cases', definition)
-
         _remove_expected_ship_date_column(conn)
         _add_column(conn, 'shipment_items', 'order_item_id INTEGER')
         _add_column(conn, 'order_items', 'purchase_price REAL NOT NULL DEFAULT 0')
-
         conn.executescript('''
-        CREATE INDEX IF NOT EXISTS idx_export_cases_status_stage
-            ON export_cases(status, stage);
-        CREATE INDEX IF NOT EXISTS idx_export_cases_dates
-            ON export_cases(actual_ship_date, created_at);
-        CREATE INDEX IF NOT EXISTS idx_order_items_case_id
-            ON order_items(case_id);
-        CREATE INDEX IF NOT EXISTS idx_purchase_price_history_name
-            ON purchase_price_history(normalized_name, created_at);
-        CREATE INDEX IF NOT EXISTS idx_purchase_price_history_case
-            ON purchase_price_history(case_id, order_item_id);
-        CREATE INDEX IF NOT EXISTS idx_shipment_items_case_id
-            ON shipment_items(case_id);
-        CREATE INDEX IF NOT EXISTS idx_shipment_items_order_item_id
-            ON shipment_items(order_item_id);
-        CREATE INDEX IF NOT EXISTS idx_shipment_items_case_box
-            ON shipment_items(case_id, box_no);
-        CREATE INDEX IF NOT EXISTS idx_boxes_case_box
-            ON boxes(case_id, box_no);
-        CREATE INDEX IF NOT EXISTS idx_history_case_id
-            ON history(case_id);
+        CREATE INDEX IF NOT EXISTS idx_export_cases_status_stage ON export_cases(status, stage);
+        CREATE INDEX IF NOT EXISTS idx_export_cases_dates ON export_cases(actual_ship_date, created_at);
+        CREATE INDEX IF NOT EXISTS idx_order_items_case_id ON order_items(case_id);
+        CREATE INDEX IF NOT EXISTS idx_purchase_price_history_name ON purchase_price_history(normalized_name, created_at);
+        CREATE INDEX IF NOT EXISTS idx_purchase_price_history_case ON purchase_price_history(case_id, order_item_id);
+        CREATE INDEX IF NOT EXISTS idx_shipment_items_case_id ON shipment_items(case_id);
+        CREATE INDEX IF NOT EXISTS idx_shipment_items_order_item_id ON shipment_items(order_item_id);
+        CREATE INDEX IF NOT EXISTS idx_shipment_items_case_box ON shipment_items(case_id, box_no);
+        CREATE INDEX IF NOT EXISTS idx_boxes_case_box ON boxes(case_id, box_no);
+        CREATE INDEX IF NOT EXISTS idx_history_case_id ON history(case_id);
         ''')
 
 
@@ -242,12 +238,15 @@ def row(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
 def execute(query: str, params: tuple[Any, ...] = ()) -> int:
     with connect() as conn:
         cursor = conn.execute(query, params)
-        return int(cursor.lastrowid or 0)
+        result = int(cursor.lastrowid or 0)
+    backup_to_usb()
+    return result
 
 
 def executemany(query: str, values: list[tuple[Any, ...]]) -> None:
     with connect() as conn:
         conn.executemany(query, values)
+    backup_to_usb()
 
 
 def get_setting(key: str, default: str = '') -> str:
