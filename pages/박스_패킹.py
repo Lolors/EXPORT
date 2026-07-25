@@ -3,8 +3,10 @@ from __future__ import annotations
 import time
 
 import streamlit as st
+
+from components.case_selector import select_export_case
 from services import export_service, folder_service, history_service, packing_service
-from utils.formatters import case_label, fmt_number
+from utils.formatters import fmt_number
 
 
 st.title('CTN 패킹')
@@ -15,17 +17,12 @@ if not cases:
     st.info('진행 중 수출 건이 없습니다.')
     st.stop()
 
-options = {case_label(case): int(case['id']) for case in cases}
-option_labels = list(options)
 saved_case_id = st.session_state.get('actual_packing_case_id')
-default_index = 0
-if saved_case_id is not None:
-    for index, label in enumerate(option_labels):
-        if options[label] == int(saved_case_id):
-            default_index = index
-            break
-selected_case_label = st.selectbox('수출 건 선택', option_labels, index=default_index, key='actual_packing_case')
-case_id = options[selected_case_label]
+case_id = select_export_case(
+    cases,
+    key_prefix='packing_export_selector',
+    saved_case_id=saved_case_id,
+)
 st.session_state['actual_packing_case_id'] = case_id
 
 items = packing_service.list_items(case_id)
