@@ -258,7 +258,7 @@ else:
 
     st.divider()
     st.markdown(
-        '''
+        """
         <style>
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#ctn-delete-anchor) {
             width: 60vw !important;
@@ -271,7 +271,7 @@ else:
             }
         }
         </style>
-        ''',
+        """,
         unsafe_allow_html=True,
     )
     with st.container():
