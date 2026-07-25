@@ -8,10 +8,16 @@ SOURCE_PATH = Path(__file__).with_name('박스_패킹_v3.py')
 source = SOURCE_PATH.read_text(encoding='utf-8')
 
 # CTN 삭제 표는 화면 상단에서 읽은 boxes가 아니라 DB의 최신 값을 다시 사용한다.
+# 제품요약은 전체 출고행을 한 번만 읽어 박스번호별로 묶어 사용한다.
 source, fresh_boxes_count = re.subn(
     r"(?m)^(\s*)delete_rows = \[\]\n\1for delete_box in boxes:",
     lambda match: (
         f"{match.group(1)}delete_boxes = packing_service.list_boxes(case_id)\n"
+        f"{match.group(1)}delete_items_by_box: dict[int, list] = {{}}\n"
+        f"{match.group(1)}for delete_item_row in packing_service.list_items(case_id):\n"
+        f"{match.group(1)}    raw_delete_box_no = delete_item_row['box_no']\n"
+        f"{match.group(1)}    if raw_delete_box_no is not None:\n"
+        f"{match.group(1)}        delete_items_by_box.setdefault(int(raw_delete_box_no), []).append(delete_item_row)\n"
         f"{match.group(1)}delete_rows = []\n"
         f"{match.group(1)}for delete_box in delete_boxes:"
     ),
@@ -20,6 +26,12 @@ source, fresh_boxes_count = re.subn(
 )
 if fresh_boxes_count != 1:
     raise RuntimeError('CTN 삭제용 최신 박스 조회 구간을 교체하지 못했습니다.')
+
+item_lookup_old = "delete_items = packing_service.list_box_items(case_id, delete_box_no)"
+item_lookup_new = "delete_items = delete_items_by_box.get(delete_box_no, [])"
+if source.count(item_lookup_old) != 1:
+    raise RuntimeError('CTN별 반복 제품 조회 구간을 찾지 못했습니다.')
+source = source.replace(item_lookup_old, item_lookup_new, 1)
 
 # 삭제 표의 규격·무게는 각 CTN 입력 위젯 값을 우선 사용하고, 없을 때 DB 값을 사용한다.
 value_pattern = re.compile(
