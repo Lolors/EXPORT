@@ -21,14 +21,40 @@ source, fresh_boxes_count = re.subn(
 if fresh_boxes_count != 1:
     raise RuntimeError('CTN 삭제용 최신 박스 조회 구간을 교체하지 못했습니다.')
 
-# data_editor 호출 직전에 갱신용 키를 삽입한다.
+# 삭제 표의 규격·무게는 각 CTN 입력 위젯 값을 우선 사용하고, 없을 때 DB 값을 사용한다.
+value_pattern = re.compile(
+    r"(?m)^(\s*)dimensions = \[delete_box\['length_cm'\], delete_box\['width_cm'\], delete_box\['height_cm'\]\]\n"
+    r"\1size_text = .*?\n"
+    r"\1weight_text = .*?$"
+)
+
+
+def replace_box_values(match: re.Match[str]) -> str:
+    indent = match.group(1)
+    return (
+        f"{indent}delete_box_id = int(delete_box['id'])\n"
+        f"{indent}length_value = st.session_state.get(f'len_{{delete_box_id}}', delete_box['length_cm'])\n"
+        f"{indent}width_value = st.session_state.get(f'wid_{{delete_box_id}}', delete_box['width_cm'])\n"
+        f"{indent}height_value = st.session_state.get(f'hei_{{delete_box_id}}', delete_box['height_cm'])\n"
+        f"{indent}weight_value = st.session_state.get(f'wei_{{delete_box_id}}', delete_box['weight_kg'])\n"
+        f"{indent}dimensions = [length_value, width_value, height_value]\n"
+        f"{indent}size_text = ' × '.join(fmt_number(value) for value in dimensions)\n"
+        f"{indent}weight_text = f'{{fmt_number(weight_value)}} kg'"
+    )
+
+
+source, value_count = value_pattern.subn(replace_box_values, source, count=1)
+if value_count != 1:
+    raise RuntimeError('CTN 삭제 표 규격·무게 구간을 교체하지 못했습니다.')
+
+# data_editor 호출 직전에 표시값 기반 갱신 키를 삽입한다.
 editor_marker = "        edited_delete_rows = st.data_editor(\n            delete_rows,"
 if editor_marker not in source:
     raise RuntimeError('CTN 삭제 표 구간을 찾지 못했습니다.')
 
 editor_replacement = """        delete_table_signature = '|'.join(
-            f"{int(row['box_no'])}:{row['length_cm']}:{row['width_cm']}:{row['height_cm']}:{row['weight_kg']}:{row['updated_at']}"
-            for row in delete_boxes
+            f"{row['_box_no']}:{row['가로 × 세로 × 높이']}:{row['GW']}"
+            for row in delete_rows
         )
         delete_table_key = f'ctn_delete_table_{case_id}_{delete_table_signature}'
 
