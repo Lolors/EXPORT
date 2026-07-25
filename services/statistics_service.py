@@ -14,6 +14,8 @@ STATISTICS_COLUMNS = [
     '국가',
     '바이어',
     '제품명',
+    '제조번호',
+    '유통기한',
     '출고수량',
     '단위',
 ]
@@ -30,6 +32,8 @@ def shipment_rows(start_date: date, end_date: date) -> pd.DataFrame:
             COALESCE(c.country, '') AS country,
             COALESCE(c.buyer, '') AS buyer,
             COALESCE(NULLIF(TRIM(s.product_name), ''), o.product_name, '') AS product_name,
+            COALESCE(s.lot_no, '') AS lot_no,
+            COALESCE(s.expiry_date, '') AS expiry_date,
             COALESCE(s.requested_qty, 0) AS shipped_qty,
             COALESCE(NULLIF(TRIM(o.unit), ''), 'EA') AS unit
         FROM export_cases c
@@ -59,6 +63,8 @@ def shipment_rows(start_date: date, end_date: date) -> pd.DataFrame:
                 '국가': str(row['country'] or '').strip() or '미입력',
                 '바이어': str(row['buyer'] or '').strip(),
                 '제품명': str(row['product_name'] or '').strip() or '미입력',
+                '제조번호': str(row['lot_no'] or '').strip(),
+                '유통기한': str(row['expiry_date'] or '').strip(),
                 '출고수량': float(row['shipped_qty'] or 0),
                 '단위': str(row['unit'] or 'EA').strip() or 'EA',
             }
