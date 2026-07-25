@@ -119,8 +119,9 @@ def main() -> None:
     shipment_service.sync_active_case_stages = stage_service.sync_active_case_stages
     packing_service._sync_packing_stage = stage_service.sync_case_stage
 
-    with measure('streamlit.page.run', slow_ms=0):
-        st.navigation(PAGES, position='sidebar').run()
+    with db.connection_session():
+        with measure('streamlit.page.run', slow_ms=0):
+            st.navigation(PAGES, position='sidebar').run()
 
 
 if __name__ == '__main__':
