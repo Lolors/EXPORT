@@ -17,7 +17,7 @@ source, fresh_boxes_count = re.subn(
     lambda match: (
         f"{match.group(1)}delete_boxes = packing_service.list_boxes(case_id)\n"
         f"{match.group(1)}delete_items_by_box: dict[int, list] = {{}}\n"
-        f"{match.group(1)}for delete_item_row in packing_service.list_items(case_id):\n"
+        f"{match.group(1)}for delete_item_row in items:\n"
         f"{match.group(1)}    raw_delete_box_no = delete_item_row['box_no']\n"
         f"{match.group(1)}    if raw_delete_box_no is not None:\n"
         f"{match.group(1)}        delete_items_by_box.setdefault(int(raw_delete_box_no), []).append(delete_item_row)\n"
