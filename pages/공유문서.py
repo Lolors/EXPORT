@@ -4,6 +4,7 @@ import html
 import os
 import re
 import subprocess
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
