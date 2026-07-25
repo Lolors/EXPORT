@@ -116,6 +116,7 @@ def _sync_packing_stage(case_id: int, now: str | None = None) -> None:
     )
 
 
+@db.backup_batch
 def assign_items(case_id: int, item_ids: list[int], box_no: int) -> None:
     now = now_text()
     for item_id in item_ids:
@@ -130,6 +131,7 @@ def assign_items(case_id: int, item_ids: list[int], box_no: int) -> None:
     _sync_packing_stage(case_id, now)
 
 
+@db.backup_batch
 def assign_partial_item(case_id: int, item_id: int, box_no: int, quantity: float) -> None:
     item = db.row(
         '''SELECT id, case_id, order_item_id, business_unit, location, product_name,
@@ -186,6 +188,7 @@ def assign_partial_item(case_id: int, item_id: int, box_no: int, quantity: float
     _sync_packing_stage(case_id, now)
 
 
+@db.backup_batch
 def unassign_items(case_id: int, item_ids: list[int]) -> None:
     now = now_text()
     for item_id in item_ids:
@@ -196,6 +199,7 @@ def unassign_items(case_id: int, item_ids: list[int]) -> None:
     _sync_packing_stage(case_id, now)
 
 
+@db.backup_batch
 def update_box(box_id: int, length: float, width: float, height: float, weight: float) -> None:
     db.execute(
         'UPDATE boxes SET length_cm=?,width_cm=?,height_cm=?,weight_kg=?,updated_at=? WHERE id=?',
@@ -203,6 +207,7 @@ def update_box(box_id: int, length: float, width: float, height: float, weight: 
     )
 
 
+@db.backup_batch
 def clear_box(case_id: int, box_no: int) -> None:
     now = now_text()
     db.execute(
@@ -242,6 +247,7 @@ def list_box_presets() -> dict[str, dict[str, float]]:
     }
 
 
+@db.backup_batch
 def save_box_preset(name: str, length: float, width: float, height: float, weight: float) -> None:
     clean_name = str(name or '').strip()
     if not clean_name:
@@ -251,6 +257,7 @@ def save_box_preset(name: str, length: float, width: float, height: float, weigh
     db.set_setting(PRESET_SETTING_KEY, json.dumps(presets, ensure_ascii=False))
 
 
+@db.backup_batch
 def delete_box_preset(name: str) -> None:
     presets = list_box_presets()
     presets.pop(name, None)
@@ -275,11 +282,13 @@ def get_last_box_values() -> dict[str, float] | None:
     )
 
 
+@db.backup_batch
 def save_last_box_values(length: float, width: float, height: float, weight: float) -> None:
     values = _normalize_box_values(length, width, height, weight)
     db.set_setting(LAST_BOX_SETTING_KEY, json.dumps(values, ensure_ascii=False))
 
 
+@db.backup_batch
 def clone_box(case_id: int, source_box_no: int, clone_count: int) -> list[int]:
     if clone_count < 1:
         raise ValueError('복제할 CTN 개수는 1개 이상이어야 합니다.')
