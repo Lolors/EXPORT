@@ -23,14 +23,17 @@ def normalize_product_name(value: str) -> str:
 
 def list_editable_cases():
     return db.rows(
-        '''SELECT c.id, c.export_no, c.buyer, c.country, c.transport_mode, c.stage,
+        '''WITH product_summary AS (
+               SELECT case_id, GROUP_CONCAT(product_name, ', ') AS product_names
+               FROM order_items
+               GROUP BY case_id
+           )
+           SELECT c.id, c.export_no, c.buyer, c.country, c.transport_mode, c.stage,
                   c.status, c.note, c.actual_ship_date, c.case_type, c.created_at,
-                  COALESCE(GROUP_CONCAT(o.product_name, ', '), '') AS product_names
+                  COALESCE(p.product_names, '') AS product_names
            FROM export_cases c
-           LEFT JOIN order_items o ON o.case_id=c.id
+           LEFT JOIN product_summary p ON p.case_id=c.id
            WHERE c.stage<>'취소'
-           GROUP BY c.id, c.export_no, c.buyer, c.country, c.transport_mode, c.stage,
-                    c.status, c.note, c.actual_ship_date, c.case_type, c.created_at
            ORDER BY COALESCE(NULLIF(c.actual_ship_date,''), c.created_at) DESC'''
     )
 
