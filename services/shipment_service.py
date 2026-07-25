@@ -134,8 +134,7 @@ def cleanup_invalid_links(case_id: int) -> int:
 
 
 def list_case_items(case_id: int):
-    """Canonical current shipment rows used by intake, packing, and documents."""
-    cleanup_invalid_links(case_id)
+    """Canonical read-only shipment rows used by intake, packing, and documents."""
     return db.rows(
         '''SELECT s.id, s.case_id, s.order_item_id, s.business_unit,
                   s.product_name, s.lot_no, s.expiry_date,
@@ -245,6 +244,7 @@ def delete_unlinked(case_id: int) -> None:
 
 
 def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
+    cleanup_invalid_links(case_id)
     order = db.row('SELECT id FROM order_items WHERE id=? AND case_id=?', (order_item_id, case_id))
     if order is None:
         raise ValueError('현재 수출 건의 주문품목을 찾을 수 없습니다.')
