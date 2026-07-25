@@ -6,11 +6,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
+from services import usb_storage_service
 from utils.dates import now_text
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / 'export.db'
 UPLOAD_DIR = BASE_DIR / 'uploads'
+LAST_USB_BACKUP_ERROR = ''
+LAST_USB_BACKUP_PATH = ''
 
 
 @lru_cache(maxsize=1)
@@ -19,6 +22,7 @@ def _initialize_database_runtime() -> None:
     try:
         conn.execute('PRAGMA journal_mode = WAL')
         conn.execute('PRAGMA synchronous = NORMAL')
+        conn.execute(f'PRAGMA user_version = {usb_storage_service.DB_VERSION}')
         conn.commit()
     finally:
         conn.close()
@@ -41,6 +45,19 @@ def connect() -> Iterable[sqlite3.Connection]:
         conn.commit()
     finally:
         conn.close()
+
+
+def backup_to_usb() -> Path | None:
+    global LAST_USB_BACKUP_ERROR, LAST_USB_BACKUP_PATH
+    try:
+        destination = usb_storage_service.safe_backup_database(DB_PATH)
+        LAST_USB_BACKUP_ERROR = ''
+        LAST_USB_BACKUP_PATH = str(destination or '')
+        return destination
+    except Exception as exc:
+        LAST_USB_BACKUP_ERROR = str(exc)
+        LAST_USB_BACKUP_PATH = ''
+        return None
 
 
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
@@ -245,12 +262,15 @@ def row(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
 def execute(query: str, params: tuple[Any, ...] = ()) -> int:
     with connect() as conn:
         cursor = conn.execute(query, params)
-        return int(cursor.lastrowid or 0)
+        result = int(cursor.lastrowid or 0)
+    backup_to_usb()
+    return result
 
 
 def executemany(query: str, values: list[tuple[Any, ...]]) -> None:
     with connect() as conn:
         conn.executemany(query, values)
+    backup_to_usb()
 
 
 def get_setting(key: str, default: str = '') -> str:
