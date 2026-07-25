@@ -46,27 +46,23 @@ def merge_case_into(source_case_id: int, target_case_id: int) -> dict:
         ).fetchone()
         box_offset = int(target_max_box['max_box'] or 0) if box_count else 0
 
-        if box_offset:
-            connection.execute(
-                'UPDATE shipment_items SET box_no=box_no+? WHERE case_id=? AND box_no IS NOT NULL',
-                (box_offset, source_case_id),
-            )
-            connection.execute(
-                'UPDATE boxes SET box_no=box_no+? WHERE case_id=?',
-                (box_offset, source_case_id),
-            )
-
         connection.execute(
             'UPDATE order_items SET case_id=? WHERE case_id=?',
             (target_case_id, source_case_id),
         )
         connection.execute(
-            'UPDATE shipment_items SET case_id=?, updated_at=? WHERE case_id=?',
-            (target_case_id, now, source_case_id),
+            '''UPDATE shipment_items
+               SET case_id=?,
+                   box_no=CASE WHEN box_no IS NULL THEN NULL ELSE box_no+? END,
+                   updated_at=?
+               WHERE case_id=?''',
+            (target_case_id, box_offset, now, source_case_id),
         )
         connection.execute(
-            'UPDATE boxes SET case_id=?, updated_at=? WHERE case_id=?',
-            (target_case_id, now, source_case_id),
+            '''UPDATE boxes
+               SET case_id=?, box_no=box_no+?, updated_at=?
+               WHERE case_id=?''',
+            (target_case_id, box_offset, now, source_case_id),
         )
         connection.execute(
             'UPDATE purchase_price_history SET case_id=? WHERE case_id=?',
