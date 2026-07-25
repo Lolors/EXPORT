@@ -3,9 +3,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from utils.page_patch_cache import compile_cached, read_text_cached
+
 
 SOURCE_PATH = Path(__file__).with_name('박스_패킹_v3.py')
-source = SOURCE_PATH.read_text(encoding='utf-8')
+SOURCE_VERSION = SOURCE_PATH.stat().st_mtime_ns
+source = read_text_cached(str(SOURCE_PATH), SOURCE_VERSION)
 
 # CTN 삭제 표는 화면 상단에서 읽은 boxes가 아니라 DB의 최신 값을 다시 사용한다.
 # 제품요약은 전체 출고행을 한 번만 읽어 박스번호별로 묶어 사용한다.
@@ -92,4 +95,5 @@ source, key_pop_count = re.subn(
 if key_pop_count != 1:
     raise RuntimeError('CTN 삭제 표 세션 정리 키를 교체하지 못했습니다.')
 
-exec(compile(source, str(SOURCE_PATH), 'exec'), globals(), globals())
+code = compile_cached(source, str(SOURCE_PATH), f'packing-v4-{SOURCE_VERSION}')
+exec(code, globals(), globals())
