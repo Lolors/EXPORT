@@ -14,6 +14,28 @@ if source.count(product_name_old) != 1:
 
 patched = source.replace(product_name_old, product_name_new, 1)
 
+price_lookup_width_old = '''    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
+        width: 100vw;
+        max-width: 100vw;
+    }
+'''
+price_lookup_width_new = '''    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
+        width: 60vw;
+        max-width: 60vw;
+    }
+    @media (max-width: 900px) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
+            width: 100%;
+            max-width: 100%;
+        }
+    }
+'''
+
+if patched.count(price_lookup_width_old) != 1:
+    raise RuntimeError('유사 제품 매입가 조회 너비 구간을 변경하지 못했습니다.')
+
+patched = patched.replace(price_lookup_width_old, price_lookup_width_new, 1)
+
 progress_old = '''    total_order_qty = sum(safe_number(order['quantity']) for order in orders)
     total_received_qty = shipment_service.total_linked_quantity(case_id)
     progress_ratio = min(total_received_qty / total_order_qty, 1.0) if total_order_qty > 0 else 0.0
