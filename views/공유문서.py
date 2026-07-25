@@ -268,9 +268,20 @@ with st.container():
         reverse=True,
     )
     filter_cols = st.columns([1.5, 1.5, 3, 4])
-    selected_year = filter_cols[0].selectbox('연도', ['전체'] + years, key='document_case_year')
+    year_options: list[str | int] = ['전체'] + years
+    selected_year = filter_cols[0].selectbox(
+        '연도',
+        year_options,
+        index=year_options.index(now.year),
+        key='document_case_year',
+    )
     month_options: list[str | int] = ['전체'] + list(range(1, 13))
-    selected_month = filter_cols[1].selectbox('월', month_options, key='document_case_month')
+    selected_month = filter_cols[1].selectbox(
+        '월',
+        month_options,
+        index=month_options.index(now.month),
+        key='document_case_month',
+    )
     countries = sorted({str(case['country']).strip() for case in cases if str(case['country']).strip()})
     selected_country = filter_cols[2].selectbox('국가', ['전체'] + countries, key='document_case_country')
     product_query = filter_cols[3].text_input('제품명 검색', key='document_case_product_search').strip().casefold()
