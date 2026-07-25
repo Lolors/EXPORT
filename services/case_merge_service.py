@@ -13,7 +13,7 @@ def merge_case_into(source_case_id: int, target_case_id: int) -> dict:
     now = now_text()
     with db.connect() as connection:
         source = connection.execute(
-            'SELECT id, export_no, status, stage FROM export_cases WHERE id=?',
+            'SELECT id, export_no, status, stage, case_type FROM export_cases WHERE id=?',
             (source_case_id,),
         ).fetchone()
         target = connection.execute(
@@ -26,6 +26,8 @@ def merge_case_into(source_case_id: int, target_case_id: int) -> dict:
             raise ValueError('이미 취소된 수출 건은 이관할 수 없습니다.')
         if target['status'] == '취소' or target['stage'] == '취소':
             raise ValueError('취소된 수출 건으로는 이관할 수 없습니다.')
+        if source['case_type'] != target['case_type']:
+            raise ValueError('현재 수출 건과 과거 수출 건은 서로 병합할 수 없습니다.')
 
         counts = connection.execute(
             '''SELECT
