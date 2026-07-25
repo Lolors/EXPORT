@@ -56,8 +56,8 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-table-anchor) {
-        width: 80vw;
-        max-width: 80vw;
+        width: 60vw;
+        max-width: 60vw;
     }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.todo-section-anchor) {
         width: 40vw;
