@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import html
+import os
 import re
+import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -45,8 +48,15 @@ def summarize_product_names(raw_names: object) -> str:
 
 def quantity_with_unit(row) -> str:
     quantity = fmt_number(row['requested_qty'])
-    unit = str(row.get('unit', '') or '').strip() if isinstance(row, dict) else str(row['unit'] or '').strip()
+    try:
+        unit = str(row['unit'] or '').strip()
+    except (KeyError, IndexError):
+        unit = ''
     return f'{quantity} {unit}'.strip()
+
+
+def _shipment_date(case) -> str:
+    return str(case['actual_ship_date'] or '').strip()
 
 
 def render_document(case, packed, actual_rows) -> None:
@@ -134,7 +144,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 <div class="cell"><div class="label">국가 / Country</div><div class="value">{html.escape(case['country'] or '-')}</div></div>
 <div class="cell"><div class="label">바이어 / Buyer</div><div class="value">{html.escape(case['buyer'] or '-')}</div></div>
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
-<div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
+<div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(_shipment_date(case) or '-')}</div></div></div>
 <div class="section">DOMESTIC DELIVERY</div><div class="grid">
 <div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div>
 <div class="cell"><div class="label">{html.escape(detail_label)}</div><div class="value">{html.escape(detail_value)}</div></div>
@@ -169,31 +179,49 @@ def render_shipment_product_list(case, actual_rows) -> None:
     document = f'''<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-*{{box-sizing:border-box}} @page{{size:A4 portrait;margin:10mm}}
+*{{box-sizing:border-box}} @page{{size:A4 portrait;margin:15mm}}
 html,body{{margin:0;padding:0;background:#eef2f6;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif}} body{{padding:10px}}
-.toolbar{{width:100%;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:7px;background:#173b5f;color:white;font-weight:700;padding:9px 16px;cursor:pointer}}
-.sheet{{width:100%;margin:auto;background:white;border:1px solid #d7dee7;box-shadow:0 10px 28px rgba(30,45,70,.08)}}
-.header{{padding:23px 28px 19px;border-bottom:3px solid #234f75;display:flex;justify-content:space-between;gap:20px;align-items:flex-end}} .title{{font-size:23px;font-weight:850;color:#173b5f;letter-spacing:.02em}} .export-no{{text-align:right;font-size:10px;color:#758294}} .export-no b{{display:block;font-size:14px;color:#172033;margin-top:3px}}
-.meta{{display:grid;grid-template-columns:repeat(4,1fr);margin:17px 28px 16px;border:1px solid #dce3eb}} .meta div{{padding:8px 10px;border-right:1px solid #e3e8ee}} .meta div:last-child{{border-right:0}} .label{{font-size:8.5px;color:#7c8797}} .value{{font-size:11px;font-weight:700;margin-top:2px;word-break:break-word}}
-.content{{padding:0 28px 23px}} .summary{{font-size:9.5px;color:#697586;text-align:right;margin-bottom:6px}}
-table{{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.7px;border:1px solid #cfd8e2}} col.destination{{width:14%}} col.product{{width:35%}} col.lot{{width:19%}} col.expiry{{width:16%}} col.qty{{width:16%}}
-th{{background:#294f71;color:white;padding:7px 6px;text-align:center;font-weight:750}} td{{padding:6px 7px;border-right:1px solid #dce3ea;border-bottom:1px solid #dce3ea;vertical-align:middle;line-height:1.35}} .center{{text-align:center}} .right{{text-align:right}} .product{{white-space:normal;overflow-wrap:anywhere;word-break:keep-all;font-weight:700}} .merged{{background:#f5f8fb}} .lot,.expiry{{white-space:nowrap}} .qty{{white-space:nowrap;font-weight:650}} .empty{{text-align:center;color:#8993a0;padding:24px}}
-.notice{{padding:12px 28px 18px;font-size:8.7px;color:#788493;border-top:1px solid #e0e6ed}}
-@media print{{html,body{{width:210mm;min-height:297mm;background:white;padding:0}} .toolbar{{display:none!important}} .sheet{{width:190mm;max-width:none;margin:0 auto;border:0;box-shadow:none}} .header{{padding:15px 18px 13px}} .title{{font-size:20px}} .meta{{margin:12px 18px}} .content{{padding:0 18px 15px}} table{{font-size:8.8px}} th{{padding:5px}} td{{padding:5px 6px}} .notice{{padding:9px 18px 0}} th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+.toolbar{{width:160mm;max-width:100%;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:7px;background:#173b5f;color:white;font-weight:700;padding:9px 16px;cursor:pointer}}
+.sheet{{width:160mm;max-width:100%;margin:auto;background:white;border:1px solid #d7dee7;box-shadow:0 10px 28px rgba(30,45,70,.08)}}
+.header{{padding:18px 20px 15px;border-bottom:3px solid #234f75;display:flex;justify-content:space-between;gap:20px;align-items:flex-end}} .title{{font-size:21px;font-weight:850;color:#173b5f;letter-spacing:.02em}} .export-no{{text-align:right;font-size:9px;color:#758294}} .export-no b{{display:block;font-size:13px;color:#172033;margin-top:3px}}
+.meta{{display:grid;grid-template-columns:repeat(4,1fr);margin:13px 16px 12px;border:1px solid #dce3eb}} .meta div{{padding:7px 8px;border-right:1px solid #e3e8ee}} .meta div:last-child{{border-right:0}} .label{{font-size:8px;color:#7c8797}} .value{{font-size:10px;font-weight:700;margin-top:2px;word-break:break-word}}
+.content{{padding:0 16px 17px}} .summary{{width:145mm;max-width:100%;margin:0 auto 5px;font-size:8.8px;color:#697586;text-align:right}}
+table{{width:145mm;max-width:100%;margin:0 auto;border-collapse:collapse;table-layout:fixed;font-size:9.2px;border:1px solid #cfd8e2}} col.destination{{width:18mm}} col.product{{width:50mm}} col.lot{{width:28mm}} col.expiry{{width:24mm}} col.qty{{width:25mm}}
+th{{background:#294f71;color:white;padding:6px 4px;text-align:center;font-weight:750}} td{{padding:5px 5px;border-right:1px solid #dce3ea;border-bottom:1px solid #dce3ea;vertical-align:middle;line-height:1.3}} .center{{text-align:center}} .right{{text-align:right}} .product{{white-space:normal;overflow-wrap:anywhere;word-break:keep-all;font-weight:700}} .merged{{background:#f5f8fb}} .lot,.expiry{{white-space:nowrap}} .qty{{white-space:nowrap;font-weight:650}} .empty{{text-align:center;color:#8993a0;padding:20px}}
+.notice{{padding:10px 20px 14px;font-size:8.2px;color:#788493;border-top:1px solid #e0e6ed}}
+@media print{{html,body{{width:210mm;min-height:297mm;background:white;padding:0}} .toolbar{{display:none!important}} .sheet{{width:160mm;max-width:none;margin:0 auto;border:0;box-shadow:none}} .header{{padding:13px 15px 11px}} .title{{font-size:18px}} .meta{{margin:10px 8px}} .content{{padding:0 8px 12px}} .summary,table{{width:145mm;max-width:none}} table{{font-size:8.5px}} th{{padding:4px 3px}} td{{padding:4px}} .notice{{padding:8px 15px 0}} th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="sheet"><div class="header"><div class="title">출고 예정 제품 리스트</div><div class="export-no">EXPORT NO.<b>{html.escape(case['export_no'] or '-')}</b></div></div>
-<div class="meta"><div><span class="label">국가 / Country</span><div class="value">{html.escape(case['country'] or '-')}</div></div><div><span class="label">바이어 / Buyer</span><div class="value">{html.escape(case['buyer'] or '-')}</div></div><div><span class="label">운송방식 / Transport</span><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div><div><span class="label">작성일 / Date</span><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
+<div class="meta"><div><span class="label">국가 / Country</span><div class="value">{html.escape(case['country'] or '-')}</div></div><div><span class="label">바이어 / Buyer</span><div class="value">{html.escape(case['buyer'] or '-')}</div></div><div><span class="label">운송방식 / Transport</span><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div><div><span class="label">출고일 / Ship Date</span><div class="value">{html.escape(_shipment_date(case) or '-')}</div></div></div>
 <div class="content"><div class="summary">총 {item_count}품목 · 제조번호 기준 {total_lines}행</div><table><colgroup><col class="destination"><col class="product"><col class="lot"><col class="expiry"><col class="qty"></colgroup><thead><tr><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr></thead><tbody>{''.join(rows_html)}</tbody></table></div>
 <div class="notice">본 문서는 패킹 완료 전 작성된 출고 예정 제품 목록이며, 최종 수량 및 패킹 정보는 변경될 수 있습니다.</div></div></body></html>'''
-    with st.container():
-        st.markdown('<div class="shipment-product-list-anchor"></div>', unsafe_allow_html=True)
-        components.html(document, height=min(1800, max(700, 500 + len(actual_rows) * 38)), scrolling=True)
+    components.html(document, height=min(1800, max(700, 500 + len(actual_rows) * 38)), scrolling=True)
 
 
 def open_selected_path(path: Path, label: str) -> None:
     try:
-        folder_service.open_in_explorer(path)
+        if not path.exists():
+            raise FileNotFoundError(f'경로를 찾을 수 없습니다: {path}')
+        if os.name != 'nt':
+            folder_service.open_in_explorer(path)
+            return
+
+        target = path if path.is_dir() else path.parent
+        subprocess.Popen(['explorer.exe', str(target)])
+        folder_title = target.name.replace("'", "''")
+        activation_script = (
+            'Start-Sleep -Milliseconds 500; '
+            '$shell = New-Object -ComObject WScript.Shell; '
+            f"if (-not $shell.AppActivate('{folder_title}')) {{ "
+            "if (-not $shell.AppActivate('파일 탐색기')) { $shell.AppActivate('File Explorer') | Out-Null } "
+            '} '
+        )
+        subprocess.Popen(
+            ['powershell.exe', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', activation_script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     except Exception as exc:
         st.error(f'{label}을(를) 열 수 없습니다: {exc}')
 
@@ -213,19 +241,8 @@ st.markdown(
         width: 56vw;
         max-width: 56vw;
     }
-    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-product-list-anchor) {
-        width: 60vw;
-        max-width: 60vw;
-    }
-    .shipment-product-list-anchor {
-        height: 0;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-    }
     @media(max-width:900px) {
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#document-case-filter-anchor),
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-product-list-anchor) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#document-case-filter-anchor) {
             width: 100%;
             max-width: 100%;
         }
@@ -237,13 +254,27 @@ st.markdown(
 
 with st.container():
     st.markdown('<span id="document-case-filter-anchor"></span>', unsafe_allow_html=True)
-    years = sorted({int(str(case['actual_ship_date'] or case['created_at'])[:4]) for case in cases if str(case['actual_ship_date'] or case['created_at'])[:4].isdigit()}, reverse=True)
+    years = sorted(
+        {
+            int(_shipment_date(case)[:4])
+            for case in cases
+            if _shipment_date(case)[:4].isdigit()
+        },
+        reverse=True,
+    )
     filter_cols = st.columns([1.5, 1.5, 3, 4])
     selected_year = filter_cols[0].selectbox('연도', ['전체'] + years, key='document_case_year')
     if selected_year == '전체':
         month_options: list[str | int] = ['전체']
     else:
-        month_values = sorted({int(str(case['actual_ship_date'] or case['created_at'])[5:7]) for case in cases if str(case['actual_ship_date'] or case['created_at']).startswith(str(selected_year)) and str(case['actual_ship_date'] or case['created_at'])[5:7].isdigit()})
+        month_values = sorted(
+            {
+                int(_shipment_date(case)[5:7])
+                for case in cases
+                if _shipment_date(case).startswith(str(selected_year))
+                and _shipment_date(case)[5:7].isdigit()
+            }
+        )
         month_options = ['전체'] + month_values
     selected_month = filter_cols[1].selectbox('월', month_options, key='document_case_month')
     countries = sorted({str(case['country']).strip() for case in cases if str(case['country']).strip()})
@@ -252,7 +283,7 @@ with st.container():
 
 filtered_cases = []
 for case in cases:
-    raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
+    raw_date = _shipment_date(case)
     case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
     case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
     if selected_year != '전체' and case_year != selected_year:
@@ -271,8 +302,18 @@ if not filtered_cases:
 
 selection_rows = []
 for case in filtered_cases:
-    raw_date = str(case['actual_ship_date'] or case['created_at'] or '')
-    selection_rows.append({'_case_id': int(case['id']), '등록일자': raw_date[:10], '수출번호': case['export_no'], '국가': case['country'], '바이어': case['buyer'] or '', '운송방식': case['transport_mode'], '단계': display_stage(case['stage']), '주문제품': summarize_product_names(case['product_names'])})
+    selection_rows.append(
+        {
+            '_case_id': int(case['id']),
+            '출고일자': _shipment_date(case),
+            '수출번호': case['export_no'],
+            '국가': case['country'],
+            '바이어': case['buyer'] or '',
+            '운송방식': case['transport_mode'],
+            '단계': display_stage(case['stage']),
+            '주문제품': summarize_product_names(case['product_names']),
+        }
+    )
 
 selection_df = pd.DataFrame(selection_rows)
 selected_rows = st.dataframe(
@@ -281,7 +322,16 @@ selected_rows = st.dataframe(
     use_container_width=True,
     on_select='rerun',
     selection_mode='single-row',
-    column_config={'_case_id': None, '등록일자': st.column_config.TextColumn('등록일자'), '수출번호': st.column_config.TextColumn('수출번호'), '국가': st.column_config.TextColumn('국가'), '바이어': st.column_config.TextColumn('바이어'), '운송방식': st.column_config.TextColumn('운송방식'), '단계': st.column_config.TextColumn('단계'), '주문제품': st.column_config.TextColumn('주문제품')},
+    column_config={
+        '_case_id': None,
+        '출고일자': st.column_config.TextColumn('출고일자'),
+        '수출번호': st.column_config.TextColumn('수출번호'),
+        '국가': st.column_config.TextColumn('국가'),
+        '바이어': st.column_config.TextColumn('바이어'),
+        '운송방식': st.column_config.TextColumn('운송방식'),
+        '단계': st.column_config.TextColumn('단계'),
+        '주문제품': st.column_config.TextColumn('주문제품'),
+    },
     key='document_case_table',
 )
 
