@@ -7,7 +7,7 @@ from pathlib import Path
 SOURCE_PATH = Path(__file__).with_name('공유문서.py')
 source = SOURCE_PATH.read_text(encoding='utf-8')
 
-replacement = r'''def render_shipment_product_list(case, actual_rows) -> None:
+replacement = r"""def render_shipment_product_list(case, actual_rows) -> None:
     destination_order = {
         '노투스팜': 0,
         '노투스': 1,
@@ -91,7 +91,7 @@ th{{background:#294f71;color:white;padding:6px 4px;text-align:center;font-weight
     components.html(document, height=min(1800, max(700, 500 + len(sorted_rows) * 38)), scrolling=True)
 
 
-'''
+"""
 
 pattern = r'def render_shipment_product_list\(case, actual_rows\) -> None:.*?(?=def open_selected_path\()'
 patched, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
