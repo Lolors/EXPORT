@@ -280,6 +280,7 @@ def _prepare_folder(case, folder: Path) -> Path:
     return folder
 
 
+@db.backup_batch
 def ensure_case_folder(case_id: int) -> Path:
     case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
     if not case:
@@ -299,6 +300,7 @@ def ensure_case_folder(case_id: int) -> Path:
     return target
 
 
+@db.backup_batch
 def refresh_attachment_paths(case_id: int, old_root: Path, new_root: Path) -> None:
     old_text = str(old_root)
     for attachment in db.rows('SELECT id, stored_path FROM attachments WHERE case_id=?', (case_id,)):
@@ -309,6 +311,7 @@ def refresh_attachment_paths(case_id: int, old_root: Path, new_root: Path) -> No
             db.execute('UPDATE attachments SET stored_path=? WHERE id=?', (_path_for_database(replacement), attachment['id']))
 
 
+@db.backup_batch
 def sync_case_folder(case_id: int) -> Path:
     case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
     if not case:
@@ -343,6 +346,7 @@ def rebuild_all_case_folders() -> list[tuple[int, Path]]:
     return [(int(case['id']), sync_case_folder(int(case['id']))) for case in cases]
 
 
+@db.backup_batch
 def move_file_to_case(case_id: int, source: Path, category: str = '출고사진') -> Path:
     destination_folder = category_folder(case_id, category)
     source = Path(source)
