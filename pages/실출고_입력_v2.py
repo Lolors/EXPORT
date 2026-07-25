@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from utils.page_patch_cache import compile_cached, read_text_cached
+
 
 SOURCE_PATH = Path(__file__).with_name('실출고_입력.py')
-source = SOURCE_PATH.read_text(encoding='utf-8')
+SOURCE_VERSION = SOURCE_PATH.stat().st_mtime_ns
+source = read_text_cached(str(SOURCE_PATH), SOURCE_VERSION)
 
 product_name_old = "'실제 제품명': selected_order_name,"
 product_name_new = "'실제 제품명': '',"
@@ -125,4 +128,5 @@ if patched.count(progress_old) != 1:
     raise RuntimeError('전체 입고 진행률 계산 구간을 변경하지 못했습니다.')
 
 patched = patched.replace(progress_old, progress_new, 1)
-exec(compile(patched, str(SOURCE_PATH), 'exec'), globals(), globals())
+code = compile_cached(patched, str(SOURCE_PATH), f'shipment-v2-{SOURCE_VERSION}')
+exec(code, globals(), globals())
