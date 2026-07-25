@@ -45,6 +45,14 @@ def _box_size_text(row) -> str:
     return ' × '.join(f'{float(value):g}' for value in values)
 
 
+def _shipment_quantity(row) -> float:
+    return float(row['requested_qty'] or 0)
+
+
+def _quantities_equal(left: object, right: object) -> bool:
+    return abs(float(left or 0) - float(right or 0)) <= 0.000001
+
+
 def write_case_workbook(case_id: int, folder: Path) -> Path:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -93,7 +101,7 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     ws2 = wb.create_sheet('출고 진행 상황')
     ws2.append(['출고 진행 상황'])
     ws2.append([
-        '주문제품', '총 주문수량', '단위', '사업장', '실출고 제품명',
+        '주문제품', '총 주문수량', '단위', '사업장',
         '제조번호', '유통기한', '출고수량', '박스번호',
         '박스 사이즈 (가로 × 세로 × 높이, cm)', 'GW (kg)', '수정일',
     ])
@@ -106,55 +114,97 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     box_rows: dict[int, list[int]] = {}
     order_fill = PatternFill('solid', fgColor='F5F8FB')
 
+    def append_shipment_row(order, shipment, *, product_text: str, total_order_quantity: object = '') -> int:
+        box_no = int(shipment['box_no']) if shipment['box_no'] is not None else None
+        row_no = ws2.max_row + 1
+        ws2.append([
+            product_text,
+            total_order_quantity,
+            order['unit'],
+            shipment['business_unit'] or '',
+            shipment['lot_no'] or '',
+            shipment['expiry_date'] or '',
+            shipment['requested_qty'] or 0,
+            box_no or '',
+            _box_size_text(shipment),
+            shipment['weight_kg'] if shipment['weight_kg'] not in (None, '') else '',
+            shipment['updated_at'] or '',
+        ])
+        if total_order_quantity != '':
+            ws2.cell(row_no, 2).number_format = '#,##0'
+        ws2.cell(row_no, 7).number_format = '#,##0'
+        ws2.cell(row_no, 10).number_format = '0" kg"'
+        if box_no is not None:
+            box_rows.setdefault(box_no, []).append(row_no)
+        return row_no
+
     for order in orders:
+        order_shipments = grouped.get(int(order['id']), [])
+        received_total = sum(_shipment_quantity(shipment) for shipment in order_shipments)
+        single_complete_shipment = (
+            len(order_shipments) == 1
+            and _quantities_equal(received_total, order['quantity'])
+        )
+
+        if single_complete_shipment:
+            shipment = order_shipments[0]
+            row_no = append_shipment_row(
+                order,
+                shipment,
+                product_text=str(shipment['actual_product_name'] or order['product_name']),
+                total_order_quantity=order['quantity'],
+            )
+            for cell in ws2[row_no]:
+                cell.font = Font(bold=True)
+                cell.fill = order_fill
+            continue
+
         order_row = ws2.max_row + 1
-        ws2.append([order['product_name'], order['quantity'], order['unit'], '', '', '', '', '', '', '', '', ''])
+        ws2.append([order['product_name'], order['quantity'], order['unit'], '', '', '', '', '', '', '', ''])
         ws2.cell(order_row, 2).number_format = '#,##0'
         for cell in ws2[order_row]:
             cell.font = Font(bold=True)
             cell.fill = order_fill
 
-        for shipment in grouped.get(int(order['id']), []):
-            box_no = int(shipment['box_no']) if shipment['box_no'] is not None else None
-            row_no = ws2.max_row + 1
-            ws2.append([
-                f'└ {shipment["actual_product_name"] or order["product_name"]}', '', order['unit'],
-                shipment['business_unit'] or '', shipment['actual_product_name'] or '',
-                shipment['lot_no'] or '', shipment['expiry_date'] or '', shipment['requested_qty'] or 0,
-                box_no or '', _box_size_text(shipment),
-                shipment['weight_kg'] if shipment['weight_kg'] not in (None, '') else '',
-                shipment['updated_at'] or '',
-            ])
+        for shipment in order_shipments:
+            row_no = append_shipment_row(
+                order,
+                shipment,
+                product_text=f'└ {shipment["actual_product_name"] or order["product_name"]}',
+            )
             ws2.cell(row_no, 1).alignment = Alignment(indent=1, vertical='center', wrap_text=True)
-            ws2.cell(row_no, 8).number_format = '#,##0'
-            ws2.cell(row_no, 11).number_format = '0" kg"'
-            if box_no is not None:
-                box_rows.setdefault(box_no, []).append(row_no)
 
     for box_no in sorted(box_rows):
         rows = box_rows[box_no]
         if len(rows) > 1:
-            for column in (9, 10, 11):
+            for column in (8, 9, 10):
                 ws2.merge_cells(start_row=rows[0], start_column=column, end_row=rows[-1], end_column=column)
-        for column in (9, 10, 11):
+        for column in (8, 9, 10):
             ws2.cell(rows[0], column).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
     total_row = ws2.max_row + 1
-    ws2.append(['합계', '', '', '', '', '', '', '', '', '', '', ''])
-    ws2.cell(total_row, 8, f'=SUM(H3:H{total_row - 1})')
+    ws2.append(['합계', '', '', '', '', '', '', '', '', '', ''])
+    ws2.cell(total_row, 7, f'=SUM(G3:G{total_row - 1})')
     if box_rows:
-        gw_cells = ','.join(f'K{rows[0]}' for rows in box_rows.values())
-        ws2.cell(total_row, 11, f'=SUM({gw_cells})')
+        gw_cells = ','.join(f'J{rows[0]}' for rows in box_rows.values())
+        ws2.cell(total_row, 10, f'=SUM({gw_cells})')
     else:
-        ws2.cell(total_row, 11, 0)
-    ws2.cell(total_row, 8).number_format = '#,##0'
-    ws2.cell(total_row, 11).number_format = '0" kg"'
+        ws2.cell(total_row, 10, 0)
+    ws2.cell(total_row, 7).number_format = '#,##0'
+    ws2.cell(total_row, 10).number_format = '0" kg"'
     for cell in ws2[total_row]:
         cell.font = Font(bold=True)
         cell.fill = PatternFill('solid', fgColor='D9EAF7')
     ws2.cell(total_row, 1).alignment = Alignment(horizontal='center', vertical='center')
 
-    _style_sheet(ws2, {'A': 32, 'B': 15, 'C': 10, 'D': 16, 'E': 28, 'F': 18, 'G': 16, 'H': 14, 'I': 12, 'J': 28, 'K': 12, 'L': 20}, {2})
+    _style_sheet(
+        ws2,
+        {
+            'A': 34, 'B': 15, 'C': 10, 'D': 16, 'E': 18, 'F': 16,
+            'G': 14, 'H': 12, 'I': 28, 'J': 12, 'K': 20,
+        },
+        {2},
+    )
 
     ws3 = wb.create_sheet('국내배송 정보')
     ws3.append(['국내배송 정보'])
