@@ -40,12 +40,14 @@ if not cases:
     st.info('진행 중인 수출 건이 없습니다.')
     st.stop()
 
-options = {
-    f"{case_label(case)} · ID {int(case['id'])}": int(case['id'])
-    for case in cases
-}
-selected_case_label = st.selectbox('수출 건 선택', list(options), key='linked_shipment_case')
-case_id = options[selected_case_label]
+case_by_id = {int(case['id']): case for case in cases}
+case_ids = list(case_by_id)
+case_id = st.selectbox(
+    '수출 건 선택',
+    case_ids,
+    format_func=lambda value: case_label(case_by_id[int(value)]),
+    key='linked_shipment_case',
+)
 
 st.session_state['actual_packing_case_id'] = case_id
 
