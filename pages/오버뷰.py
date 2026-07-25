@@ -12,6 +12,25 @@ STAGE_LABELS = {
     '출고 대기': '패킹 대기',
 }
 
+STAGE_COLORS = {
+    '주문 접수': 'background-color: #eef1f5; color: #46505f; font-weight: 700;',
+    '제품 준비': 'background-color: #fff2cc; color: #7a5a00; font-weight: 700;',
+    '패킹 대기': 'background-color: #dff3ff; color: #075f85; font-weight: 700;',
+    '패킹 진행': 'background-color: #e8f0ff; color: #315d9b; font-weight: 700;',
+    '패킹 완료': 'background-color: #e7e0ff; color: #5637a5; font-weight: 700;',
+    '국내배송': 'background-color: #ffe7d6; color: #9a4b0b; font-weight: 700;',
+    '선적 준비': 'background-color: #dff5f2; color: #14685f; font-weight: 700;',
+    '선적 완료': 'background-color: #dcecff; color: #174f8f; font-weight: 700;',
+    '완료': 'background-color: #dff5e7; color: #17683a; font-weight: 700;',
+}
+
+
+def _stage_style(value: object) -> str:
+    return STAGE_COLORS.get(
+        str(value or '').strip(),
+        'background-color: #f3f4f6; color: #555; font-weight: 700;',
+    )
+
 
 def _order_products_summary(case_id: int) -> str:
     product_names = [
@@ -37,8 +56,8 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.export-table-anchor) {
-        width: 70vw;
-        max-width: 70vw;
+        width: 80vw;
+        max-width: 80vw;
     }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.todo-section-anchor) {
         width: 40vw;
@@ -106,10 +125,13 @@ else:
             }
         )
 
+    table_df = pd.DataFrame(table_rows)
+    styled_table = table_df.style.map(_stage_style, subset=['현재 단계'])
+
     with st.container():
         st.markdown('<div class="export-table-anchor"></div>', unsafe_allow_html=True)
         st.dataframe(
-            pd.DataFrame(table_rows),
+            styled_table,
             use_container_width=True,
             hide_index=True,
             column_config={
