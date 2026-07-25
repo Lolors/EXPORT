@@ -33,4 +33,36 @@ patched, count = re.subn(pattern, lambda _match: replacement, source, count=1, f
 if count != 1:
     raise RuntimeError('박스 패킹 수출 건 선택 영역을 교체하지 못했습니다.')
 
+selector_original = '''    selector_key = f'packing_box_detail_{case_id}'
+    if st.session_state.get(selector_key) not in box_labels:
+        st.session_state[selector_key] = default_box_label
+
+    selected_box_label = st.selectbox('CTN 선택', box_labels, key=selector_key)
+'''
+selector_replacement = '''    selector_key = f'packing_box_detail_{case_id}'
+    pending_selector_key = f'pending_packing_box_detail_{case_id}'
+    if pending_selector_key in st.session_state:
+        pending_label = st.session_state.pop(pending_selector_key)
+        if pending_label in box_labels:
+            st.session_state[selector_key] = pending_label
+    if st.session_state.get(selector_key) not in box_labels:
+        st.session_state[selector_key] = default_box_label
+
+    selected_box_label = st.selectbox('CTN 선택', box_labels, key=selector_key)
+'''
+if selector_original not in patched:
+    raise RuntimeError('CTN 선택 상태 초기화 영역을 찾지 못했습니다.')
+patched = patched.replace(selector_original, selector_replacement, 1)
+
+patched = patched.replace(
+    "                st.session_state[selector_key] = next_label\n",
+    "                st.session_state[pending_selector_key] = next_label\n",
+    1,
+)
+patched = patched.replace(
+    "            st.session_state[selector_key] = f'CTN {created_boxes[0]}'\n",
+    "            st.session_state[pending_selector_key] = f'CTN {created_boxes[0]}'\n",
+    1,
+)
+
 exec(compile(patched, str(SOURCE_PATH), 'exec'), globals(), globals())
