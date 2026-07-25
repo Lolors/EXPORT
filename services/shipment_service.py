@@ -4,6 +4,97 @@ import db
 from utils.dates import now_text
 
 
+PACKING_STAGE_NAMES = {
+    '주문 접수',
+    '출고 대기',
+    '입고 진행',
+    '패킹 대기',
+    '패킹 진행',
+    '패킹 완료',
+}
+
+
+def sync_case_stage(case_id: int, now: str | None = None) -> str:
+    """Recalculate the intake/packing stage from every order item's progress."""
+    case = db.row(
+        'SELECT case_type, status, stage FROM export_cases WHERE id=?',
+        (case_id,),
+    )
+    if case is None:
+        return ''
+
+    current_stage = str(case['stage'] or '')
+    if case['case_type'] == 'historical' or case['status'] == '취소':
+        return current_stage
+    if current_stage and current_stage not in PACKING_STAGE_NAMES:
+        return current_stage
+
+    intake = db.row(
+        '''SELECT
+               COUNT(*) AS order_count,
+               COALESCE(SUM(COALESCE(received.received_qty, 0)), 0) AS total_received_qty,
+               SUM(
+                   CASE
+                       WHEN COALESCE(received.received_qty, 0) + 0.000001 < COALESCE(o.quantity, 0)
+                       THEN 1
+                       ELSE 0
+                   END
+               ) AS incomplete_order_count
+           FROM order_items o
+           LEFT JOIN (
+               SELECT order_item_id, SUM(COALESCE(requested_qty, 0)) AS received_qty
+               FROM shipment_items
+               WHERE case_id=?
+               GROUP BY order_item_id
+           ) received ON received.order_item_id=o.id
+           WHERE o.case_id=?''',
+        (case_id, case_id),
+    )
+
+    order_count = int(intake['order_count'] or 0) if intake else 0
+    total_received_qty = float(intake['total_received_qty'] or 0) if intake else 0.0
+    incomplete_order_count = int(intake['incomplete_order_count'] or 0) if intake else 0
+
+    if order_count == 0 or total_received_qty <= 0:
+        stage = '출고 대기'
+    elif incomplete_order_count > 0:
+        stage = '입고 진행'
+    else:
+        packing = db.row(
+            '''SELECT COALESCE(
+                       SUM(CASE WHEN s.box_no IS NULL THEN s.requested_qty ELSE 0 END),
+                       0
+                   ) AS remaining_qty
+               FROM shipment_items s
+               JOIN order_items o
+                 ON o.id=s.order_item_id
+                AND o.case_id=s.case_id
+               WHERE s.case_id=?''',
+            (case_id,),
+        )
+        remaining_qty = float(packing['remaining_qty'] or 0) if packing else 0.0
+        stage = '패킹 완료' if remaining_qty <= 0 else '패킹 대기'
+
+    timestamp = now or now_text()
+    db.execute(
+        'UPDATE export_cases SET stage=?, updated_at=? WHERE id=?',
+        (stage, timestamp, case_id),
+    )
+    return stage
+
+
+def sync_active_case_stages() -> None:
+    rows = db.rows(
+        '''SELECT id FROM export_cases
+           WHERE status<>'취소'
+             AND case_type<>'historical'
+             AND stage IN ('주문 접수','출고 대기','입고 진행','패킹 대기','패킹 진행','패킹 완료')'''
+    )
+    timestamp = now_text()
+    for row in rows:
+        sync_case_stage(int(row['id']), timestamp)
+
+
 def list_for_case(case_id: int):
     return db.rows(
         '''SELECT id, case_id, order_item_id, business_unit, product_name,
@@ -38,6 +129,7 @@ def cleanup_invalid_links(case_id: int) -> int:
              )''',
         (case_id,),
     )
+    sync_case_stage(case_id)
     return len(ids)
 
 
@@ -149,6 +241,7 @@ def delete_unlinked(case_id: int) -> None:
              )''',
         (case_id,),
     )
+    sync_case_stage(case_id)
 
 
 def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
@@ -197,7 +290,7 @@ def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
              )''',
         (case_id,),
     )
-    db.execute("UPDATE export_cases SET stage='패킹 대기', updated_at=? WHERE id=?", (now, case_id))
+    sync_case_stage(case_id, now)
     return total
 
 
