@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 from services import usb_storage_service
 from utils.dates import now_text
+from utils.performance import measure
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / 'export.db'
@@ -288,13 +289,15 @@ def init_db() -> None:
 
 
 def rows(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
-    with connect() as conn:
-        return list(conn.execute(query, params).fetchall())
+    with measure('db.rows'):
+        with connect() as conn:
+            return list(conn.execute(query, params).fetchall())
 
 
 def row(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
-    with connect() as conn:
-        return conn.execute(query, params).fetchone()
+    with measure('db.row'):
+        with connect() as conn:
+            return conn.execute(query, params).fetchone()
 
 
 def execute(query: str, params: tuple[Any, ...] = ()) -> int:
