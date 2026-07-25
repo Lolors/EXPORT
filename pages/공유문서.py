@@ -171,9 +171,9 @@ def render_shipment_product_list(case, actual_rows) -> None:
 <style>
 *{{box-sizing:border-box}} @page{{size:A4 portrait;margin:10mm}}
 html,body{{margin:0;padding:0;background:#eef2f6;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif}} body{{padding:10px}}
-.toolbar{{max-width:900px;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:7px;background:#173b5f;color:white;font-weight:700;padding:9px 16px;cursor:pointer}}
-.sheet{{max-width:900px;margin:auto;background:white;border:1px solid #d7dee7;box-shadow:0 10px 28px rgba(30,45,70,.08)}}
-.header{{padding:23px 28px 19px;border-bottom:3px solid #234f75;display:flex;justify-content:space-between;gap:20px;align-items:flex-end}} .title{{font-size:23px;font-weight:850;color:#173b5f;letter-spacing:.02em}} .subtitle{{font-size:10px;color:#758294;margin-top:3px;letter-spacing:.12em}} .export-no{{text-align:right;font-size:10px;color:#758294}} .export-no b{{display:block;font-size:14px;color:#172033;margin-top:3px}}
+.toolbar{{width:100%;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:7px;background:#173b5f;color:white;font-weight:700;padding:9px 16px;cursor:pointer}}
+.sheet{{width:100%;margin:auto;background:white;border:1px solid #d7dee7;box-shadow:0 10px 28px rgba(30,45,70,.08)}}
+.header{{padding:23px 28px 19px;border-bottom:3px solid #234f75;display:flex;justify-content:space-between;gap:20px;align-items:flex-end}} .title{{font-size:23px;font-weight:850;color:#173b5f;letter-spacing:.02em}} .export-no{{text-align:right;font-size:10px;color:#758294}} .export-no b{{display:block;font-size:14px;color:#172033;margin-top:3px}}
 .meta{{display:grid;grid-template-columns:repeat(4,1fr);margin:17px 28px 16px;border:1px solid #dce3eb}} .meta div{{padding:8px 10px;border-right:1px solid #e3e8ee}} .meta div:last-child{{border-right:0}} .label{{font-size:8.5px;color:#7c8797}} .value{{font-size:11px;font-weight:700;margin-top:2px;word-break:break-word}}
 .content{{padding:0 28px 23px}} .summary{{font-size:9.5px;color:#697586;text-align:right;margin-bottom:6px}}
 table{{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.7px;border:1px solid #cfd8e2}} col.destination{{width:14%}} col.product{{width:35%}} col.lot{{width:19%}} col.expiry{{width:16%}} col.qty{{width:16%}}
@@ -182,11 +182,13 @@ th{{background:#294f71;color:white;padding:7px 6px;text-align:center;font-weight
 @media print{{html,body{{width:210mm;min-height:297mm;background:white;padding:0}} .toolbar{{display:none!important}} .sheet{{width:190mm;max-width:none;margin:0 auto;border:0;box-shadow:none}} .header{{padding:15px 18px 13px}} .title{{font-size:20px}} .meta{{margin:12px 18px}} .content{{padding:0 18px 15px}} table{{font-size:8.8px}} th{{padding:5px}} td{{padding:5px 6px}} .notice{{padding:9px 18px 0}} th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
-<div class="sheet"><div class="header"><div><div class="title">출고 예정 제품 리스트</div><div class="subtitle">PRODUCT LIST</div></div><div class="export-no">EXPORT NO.<b>{html.escape(case['export_no'] or '-')}</b></div></div>
+<div class="sheet"><div class="header"><div class="title">출고 예정 제품 리스트</div><div class="export-no">EXPORT NO.<b>{html.escape(case['export_no'] or '-')}</b></div></div>
 <div class="meta"><div><span class="label">국가 / Country</span><div class="value">{html.escape(case['country'] or '-')}</div></div><div><span class="label">바이어 / Buyer</span><div class="value">{html.escape(case['buyer'] or '-')}</div></div><div><span class="label">운송방식 / Transport</span><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div><div><span class="label">작성일 / Date</span><div class="value">{html.escape(case['actual_ship_date'] or '-')}</div></div></div>
 <div class="content"><div class="summary">총 {item_count}품목 · 제조번호 기준 {total_lines}행</div><table><colgroup><col class="destination"><col class="product"><col class="lot"><col class="expiry"><col class="qty"></colgroup><thead><tr><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th></tr></thead><tbody>{''.join(rows_html)}</tbody></table></div>
 <div class="notice">본 문서는 패킹 완료 전 작성된 출고 예정 제품 목록이며, 최종 수량 및 패킹 정보는 변경될 수 있습니다.</div></div></body></html>'''
-    components.html(document, height=min(1800, max(700, 500 + len(actual_rows) * 38)), scrolling=True)
+    with st.container():
+        st.markdown('<div class="shipment-product-list-anchor"></div>', unsafe_allow_html=True)
+        components.html(document, height=min(1800, max(700, 500 + len(actual_rows) * 38)), scrolling=True)
 
 
 def open_selected_path(path: Path, label: str) -> None:
@@ -204,7 +206,34 @@ if not cases:
     st.info('표시할 수출 건이 없습니다.')
     st.stop()
 
-st.markdown('''<style>div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#document-case-filter-anchor){width:56vw;max-width:56vw}@media(max-width:900px){div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#document-case-filter-anchor){width:100%;max-width:100%}}</style>''', unsafe_allow_html=True)
+st.markdown(
+    '''
+    <style>
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#document-case-filter-anchor) {
+        width: 56vw;
+        max-width: 56vw;
+    }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-product-list-anchor) {
+        width: 60vw;
+        max-width: 60vw;
+    }
+    .shipment-product-list-anchor {
+        height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+    @media(max-width:900px) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#document-case-filter-anchor),
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-product-list-anchor) {
+            width: 100%;
+            max-width: 100%;
+        }
+    }
+    </style>
+    ''',
+    unsafe_allow_html=True,
+)
 
 with st.container():
     st.markdown('<span id="document-case-filter-anchor"></span>', unsafe_allow_html=True)
