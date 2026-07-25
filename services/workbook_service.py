@@ -159,8 +159,16 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
                 cell.fill = order_fill
             continue
 
+        actual_product_name = next(
+            (
+                str(shipment['actual_product_name'] or '').strip()
+                for shipment in order_shipments
+                if str(shipment['actual_product_name'] or '').strip()
+            ),
+            str(order['product_name'] or ''),
+        )
         order_row = ws2.max_row + 1
-        ws2.append([order['product_name'], order['quantity'], order['unit'], '', '', '', '', '', '', '', ''])
+        ws2.append([actual_product_name, order['quantity'], order['unit'], '', '', '', '', '', '', '', ''])
         ws2.cell(order_row, 2).number_format = '#,##0'
         for cell in ws2[order_row]:
             cell.font = Font(bold=True)
@@ -170,7 +178,7 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
             row_no = append_shipment_row(
                 order,
                 shipment,
-                product_text=f'└ {shipment["actual_product_name"] or order["product_name"]}',
+                product_text=f'└ {shipment["actual_product_name"] or actual_product_name}',
             )
             ws2.cell(row_no, 1).alignment = Alignment(indent=1, vertical='center', wrap_text=True)
 
