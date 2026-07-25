@@ -323,9 +323,14 @@ def sync_case_folder(case_id: int) -> Path:
         refresh_attachment_paths(case_id, current, target)
     elif not current:
         target.mkdir(parents=True, exist_ok=True)
+    stored_target = _path_for_database(target)
+    if str(case['folder_path'] or '') != stored_target:
+        db.execute(
+            'UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?',
+            (stored_target, now_text(), case_id),
+        )
+        case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
     _prepare_folder(case, target)
-    db.execute('UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?', (_path_for_database(target), now_text(), case_id))
-    write_case_workbook(case_id, target)
     return target
 
 
