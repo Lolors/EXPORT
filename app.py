@@ -25,10 +25,29 @@ def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
     db.init_db()
 
-    # 주문 수정 저장 전 빈 매입가를 0으로 정리하고 중복 제품명을 검사한다.
-    order_save_guard.install()
+    st.markdown(
+        '''
+        <style>
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-price-layout-anchor) {
+            width: 40vw !important;
+            max-width: 40vw !important;
+        }
+        div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor)
+        > div[data-testid="stElementContainer"]:has(+ div[data-testid="stElementContainer"] + div[data-testid="stVerticalBlock"] .shipment-price-lookup-anchor) {
+            display: none !important;
+        }
+        @media (max-width: 900px) {
+            div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-price-layout-anchor) {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+        }
+        </style>
+        ''',
+        unsafe_allow_html=True,
+    )
 
-    # 수출대기 입고와 박스 패킹은 반드시 같은 현재 출고행 목록을 사용한다.
+    order_save_guard.install()
     packing_service.list_items = shipment_service.list_case_items
 
     st.navigation(PAGES, position='sidebar').run()
