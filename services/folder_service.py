@@ -1,34 +1,60 @@
 from __future__ import annotations
 
+import json
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
 
 import db
+from services import usb_storage_service
 from services.workbook_service import write_case_workbook
 from utils.dates import now_text, parse_date
 from utils.formatters import sanitize_folder_part
 
+CASE_MARKER_NAME = '.export_case.json'
+CATEGORY_FOLDERS = {
+    '출고사진': '01_출고제품사진',
+    'CI': '02_CI',
+    'Shipping Mark': '03_Shipping Mark',
+    '기타': '04_기타',
+}
 
-def storage_root() -> Path:
+
+def _configured_storage_path() -> Path | None:
     configured = db.get_setting('shared_root').strip()
+    usb_root = usb_storage_service.find_export_usb()
     if not configured:
-        return db.UPLOAD_DIR
+        return (usb_root / '수출관리') if usb_root else None
 
     path = Path(configured).expanduser()
+    if path.is_absolute():
+        if path.exists():
+            return path
+        if usb_root and path.anchor:
+            try:
+                relative = path.relative_to(path.anchor)
+                return usb_root / relative
+            except ValueError:
+                pass
+        return path
+    if usb_root:
+        return usb_root / path
+    return path
 
-    # Windows에서 E:\ 같은 설정이 남아 있지만 해당 드라이브가 현재
-    # 연결되어 있지 않은 경우 mkdir이 FileNotFoundError를 발생시킨다.
-    # 드라이브/공유 루트 자체가 없으면 앱 내부 uploads 폴더로 안전하게 대체한다.
-    anchor = path.anchor
+
+def storage_root() -> Path:
+    configured = _configured_storage_path()
+    if configured is None:
+        return db.UPLOAD_DIR
+    anchor = configured.anchor
     if anchor:
         try:
             if not Path(anchor).exists():
                 return db.UPLOAD_DIR
         except OSError:
             return db.UPLOAD_DIR
-
-    return path
+    return configured
 
 
 def test_storage_root(path_text: str) -> tuple[bool, str]:
@@ -62,32 +88,119 @@ def order_item_summary(case_id: int) -> str:
             products.append(name)
             seen.add(name)
     if not products:
-        return ''
+        return '제품미입력'
     if len(products) <= 2:
         return ', '.join(products)
     return f'{products[0]}, {products[1]} 외 {len(products) - 2}품목'
 
 
+def _case_date(case) -> datetime:
+    actual = parse_date(case['actual_ship_date'] if 'actual_ship_date' in case.keys() else '')
+    if actual:
+        return actual
+    created = parse_date(str(case['created_at'] or '')[:10])
+    return created or datetime.now()
+
+
 def case_folder_name(case) -> str:
-    country = sanitize_folder_part(case['country'], '국가미입력')
-    buyer = sanitize_folder_part(case['buyer'], '')
-    transport = sanitize_folder_part(case['transport_mode'], '')
+    case_date = _case_date(case)
+    buyer = sanitize_folder_part(case['buyer'], '바이어미입력')
+    transport = sanitize_folder_part(case['transport_mode'], '운송방식미입력')
+    buyer_transport = f'[{buyer} - {transport}]'
     summary = order_item_summary(int(case['id']))
-    name = '_'.join(part for part in [country, buyer, transport, summary] if part)
-    actual_ship_date = parse_date(case['actual_ship_date'] if 'actual_ship_date' in case.keys() else '')
-    domestic_method = str(case['domestic_method'] if 'domestic_method' in case.keys() else '').strip()
-    if actual_ship_date and domestic_method:
-        name = f'{actual_ship_date.strftime("%m%d")}_{name}'
+    name = f'{case_date.strftime("%m%d")}_{buyer_transport}_{summary}'
     if str(case['status']) == '취소' or str(case['stage']) == '취소':
         return name if name.startswith('[취소]') else f'[취소]{name}'
     return name.removeprefix('[취소]')
 
 
 def case_folder_base(case) -> Path:
-    actual = parse_date(case['actual_ship_date'] if 'actual_ship_date' in case.keys() else '')
-    year = (actual or datetime.now()).strftime('%Y')
+    case_date = _case_date(case)
     country = sanitize_folder_part(case['country'], '국가미입력')
-    return storage_root() / country / year
+    return storage_root() / country / case_date.strftime('%Y') / f'{case_date.strftime("%m")}월'
+
+
+def _path_for_database(path: Path) -> str:
+    usb_root = usb_storage_service.find_export_usb()
+    if usb_root:
+        try:
+            return str(path.resolve().relative_to(usb_root.resolve()))
+        except (ValueError, OSError):
+            pass
+    return str(path)
+
+
+def resolve_database_path(path_text: str) -> Path | None:
+    text = str(path_text or '').strip()
+    if not text:
+        return None
+    path = Path(text).expanduser()
+    if path.is_absolute() and path.exists():
+        return path
+    usb_root = usb_storage_service.find_export_usb()
+    if usb_root:
+        if path.is_absolute() and path.anchor:
+            try:
+                path = path.relative_to(path.anchor)
+            except ValueError:
+                return None
+        candidate = usb_root / path
+        if candidate.exists():
+            return candidate
+    if path.exists():
+        return path
+    return None
+
+
+def write_case_marker(folder: Path, case) -> Path:
+    marker = folder / CASE_MARKER_NAME
+    marker.write_text(
+        json.dumps(
+            {'case_id': int(case['id']), 'export_no': str(case['export_no'])},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding='utf-8',
+    )
+    return marker
+
+
+def _marker_matches(marker: Path, case_id: int) -> bool:
+    try:
+        data = json.loads(marker.read_text(encoding='utf-8'))
+        return int(data.get('case_id')) == int(case_id)
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def find_case_folder(case_id: int) -> Path | None:
+    case = db.row('SELECT folder_path FROM export_cases WHERE id=?', (case_id,))
+    saved = resolve_database_path(case['folder_path'] if case else '')
+    if saved and saved.exists():
+        return saved
+    root = storage_root()
+    if not root.exists():
+        return None
+    try:
+        for marker in root.rglob(CASE_MARKER_NAME):
+            if _marker_matches(marker, case_id):
+                return marker.parent
+    except OSError:
+        return None
+    return None
+
+
+def ensure_category_folders(folder: Path) -> None:
+    for name in CATEGORY_FOLDERS.values():
+        (folder / name).mkdir(parents=True, exist_ok=True)
+
+
+def category_folder(case_id: int, category: str) -> Path:
+    folder = ensure_case_folder(case_id)
+    name = CATEGORY_FOLDERS.get(category, CATEGORY_FOLDERS['기타'])
+    target = folder / name
+    target.mkdir(parents=True, exist_ok=True)
+    return target
 
 
 def unique_folder_path(base: Path, folder_name: str, current_path: Path | None = None) -> Path:
@@ -120,7 +233,6 @@ def _workbook_needs_update(case_id: int, folder: Path) -> bool:
     workbook_path = folder / '수출진행내역.xlsx'
     if not workbook_path.exists():
         return True
-
     timestamps: list[datetime] = []
     queries = [
         ('SELECT updated_at AS value FROM export_cases WHERE id=?', (case_id,)),
@@ -133,44 +245,48 @@ def _workbook_needs_update(case_id: int, folder: Path) -> bool:
         parsed = _parse_timestamp(row['value'] if row else '')
         if parsed:
             timestamps.append(parsed)
-
     if not timestamps:
         return False
     workbook_time = datetime.fromtimestamp(workbook_path.stat().st_mtime)
     return max(timestamps) > workbook_time
 
 
+def _prepare_folder(case, folder: Path) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    write_case_marker(folder, case)
+    ensure_category_folders(folder)
+    if _workbook_needs_update(int(case['id']), folder):
+        write_case_workbook(int(case['id']), folder)
+    return folder
+
+
 def ensure_case_folder(case_id: int) -> Path:
     case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
     if not case:
         raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
-    saved_path = Path(case['folder_path']) if case['folder_path'] else None
-    if saved_path and saved_path.exists():
-        if _workbook_needs_update(case_id, saved_path):
-            write_case_workbook(case_id, saved_path)
-        return saved_path
+    existing = find_case_folder(case_id)
+    if existing:
+        _prepare_folder(case, existing)
+        stored = _path_for_database(existing)
+        if str(case['folder_path'] or '') != stored:
+            db.execute('UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?', (stored, now_text(), case_id))
+        return existing
     base = case_folder_base(case)
     base.mkdir(parents=True, exist_ok=True)
     target = unique_folder_path(base, case_folder_name(case))
-    target.mkdir(parents=True, exist_ok=True)
-    db.execute(
-        'UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?',
-        (str(target), now_text(), case_id),
-    )
-    write_case_workbook(case_id, target)
+    _prepare_folder(case, target)
+    db.execute('UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?', (_path_for_database(target), now_text(), case_id))
     return target
 
 
 def refresh_attachment_paths(case_id: int, old_root: Path, new_root: Path) -> None:
     old_text = str(old_root)
-    for attachment in db.rows(
-        'SELECT id, stored_path FROM attachments WHERE case_id=?',
-        (case_id,),
-    ):
+    for attachment in db.rows('SELECT id, stored_path FROM attachments WHERE case_id=?', (case_id,)):
         stored = str(attachment['stored_path'])
-        if stored.startswith(old_text):
-            replacement = str(new_root / Path(stored).relative_to(old_root))
-            db.execute('UPDATE attachments SET stored_path=? WHERE id=?', (replacement, attachment['id']))
+        resolved = resolve_database_path(stored) or Path(stored)
+        if str(resolved).startswith(old_text):
+            replacement = new_root / resolved.relative_to(old_root)
+            db.execute('UPDATE attachments SET stored_path=? WHERE id=?', (_path_for_database(replacement), attachment['id']))
 
 
 def sync_case_folder(case_id: int) -> Path:
@@ -178,53 +294,49 @@ def sync_case_folder(case_id: int) -> Path:
     if not case:
         raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
     base = case_folder_base(case)
-    current = Path(case['folder_path']) if case['folder_path'] else None
+    current = find_case_folder(case_id)
     target = unique_folder_path(base, case_folder_name(case), current)
-
-    if current and current.exists() and current.resolve() == target.resolve():
-        if _workbook_needs_update(case_id, current):
-            write_case_workbook(case_id, current)
-        return current
-
     base.mkdir(parents=True, exist_ok=True)
-    if current and current.exists():
+    if current and current.exists() and current.resolve() != target.resolve():
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(current), str(target))
         refresh_attachment_paths(case_id, current, target)
-    else:
+    elif not current:
         target.mkdir(parents=True, exist_ok=True)
-    db.execute(
-        'UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?',
-        (str(target), now_text(), case_id),
-    )
+    _prepare_folder(case, target)
+    db.execute('UPDATE export_cases SET folder_path=?,updated_at=? WHERE id=?', (_path_for_database(target), now_text(), case_id))
     write_case_workbook(case_id, target)
     return target
 
 
 def rebuild_all_case_folders() -> list[tuple[int, Path]]:
     cases = db.rows(
-        """SELECT id
-           FROM export_cases
+        """SELECT id FROM export_cases
            WHERE status<>'취소' AND stage<>'취소'
            ORDER BY id"""
     )
-    return [
-        (int(case['id']), sync_case_folder(int(case['id'])))
-        for case in cases
-    ]
+    return [(int(case['id']), sync_case_folder(int(case['id']))) for case in cases]
 
 
 def move_file_to_case(case_id: int, source: Path, category: str = '출고사진') -> Path:
-    folder = ensure_case_folder(case_id)
+    destination_folder = category_folder(case_id, category)
     source = Path(source)
-    destination = folder / source.name
+    destination = destination_folder / source.name
     counter = 2
     while destination.exists():
-        destination = folder / f'{source.stem}_{counter}{source.suffix}'
+        destination = destination_folder / f'{source.stem}_{counter}{source.suffix}'
         counter += 1
     shutil.move(str(source), str(destination))
     db.execute(
         'INSERT INTO attachments(case_id,file_name,stored_path,category,uploaded_at) VALUES (?,?,?,?,?)',
-        (case_id, destination.name, str(destination), category, now_text()),
+        (case_id, destination.name, _path_for_database(destination), category, now_text()),
     )
     return destination
+
+
+def open_in_explorer(path: Path) -> None:
+    if not path.exists():
+        raise FileNotFoundError(f'경로를 찾을 수 없습니다: {path}')
+    if os.name != 'nt':
+        raise OSError('Windows에서만 탐색기 열기를 사용할 수 있습니다.')
+    os.startfile(str(path))
