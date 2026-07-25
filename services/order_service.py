@@ -23,7 +23,7 @@ def normalize_product_name(value: str) -> str:
     return re.sub(r'[^0-9a-z가-힣%]+', '', text)
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(persist='disk', show_spinner=False)
 def _cached_editable_cases() -> list[dict]:
     rows = db.rows(
         '''WITH product_summary AS (
