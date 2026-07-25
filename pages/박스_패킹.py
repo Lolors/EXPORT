@@ -3,7 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from components.case_selector import select_export_case
-from services import export_service, folder_service, history_service, packing_service
+from services import export_service, history_service, packing_service
 from utils.formatters import fmt_number
 
 
@@ -112,7 +112,6 @@ if assign_clicked:
     else:
         assigned_box_no = int(box_no)
         packing_service.assign_items(case_id, selected_ids, assigned_box_no)
-        folder_service.sync_case_folder(case_id)
         history_service.add(
             case_id,
             'CTN 패킹',
@@ -180,7 +179,6 @@ if partial_item_id:
                 except ValueError as exc:
                     st.error(str(exc))
                 else:
-                    folder_service.sync_case_folder(case_id)
                     history_service.add(
                         case_id,
                         'CTN 일부 수량 배정',
@@ -202,7 +200,6 @@ if partial_item_id:
 
 if selected_ids and st.button('선택 제품 CTN 배정 해제'):
     packing_service.unassign_items(case_id, selected_ids)
-    folder_service.sync_case_folder(case_id)
     history_service.add(case_id, 'CTN 배정 해제', f'{len(selected_ids)}개 실제 출고 행')
     st.success('선택한 제품의 CTN 배정을 해제했습니다.')
     st.rerun()
@@ -304,7 +301,6 @@ else:
         if save_box:
             packing_service.update_box(int(box['id']), length, width, height, weight)
             packing_service.save_last_box_values(length, width, height, weight)
-            folder_service.sync_case_folder(case_id)
             history_service.add(case_id, 'CTN 정보 수정', selected_box_label)
             current_values = {
                 'length_cm': float(length),
@@ -420,7 +416,6 @@ else:
             except ValueError as exc:
                 st.error(str(exc))
             else:
-                folder_service.sync_case_folder(case_id)
                 created_text = ', '.join(f'CTN {number}' for number in created_boxes)
                 history_service.add(case_id, 'CTN 구성 복제', f'{selected_box_label} → {created_text}')
                 st.session_state[pending_selector_key] = f'CTN {created_boxes[0]}'
@@ -449,84 +444,85 @@ else:
         st.markdown('<span id="ctn-delete-anchor"></span>', unsafe_allow_html=True)
         st.markdown('#### CTN 삭제')
         st.caption('삭제할 CTN을 복수 선택할 수 있습니다. 삭제된 CTN의 제품은 다시 미패킹 상태로 돌아갑니다.')
+        show_delete_tools = st.toggle('CTN 삭제 도구 열기', value=False, key=f'ctn_delete_tools_{case_id}')
 
-        delete_boxes = packing_service.list_boxes(case_id)
-        delete_items_by_box: dict[int, list] = {}
-        for delete_item_row in items:
-            raw_delete_box_no = delete_item_row['box_no']
-            if raw_delete_box_no is not None:
-                delete_items_by_box.setdefault(int(raw_delete_box_no), []).append(delete_item_row)
-        delete_rows = []
-        for delete_box in delete_boxes:
-            delete_box_no = int(delete_box['box_no'])
-            delete_items = delete_items_by_box.get(delete_box_no, [])
-            product_names = []
-            for delete_item in delete_items:
-                name = str(delete_item['product_name'] or '').strip() or '-'
-                if name not in product_names:
-                    product_names.append(name)
-            if len(product_names) > 2:
-                product_summary = f'{product_names[0]}, {product_names[1]} 외 {len(product_names) - 2}품목'
-            else:
-                product_summary = ', '.join(product_names) or '-'
-            delete_box_id = int(delete_box['id'])
-            length_value = st.session_state.get(f'len_{delete_box_id}', delete_box['length_cm'])
-            width_value = st.session_state.get(f'wid_{delete_box_id}', delete_box['width_cm'])
-            height_value = st.session_state.get(f'hei_{delete_box_id}', delete_box['height_cm'])
-            weight_value = st.session_state.get(f'wei_{delete_box_id}', delete_box['weight_kg'])
-            dimensions = [length_value, width_value, height_value]
-            size_text = ' × '.join(fmt_number(value) for value in dimensions)
-            weight_text = f'{fmt_number(weight_value)} kg'
-            delete_rows.append({
-                '삭제': False,
-                '_box_no': delete_box_no,
-                'CTN': f'CTN {delete_box_no}',
-                '가로 × 세로 × 높이': size_text,
-                'GW': weight_text,
-                '포함된 제품요약': product_summary,
-            })
+        if show_delete_tools:
+            delete_boxes = boxes
+            delete_items_by_box: dict[int, list] = {}
+            for delete_item_row in items:
+                raw_delete_box_no = delete_item_row['box_no']
+                if raw_delete_box_no is not None:
+                    delete_items_by_box.setdefault(int(raw_delete_box_no), []).append(delete_item_row)
+            delete_rows = []
+            for delete_box in delete_boxes:
+                delete_box_no = int(delete_box['box_no'])
+                delete_items = delete_items_by_box.get(delete_box_no, [])
+                product_names = []
+                for delete_item in delete_items:
+                    name = str(delete_item['product_name'] or '').strip() or '-'
+                    if name not in product_names:
+                        product_names.append(name)
+                if len(product_names) > 2:
+                    product_summary = f'{product_names[0]}, {product_names[1]} 외 {len(product_names) - 2}품목'
+                else:
+                    product_summary = ', '.join(product_names) or '-'
+                delete_box_id = int(delete_box['id'])
+                length_value = st.session_state.get(f'len_{delete_box_id}', delete_box['length_cm'])
+                width_value = st.session_state.get(f'wid_{delete_box_id}', delete_box['width_cm'])
+                height_value = st.session_state.get(f'hei_{delete_box_id}', delete_box['height_cm'])
+                weight_value = st.session_state.get(f'wei_{delete_box_id}', delete_box['weight_kg'])
+                dimensions = [length_value, width_value, height_value]
+                size_text = ' × '.join(fmt_number(value) for value in dimensions)
+                weight_text = f'{fmt_number(weight_value)} kg'
+                delete_rows.append({
+                    '삭제': False,
+                    '_box_no': delete_box_no,
+                    'CTN': f'CTN {delete_box_no}',
+                    '가로 × 세로 × 높이': size_text,
+                    'GW': weight_text,
+                    '포함된 제품요약': product_summary,
+                })
 
-        delete_table_signature = '|'.join(
-            f"{row['_box_no']}:{row['가로 × 세로 × 높이']}:{row['GW']}"
-            for row in delete_rows
-        )
-        delete_table_key = f'ctn_delete_table_{case_id}_{delete_table_signature}'
+            delete_table_signature = '|'.join(
+                f"{row['_box_no']}:{row['가로 × 세로 × 높이']}:{row['GW']}"
+                for row in delete_rows
+            )
+            delete_table_key = f'ctn_delete_table_{case_id}_{delete_table_signature}'
 
-        edited_delete_rows = st.data_editor(
-            delete_rows,
-            hide_index=True,
-            use_container_width=True,
-            disabled=['CTN', '가로 × 세로 × 높이', 'GW', '포함된 제품요약'],
-            column_config={
-                '삭제': st.column_config.CheckboxColumn('삭제'),
-                '_box_no': None,
-                'CTN': st.column_config.TextColumn('CTN'),
-                '가로 × 세로 × 높이': st.column_config.TextColumn('가로 × 세로 × 높이'),
-                'GW': st.column_config.TextColumn('GW'),
-                '포함된 제품요약': st.column_config.TextColumn('포함된 제품요약'),
-            },
-            key=delete_table_key,
-        )
-        selected_delete_boxes = [
-            int(row['_box_no'])
-            for row in edited_delete_rows
-            if bool(row.get('삭제'))
-        ]
-        delete_button = st.button(
-            f'선택한 CTN 삭제 ({len(selected_delete_boxes)}개)',
-            type='primary',
-            disabled=not selected_delete_boxes,
-            use_container_width=True,
-        )
-        if delete_button:
-            for delete_box_no in selected_delete_boxes:
-                packing_service.clear_box(case_id, delete_box_no)
-            folder_service.sync_case_folder(case_id)
-            deleted_text = ', '.join(f'CTN {number}' for number in selected_delete_boxes)
-            history_service.add(case_id, 'CTN 삭제', deleted_text)
-            st.session_state.pop(selector_key, None)
-            st.session_state.pop(delete_table_key, None)
-            st.success(f'{deleted_text}을 삭제했습니다. 포함 제품은 미패킹 상태로 돌아갔습니다.')
-            st.rerun()
+            edited_delete_rows = st.data_editor(
+                delete_rows,
+                hide_index=True,
+                use_container_width=True,
+                disabled=['CTN', '가로 × 세로 × 높이', 'GW', '포함된 제품요약'],
+                column_config={
+                    '삭제': st.column_config.CheckboxColumn('삭제'),
+                    '_box_no': None,
+                    'CTN': st.column_config.TextColumn('CTN'),
+                    '가로 × 세로 × 높이': st.column_config.TextColumn('가로 × 세로 × 높이'),
+                    'GW': st.column_config.TextColumn('GW'),
+                    '포함된 제품요약': st.column_config.TextColumn('포함된 제품요약'),
+                },
+                key=delete_table_key,
+            )
+            selected_delete_boxes = [
+                int(row['_box_no'])
+                for row in edited_delete_rows
+                if bool(row.get('삭제'))
+            ]
+            delete_button = st.button(
+                f'선택한 CTN 삭제 ({len(selected_delete_boxes)}개)',
+                type='primary',
+                disabled=not selected_delete_boxes,
+                use_container_width=True,
+            )
+            if delete_button:
+                for delete_box_no in selected_delete_boxes:
+                    packing_service.clear_box(case_id, delete_box_no)
+                deleted_text = ', '.join(f'CTN {number}' for number in selected_delete_boxes)
+                history_service.add(case_id, 'CTN 삭제', deleted_text)
+                st.session_state.pop(selector_key, None)
+                st.session_state.pop(delete_table_key, None)
+                st.success(f'{deleted_text}을 삭제했습니다. 포함 제품은 미패킹 상태로 돌아갔습니다.')
+                st.rerun()
 
 st.caption(f'현재 미패킹 실제 출고 행: {unpacked_count}개')
