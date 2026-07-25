@@ -25,9 +25,14 @@ def select_export_case(
     key_prefix: str,
     saved_case_id: int | None = None,
     show_stage: bool = True,
+    fixed_stage: str | None = None,
 ) -> int:
     """Select an export case through country, optional stage, buyer, and case filters."""
     case_list = list(cases)
+    if fixed_stage is not None:
+        normalized_stage = _text(fixed_stage)
+        case_list = [case for case in case_list if _text(case['stage']) == normalized_stage]
+
     if not case_list:
         raise ValueError('선택할 수출 건이 없습니다.')
 
@@ -47,6 +52,7 @@ def select_export_case(
         country_col, stage_col, buyer_col, case_col = st.columns([1.2, 1.2, 1.5, 3.0])
     else:
         country_col, buyer_col, case_col = st.columns([1.2, 1.5, 3.0])
+        stage_col = None
 
     selected_country = country_col.selectbox('국가', countries, key=country_key)
 
