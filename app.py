@@ -84,54 +84,6 @@ def initialize_document_filter_defaults() -> None:
 
 
 
-def show_page_loading():
-    placeholder = st.empty()
-    placeholder.markdown(
-        '''
-        <style>
-        .export-page-loading {
-            position: fixed;
-            inset: 0;
-            z-index: 999999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(246, 248, 251, 0.96);
-            backdrop-filter: blur(2px);
-        }
-        .export-page-loading-card {
-            min-width: 220px;
-            padding: 24px 28px;
-            border: 1px solid #dce3eb;
-            border-radius: 14px;
-            background: white;
-            box-shadow: 0 12px 32px rgba(31, 45, 61, 0.12);
-            color: #294f71;
-            text-align: center;
-            font-weight: 700;
-        }
-        .export-page-loading-spinner {
-            width: 28px;
-            height: 28px;
-            margin: 0 auto 12px;
-            border: 3px solid #dbe7f1;
-            border-top-color: #294f71;
-            border-radius: 50%;
-            animation: export-page-spin .75s linear infinite;
-        }
-        @keyframes export-page-spin { to { transform: rotate(360deg); } }
-        </style>
-        <div class="export-page-loading">
-            <div class="export-page-loading-card">
-                <div class="export-page-loading-spinner"></div>
-                화면을 준비하고 있습니다
-            </div>
-        </div>
-        ''',
-        unsafe_allow_html=True,
-    )
-    return placeholder
-
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
     check_usb_restore_before_start()
@@ -168,13 +120,9 @@ def main() -> None:
     shipment_service.sync_active_case_stages = stage_service.sync_active_case_stages
     packing_service._sync_packing_stage = stage_service.sync_case_stage
 
-    page_loading = show_page_loading()
-    try:
-        with db.connection_session():
-            with measure('streamlit.page.run', slow_ms=0):
-                st.navigation(PAGES, position='sidebar').run()
-    finally:
-        page_loading.empty()
+    with db.connection_session():
+        with measure('streamlit.page.run', slow_ms=0):
+            st.navigation(PAGES, position='sidebar').run()
 
 
 if __name__ == '__main__':
