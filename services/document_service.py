@@ -21,19 +21,21 @@ def _business_sort_key(value: object) -> tuple[int, str]:
 
 
 def _aggregate_actual(rows) -> list[dict]:
-    grouped: dict[tuple[str, str, str, str], dict] = {}
+    grouped: dict[tuple[str, str, str, str, str], dict] = {}
     for row in rows:
         business = _text(row['business_unit'])
         product = _text(row['product_name'])
         lot = _text(row['lot_no'])
         expiry = _text(row['expiry_date'])
-        key = (business, product, lot, expiry)
+        unit = _text(row['unit'])
+        key = (business, product, lot, expiry, unit)
         if key not in grouped:
             grouped[key] = {
                 'business_unit': business,
                 'product_name': product,
                 'lot_no': lot,
                 'expiry_date': expiry,
+                'unit': unit,
                 'requested_qty': 0.0,
             }
         grouped[key]['requested_qty'] += float(row['requested_qty'] or 0)
@@ -41,10 +43,11 @@ def _aggregate_actual(rows) -> list[dict]:
     return sorted(
         grouped.values(),
         key=lambda row: (
-            _business_sort_key(row['business_unit']),
             _text(row['product_name']).casefold(),
+            _business_sort_key(row['business_unit']),
             _text(row['lot_no']).casefold(),
             _text(row['expiry_date']),
+            _text(row['unit']).casefold(),
         ),
     )
 
