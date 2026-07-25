@@ -12,52 +12,15 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from services import document_service, export_service, folder_service, order_service, shipment_service
+from services.shared_document_view_service import (
+    display_stage,
+    filter_and_sort_cases,
+    format_case_option as build_case_option_label,
+    quantity_with_unit,
+    shipment_date,
+    summarize_product_names,
+)
 from utils.formatters import fmt_number
-
-
-STAGE_LABELS = {
-    '주문 접수': '주문 접수',
-    '주문 입력': '주문 접수',
-    '제품 준비': '제품 준비',
-    '실출고 입력': '출고 대기',
-    '출고 대기': '출고 대기',
-    '패킹': '패킹',
-    '박스 패킹': '패킹',
-    '패킹 진행': '패킹 진행',
-    '패킹 대기': '패킹 대기',
-    '패킹 완료': '패킹 완료',
-    '국내배송': '국내배송',
-    '선적 준비': '선적 준비',
-    '선적 완료': '선적 완료',
-    '완료': '완료',
-    '취소': '주문 취소',
-    '주문 취소': '주문 취소',
-}
-
-
-def display_stage(value: object) -> str:
-    stage = str(value or '').strip()
-    return STAGE_LABELS.get(stage, stage or '-')
-
-
-def summarize_product_names(raw_names: object) -> str:
-    names = [name.strip() for name in re.split(r'[,\n]+', str(raw_names or '')) if name.strip()]
-    if len(names) <= 2:
-        return ', '.join(names)
-    return f"{', '.join(names[:2])} 외 {len(names) - 2}품목"
-
-
-def quantity_with_unit(row) -> str:
-    quantity = fmt_number(row['requested_qty'])
-    try:
-        unit = str(row['unit'] or '').strip()
-    except (KeyError, IndexError):
-        unit = ''
-    return f'{quantity} {unit}'.strip()
-
-
-def _shipment_date(case) -> str:
-    return str(case['actual_ship_date'] or '').strip()
 
 
 def render_document(case, packed, actual_rows=None) -> None:
@@ -134,7 +97,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 <div class="cell"><div class="label">국가 / Country</div><div class="value">{html.escape(case['country'] or '-')}</div></div>
 <div class="cell"><div class="label">바이어 / Buyer</div><div class="value">{html.escape(case['buyer'] or '-')}</div></div>
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
-<div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(_shipment_date(case) or '-')}</div></div></div>
+<div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(shipment_date(case) or '-')}</div></div></div>
 <div class="section">DOMESTIC DELIVERY</div><div class="grid">
 <div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div>
 <div class="cell"><div class="label">{html.escape(detail_label)}</div><div class="value">{html.escape(detail_value)}</div></div>
@@ -297,9 +260,9 @@ with st.container():
         {
             now.year,
             *{
-                int(_shipment_date(case)[:4])
+                int(shipment_date(case)[:4])
                 for case in cases
-                if _shipment_date(case)[:4].isdigit()
+                if shipment_date(case)[:4].isdigit()
             },
         },
         reverse=True,
@@ -312,56 +275,19 @@ with st.container():
     selected_country = filter_cols[2].selectbox('국가', ['전체'] + countries, key='document_case_country')
     product_query = filter_cols[3].text_input('제품명 검색', key='document_case_product_search').strip().casefold()
 
-filtered_cases = []
-for case in cases:
-    raw_date = _shipment_date(case)
-    case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
-    case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
-    if raw_date:
-        if selected_year != '전체' and case_year != selected_year:
-            continue
-        if selected_month != '전체' and case_month != selected_month:
-            continue
-    if selected_country != '전체' and str(case['country']).strip() != selected_country:
-        continue
-    if product_query and product_query not in str(case['product_names'] or '').casefold():
-        continue
-    filtered_cases.append(case)
-
-stage_sort_order = {
-    '패킹 완료': 0,
-    '패킹 대기': 1,
-    '입고 진행': 2,
-    '제품 준비': 2,
-    '출고 대기': 2,
-    '주문 접수': 3,
-    '주문 입력': 3,
-    '국내배송': 99,
-}
-filtered_cases.sort(
-    key=lambda case: stage_sort_order.get(str(case['stage'] or '').strip(), 90),
+filtered_cases = filter_and_sort_cases(
+    cases,
+    selected_year=selected_year,
+    selected_month=selected_month,
+    selected_country=selected_country,
+    product_query=product_query,
 )
-
 if not filtered_cases:
     st.warning('조건에 맞는 수출 건이 없습니다.')
     st.stop()
 
 case_by_id = {int(case['id']): case for case in filtered_cases}
 case_options: list[int | None] = [None, *case_by_id.keys()]
-
-
-def format_case_option(selected_case_id: int | None) -> str:
-    if selected_case_id is None:
-        return '수출 건을 선택하세요'
-    selected_case = case_by_id[int(selected_case_id)]
-    ship_date = _shipment_date(selected_case) or '미출고'
-    buyer = str(selected_case['buyer'] or '').strip() or '바이어 미입력'
-    products = summarize_product_names(selected_case['product_names'])
-    return (
-        f"{display_stage(selected_case['stage'])} · {ship_date} · "
-        f"{selected_case['export_no']} · {selected_case['country']} · "
-        f"{buyer} · {products}"
-    )
 
 
 case_filter_key = (
@@ -371,7 +297,11 @@ case_filter_key = (
 selected_case_id = st.selectbox(
     '수출 건 선택',
     case_options,
-    format_func=format_case_option,
+    format_func=lambda selected_id: (
+        '수출 건을 선택하세요'
+        if selected_id is None
+        else build_case_option_label(case_by_id[int(selected_id)])
+    ),
     key=f'document_case_select_{case_filter_key}',
 )
 if selected_case_id is None:
