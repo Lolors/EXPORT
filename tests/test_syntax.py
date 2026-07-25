@@ -33,6 +33,39 @@ class PythonSyntaxTests(unittest.TestCase):
         self.assertNotIn("st.Page('pages/", app_source)
         self.assertIn("st.Page('views/", app_source)
 
+    def test_calculation_logic_stays_out_of_views(self) -> None:
+        forbidden_functions = {
+            'find_product_name_mismatches',
+            'intake_progress',
+            'order_state',
+            'product_name_similarity',
+            'safe_number',
+            'save_historical',
+            'historical_items',
+            'box_items',
+            'quantity_text',
+            'filter_and_sort_cases',
+            'order_products_summary',
+        }
+        violations: list[str] = []
+        for path in sorted((ROOT / 'views').glob('*.py')):
+            tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in forbidden_functions:
+                    violations.append(f'{path.relative_to(ROOT)}:{node.lineno}: {node.name}')
+        self.assertEqual([], violations, '\n'.join(violations))
+
+    def test_calculation_service_modules_exist(self) -> None:
+        expected = {
+            'dashboard_view_service.py',
+            'order_edit_service.py',
+            'shared_document_view_service.py',
+            'shipment_intake_view_service.py',
+            'statistics_view_service.py',
+        }
+        existing = {path.name for path in (ROOT / 'services').glob('*.py')}
+        self.assertTrue(expected.issubset(existing), sorted(expected - existing))
+
 
 if __name__ == '__main__':
     unittest.main()
