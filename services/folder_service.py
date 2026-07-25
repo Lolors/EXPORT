@@ -202,9 +202,15 @@ def sync_case_folder(case_id: int) -> Path:
 
 
 def rebuild_all_case_folders() -> list[tuple[int, Path]]:
+    cases = db.rows(
+        """SELECT id
+           FROM export_cases
+           WHERE status<>'취소' AND stage<>'취소'
+           ORDER BY id"""
+    )
     return [
         (int(case['id']), sync_case_folder(int(case['id'])))
-        for case in db.rows('SELECT id FROM export_cases ORDER BY id')
+        for case in cases
     ]
 
 
