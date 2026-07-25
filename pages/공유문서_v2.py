@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 
 
@@ -15,12 +16,18 @@ replacement = r"""def render_shipment_product_list(case, actual_rows) -> None:
         '비자료': 3,
     }
 
+    def normalize_product_group_name(value: object) -> str:
+        text = unicodedata.normalize('NFKC', str(value or ''))
+        text = text.replace('\u200b', '').replace('\ufeff', '')
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text.casefold()
+
     sorted_rows = sorted(
         actual_rows,
         key=lambda row: (
             destination_order.get(str(row['business_unit'] or '').strip(), 99),
             str(row['business_unit'] or '').strip().casefold(),
-            str(row['product_name'] or '').strip().casefold(),
+            normalize_product_group_name(row['product_name']),
             str(row['lot_no'] or '').strip().casefold(),
             str(row['expiry_date'] or '').strip(),
         ),
@@ -36,14 +43,22 @@ replacement = r"""def render_shipment_product_list(case, actual_rows) -> None:
 
     for destination, destination_rows in destination_groups.items():
         destination_rowspan = len(destination_rows)
-        product_groups: dict[str, list] = {}
+        product_groups: dict[str, dict[str, object]] = {}
         for row in destination_rows:
-            product_name = str(row['product_name'] or '').strip() or '-'
-            product_groups.setdefault(product_name, []).append(row)
-            unique_products.add(product_name)
+            raw_product_name = str(row['product_name'] or '').strip() or '-'
+            product_key = normalize_product_group_name(raw_product_name) or '-'
+            if product_key not in product_groups:
+                product_groups[product_key] = {
+                    'display_name': re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', raw_product_name)).strip() or '-',
+                    'rows': [],
+                }
+            product_groups[product_key]['rows'].append(row)
+            unique_products.add(product_key)
 
         destination_written = False
-        for product_name, product_rows in product_groups.items():
+        for product_group in product_groups.values():
+            product_name = str(product_group['display_name'])
+            product_rows = product_group['rows']
             product_rowspan = len(product_rows)
             for product_index, row in enumerate(product_rows):
                 rows_html.append('<tr>')
