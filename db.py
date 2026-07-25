@@ -230,6 +230,8 @@ def init_db() -> None:
             ON export_cases(status, stage);
         CREATE INDEX IF NOT EXISTS idx_export_cases_dates
             ON export_cases(actual_ship_date, created_at);
+        CREATE INDEX IF NOT EXISTS idx_export_cases_ship_date
+            ON export_cases(date(substr(actual_ship_date, 1, 10)), id);
         CREATE INDEX IF NOT EXISTS idx_order_items_case_id
             ON order_items(case_id);
         CREATE INDEX IF NOT EXISTS idx_purchase_price_history_name
