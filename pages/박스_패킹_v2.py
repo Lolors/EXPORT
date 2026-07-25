@@ -3,9 +3,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from utils.page_patch_cache import compile_cached, read_text_cached
+
 
 SOURCE_PATH = Path(__file__).with_name('박스_패킹.py')
-source = SOURCE_PATH.read_text(encoding='utf-8')
+SOURCE_VERSION = SOURCE_PATH.stat().st_mtime_ns
+source = read_text_cached(str(SOURCE_PATH), SOURCE_VERSION)
 
 replacement = r'''cases = [
     case for case in export_service.active_cases()
@@ -65,4 +68,5 @@ patched = patched.replace(
     1,
 )
 
-exec(compile(patched, str(SOURCE_PATH), 'exec'), globals(), globals())
+code = compile_cached(patched, str(SOURCE_PATH), f'packing-v2-{SOURCE_VERSION}')
+exec(code, globals(), globals())
