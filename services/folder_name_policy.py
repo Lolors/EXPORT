@@ -28,7 +28,10 @@ def install(folder_service) -> None:
             label_parts.append(transport)
 
         date_prefix = actual_ship_date.strftime('%m%d') if actual_ship_date else ''
-        detail_prefix = f'[{" ".join(label_parts)}] ' if label_parts else (' ' if date_prefix else '')
+        if label_parts:
+            detail_prefix = f'{" " if date_prefix else ""}[{" ".join(label_parts)}] '
+        else:
+            detail_prefix = ' ' if date_prefix else ''
         name = f'{date_prefix}{detail_prefix}{summary}'
 
         if str(case['status']) == '취소' or str(case['stage']) == '취소':
