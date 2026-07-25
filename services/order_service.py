@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
+import streamlit as st
+
 import db
 from utils.dates import now_text
 
@@ -21,8 +23,9 @@ def normalize_product_name(value: str) -> str:
     return re.sub(r'[^0-9a-z가-힣%]+', '', text)
 
 
-def list_editable_cases():
-    return db.rows(
+@st.cache_data(ttl=30, show_spinner=False)
+def _cached_editable_cases() -> list[dict]:
+    rows = db.rows(
         '''WITH product_summary AS (
                SELECT case_id, GROUP_CONCAT(product_name, ', ') AS product_names
                FROM order_items
@@ -36,6 +39,15 @@ def list_editable_cases():
            WHERE c.stage<>'취소'
            ORDER BY COALESCE(NULLIF(c.actual_ship_date,''), c.created_at) DESC'''
     )
+    return [dict(row) for row in rows]
+
+
+def clear_editable_cases_cache() -> None:
+    _cached_editable_cases.clear()
+
+
+def list_editable_cases() -> list[dict]:
+    return _cached_editable_cases()
 
 
 def list_for_case(case_id: int):
@@ -393,3 +405,4 @@ def save_order_items(case_id: int, edited) -> None:
         )
 
     sync_historical_shipments(case_id)
+    clear_editable_cases_cache()
