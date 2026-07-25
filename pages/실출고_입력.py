@@ -81,20 +81,14 @@ st.markdown(
     '''
     <style>
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
-        width: 40vw;
-        max-width: 40vw;
+        width: 100vw;
+        max-width: 100vw;
     }
     .shipment-price-lookup-anchor {
         height: 0;
         margin: 0;
         padding: 0;
         overflow: hidden;
-    }
-    @media (max-width: 900px) {
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.shipment-price-lookup-anchor) {
-            width: 100%;
-            max-width: 100%;
-        }
     }
     </style>
     ''',
@@ -319,11 +313,21 @@ with right:
                 st.success('저장했습니다. 박스 패킹에 바로 반영됩니다.')
                 st.rerun()
 
-st.divider()
-st.caption(
-    f'현재 주문품목에 연결된 전체 입고 수량: '
-    f'{fmt_number(shipment_service.total_linked_quantity(case_id))}'
-)
+    total_order_qty = sum(safe_number(order['quantity']) for order in orders)
+    total_received_qty = shipment_service.total_linked_quantity(case_id)
+    progress_ratio = min(total_received_qty / total_order_qty, 1.0) if total_order_qty > 0 else 0.0
+
+    st.divider()
+    st.markdown('#### 전체 입고 진행률')
+    st.progress(
+        progress_ratio,
+        text=(
+            f'{fmt_number(total_received_qty)} / {fmt_number(total_order_qty)} '
+            f'({progress_ratio * 100:.1f}%)'
+        ),
+    )
+    if total_order_qty > 0 and total_received_qty >= total_order_qty:
+        st.success('🎉 모든 제품이 입고되었습니다!')
 
 st.divider()
 with st.container():
