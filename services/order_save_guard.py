@@ -5,7 +5,9 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
+import db
 from services import order_service
+from utils.dates import now_text
 
 
 _original_save_order_items = order_service.save_order_items
@@ -129,8 +131,42 @@ def render_duplicate_notice(rows: list[dict[str, object]]) -> None:
     )
 
 
+def _database_snapshot(case_id: int) -> list[tuple]:
+    rows = db.rows(
+        '''SELECT id, product_name, quantity, unit, purchase_price
+           FROM order_items
+           WHERE case_id=?
+           ORDER BY id''',
+        (case_id,),
+    )
+    return [
+        (
+            int(row['id']),
+            str(row['product_name'] or '').strip(),
+            float(row['quantity'] or 0),
+            str(row['unit'] or 'EA').strip() or 'EA',
+            float(row['purchase_price'] or 0),
+        )
+        for row in rows
+    ]
+
+
+def _after_order_change(case_id: int) -> None:
+    case = db.row('SELECT stage, status, case_type FROM export_cases WHERE id=?', (case_id,))
+    if case and case['case_type'] != 'historical' and str(case['stage'] or '').strip() == '패킹 완료':
+        db.execute(
+            "UPDATE export_cases SET stage='제품 준비', status='진행중', updated_at=? WHERE id=?",
+            (now_text(), case_id),
+        )
+
+    draft_key = f'shipment_order_draft_{case_id}'
+    version_key = f'shipment_order_editor_version_{case_id}'
+    st.session_state.pop(draft_key, None)
+    st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+
+
 def save_order_items(case_id: int, edited) -> None:
-    """Validate and normalize the order editor before using the existing save logic."""
+    """Validate, normalize, save, and synchronize downstream order views."""
     cleaned = edited.copy().drop(columns=['행번호'], errors='ignore')
 
     if '매입가' not in cleaned.columns:
@@ -145,7 +181,12 @@ def save_order_items(case_id: int, edited) -> None:
         render_duplicate_notice(duplicate_rows)
         st.stop()
 
+    before = _database_snapshot(case_id)
     _original_save_order_items(case_id, cleaned)
+    after = _database_snapshot(case_id)
+
+    if before != after:
+        _after_order_change(case_id)
 
 
 def install() -> None:
