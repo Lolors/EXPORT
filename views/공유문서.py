@@ -71,6 +71,7 @@ def render_document(case, packed, actual_rows=None) -> None:
         f'<td class="right"><b>{fmt_number(total_qty)}</b></td>'
         f'<td class="center"><b>{fmt_number(total_weight)} kg</b></td><td></td></tr>'
     )
+    table_columns = '<colgroup><col style="width:13mm"><col style="width:17mm"><col style="width:43mm"><col style="width:27mm"><col style="width:23mm"><col style="width:14mm"><col style="width:15mm"><col style="width:22mm"></colgroup>'
     table_header = '<tr><th>CTN No.</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>GW (kg)</th><th>CTN 사이즈</th></tr>'
     first_summary = f'{len({row["box_no"] for row in packed})} CTN'
     display_rows = packed
@@ -82,14 +83,14 @@ def render_document(case, packed, actual_rows=None) -> None:
 *{{box-sizing:border-box}} @page{{size:A4 portrait;margin:6mm}}
 html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif}} body{{padding:8px}}
 .toolbar{{max-width:1180px;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:8px;background:#173b5f;color:#fff;font-weight:700;padding:10px 18px;cursor:pointer}}
-.document{{max-width:1180px;margin:auto;background:#fff;border:1px solid #d8dee8;border-radius:14px;overflow:hidden;box-shadow:0 12px 34px rgba(30,45,70,.08)}}
-.header{{padding:30px 38px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:18px}} .title{{font-size:28px;font-weight:800}} .sub{{font-size:12px;opacity:.8}} .number{{text-align:right}}
-.body{{padding:28px 38px 32px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 9px}}
-.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:8px;overflow:hidden;margin-bottom:18px}} .cell{{padding:11px 13px;border-right:1px solid #e5eaf0}} .label{{font-size:9.5px;color:#7c8797}} .value{{font-size:12.5px;font-weight:700;margin-top:3px;white-space:pre-wrap;word-break:break-word}}
-.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:19px}} .card{{border:1px solid #dce3eb;border-radius:8px;padding:12px 14px;background:#f8fafc}} .card b{{font-size:18px;color:#214f76}}
-.wrap{{overflow-x:auto;border:1px solid #d8e0e8;border-radius:8px}} table{{border-collapse:collapse;width:100%;min-width:900px;font-size:10.5px}} th{{background:#294f71;color:#fff;padding:8px 9px;text-align:left}} td{{padding:8px 9px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .total-row td{{background:#eef3f8;font-weight:700}}
-.note-box{{margin-top:15px;padding:11px 13px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:10.5px}}
-@media print{{html,body{{width:210mm;min-height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:198mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}} .header{{padding:25px 30px}} .title{{font-size:25px}} .body{{padding:22px 30px 24px}} .grid{{margin-bottom:14px}} .cell{{padding:9px 11px}} .summary{{margin-bottom:15px}} .card{{padding:10px 12px}} .card b{{font-size:16px}} .section{{margin-bottom:6px}} .wrap{{overflow:visible}} table{{min-width:0;width:100%;font-size:9.5px;table-layout:auto}} th{{padding:6px 7px}} td{{padding:6px 7px;line-height:1.35}} .note-box{{margin-top:10px;padding:8px 10px}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+.document{{width:190mm;max-width:100%;margin:auto;background:#fff;border:1px solid #d8dee8;border-radius:12px;overflow:hidden;box-shadow:0 12px 34px rgba(30,45,70,.08)}}
+.header{{padding:22px 28px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:16px}} .title{{font-size:24px;font-weight:800}} .sub{{font-size:11px;opacity:.8}} .number{{text-align:right}}
+.body{{padding:18px 24px 22px}} .section{{font-size:11px;font-weight:800;color:#294f71;margin:0 0 5px}}
+.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:10px}} .cell{{padding:7px 8px;border-right:1px solid #e5eaf0}} .label{{font-size:8px;color:#7c8797}} .value{{font-size:10.5px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}}
+.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:7px 9px;background:#f8fafc}} .card b{{font-size:14px;color:#214f76}}
+.wrap{{width:174mm;max-width:100%;margin:0 auto;overflow-x:auto;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:174mm;max-width:100%;table-layout:fixed;font-size:9px}} th{{background:#294f71;color:#fff;padding:5px 4px;text-align:left;white-space:nowrap}} td{{padding:5px 4px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.25;overflow-wrap:anywhere}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .total-row td{{background:#eef3f8;font-weight:700}}
+.note-box{{margin:8px auto 0;width:174mm;max-width:100%;padding:7px 9px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:9px}}
+@media print{{html,body{{width:210mm;height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:190mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}} .header{{padding:16px 22px}} .title{{font-size:20px}} .sub{{font-size:9px}} .body{{padding:12px 8px 10px}} .grid{{margin-bottom:7px}} .cell{{padding:5px 6px}} .label{{font-size:7px}} .value{{font-size:9px}} .summary{{margin-bottom:7px}} .card{{padding:5px 7px}} .card b{{font-size:12px}} .section{{font-size:9px;margin-bottom:3px}} .wrap{{width:174mm;overflow:visible}} table{{width:174mm;min-width:0;font-size:7.8px;table-layout:fixed}} th{{padding:4px 3px}} td{{padding:3.5px 3px;line-height:1.15}} tr{{break-inside:avoid}} .note-box{{width:174mm;margin-top:6px;padding:5px 7px;font-size:8px}} .header,th,.merged,.total-row td{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b></div></div>
@@ -104,7 +105,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 <div class="cell"><div class="label">수하인명</div><div class="value">{html.escape(case['consignee_name'] or '-')}</div></div>
 <div class="cell"><div class="label">수하인주소</div><div class="value">{html.escape(case['consignee_address'] or '-')}</div></div></div>
 <div class="section">PACKING SUMMARY</div><div class="summary"><div class="card"><small>총 CTN 수</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
-<div class="section">PACKING LIST</div><div class="wrap"><table><thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}</div></div></body></html>'''
+<div class="section">PACKING LIST</div><div class="wrap"><table>{table_columns}<thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}</div></div></body></html>'''
     components.html(document, height=min(1800, max(850, 760 + len(display_rows) * 44)), scrolling=True)
 
 
