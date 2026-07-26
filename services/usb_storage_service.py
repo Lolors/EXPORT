@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import string
 import time
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -128,7 +129,7 @@ def database_info(path: Path) -> dict:
         return {'exists': False, 'version': 0, 'modified_at': None, 'size': 0}
     version = DB_VERSION
     try:
-        with sqlite3.connect(path, timeout=5.0) as conn:
+        with closing(sqlite3.connect(path, timeout=5.0)) as conn:
             row = conn.execute('PRAGMA user_version').fetchone()
             version = int(row[0] or DB_VERSION) if row else DB_VERSION
     except sqlite3.Error:
@@ -166,7 +167,7 @@ def compare_databases(local_path: Path, usb_path: Path | None) -> dict:
 
 def validate_sqlite_database(path: Path) -> None:
     try:
-        with sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=10.0) as connection:
+        with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=10.0)) as connection:
             result = connection.execute('PRAGMA quick_check').fetchone()
     except sqlite3.DatabaseError as exc:
         raise ValueError(f'DB 무결성 검사에 실패했습니다: {path}') from exc
@@ -187,8 +188,8 @@ def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path
     if temporary.exists():
         temporary.unlink()
 
-    with sqlite3.connect(local_path, timeout=10.0) as source:
-        with sqlite3.connect(temporary, timeout=10.0) as target:
+    with closing(sqlite3.connect(local_path, timeout=10.0)) as source:
+        with closing(sqlite3.connect(temporary, timeout=10.0)) as target:
             source.backup(target)
             target.execute(f'PRAGMA user_version = {DB_VERSION}')
             target.commit()
@@ -220,8 +221,8 @@ def restore_database_from_usb(local_path: Path, usb_path: Path) -> Path:
     temporary = local_path.with_suffix('.db.restore.tmp')
     if temporary.exists():
         temporary.unlink()
-    with sqlite3.connect(usb_path, timeout=10.0) as source:
-        with sqlite3.connect(temporary, timeout=10.0) as target:
+    with closing(sqlite3.connect(usb_path, timeout=10.0)) as source:
+        with closing(sqlite3.connect(temporary, timeout=10.0)) as target:
             source.backup(target)
             target.commit()
 
