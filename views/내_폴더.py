@@ -181,6 +181,13 @@ with usb_col:
             )
         if db.LAST_USB_BACKUP_ERROR:
             st.error(f'최근 자동 백업 실패: {db.LAST_USB_BACKUP_ERROR}')
+        if st.button('DB 지금 백업', use_container_width=True, key='backup_database_now'):
+            destination = db.backup_to_usb()
+            if destination is None:
+                st.error(f'DB 백업에 실패했습니다: {db.LAST_USB_BACKUP_ERROR or "백업 위치를 찾지 못했습니다."}')
+            else:
+                st.success(f'DB 백업을 완료했습니다: {destination}')
+                st.rerun()
     else:
         st.warning('등록된 수출 USB를 찾지 못했습니다.')
 
