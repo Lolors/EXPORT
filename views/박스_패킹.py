@@ -210,13 +210,15 @@ with right_column:
 
     st.divider()
     with st.expander('CTN 삭제'):
-        delete_label_map = {
-            (
-                f"CTN {box_no} · {len(items_grouped_by_box.get(box_no, []))}행 · "
-                f"{product_summary(items_grouped_by_box.get(box_no, []))}"
-            ): box_no
-            for box_no in sorted(items_grouped_by_box)
-        }
+        delete_label_map = {}
+        for delete_box in boxes:
+            delete_box_no = int(delete_box['box_no'])
+            delete_box_items = items_grouped_by_box.get(delete_box_no, [])
+            delete_label = (
+                f"CTN {delete_box_no} · {len(delete_box_items)}행 · "
+                f"{product_summary(delete_box_items)}"
+            )
+            delete_label_map[delete_label] = delete_box_no
         selected_delete_labels = st.multiselect('삭제할 CTN', list(delete_label_map))
         selected_delete_boxes = [delete_label_map[label] for label in selected_delete_labels]
         st.caption('삭제한 CTN의 제품은 다시 미패킹 상태로 돌아갑니다.')
@@ -269,8 +271,19 @@ with left_column:
         }
         for item in visible_items
     ]
+    grid_columns = [
+        '선택', '_id', '사업장', '실제 제품명',
+        '제조번호', '유통기한', '출고수량', '현재 CTN',
+    ]
+    grid_df = pd.DataFrame(grid_rows, columns=grid_columns)
+    filter_signature = abs(hash((
+        product_query,
+        selected_business,
+        lot_query,
+        bool(unpacked_only),
+    )))
     edited_grid = st.data_editor(
-        pd.DataFrame(grid_rows),
+        grid_df,
         hide_index=True,
         use_container_width=True,
         height=min(680, max(250, 70 + len(grid_rows) * 35)),
@@ -285,7 +298,10 @@ with left_column:
             '출고수량': st.column_config.NumberColumn('출고수량', format='%.0f'),
             '현재 CTN': st.column_config.TextColumn('현재 CTN', width='small'),
         },
-        key=f"packing_item_grid_{case_id}_{int(st.session_state.get(version_key, 0))}",
+        key=(
+            f"packing_item_grid_{case_id}_"
+            f"{int(st.session_state.get(version_key, 0))}_{filter_signature}"
+        ),
     )
     selected_ids = [int(row['_id']) for _, row in edited_grid.iterrows() if bool(row['선택'])]
     st.session_state[selection_key] = selected_ids
