@@ -135,15 +135,16 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
         draw.text((left + 12, y + 29), value, font=heading_font, fill=BLUE)
     y += 78
 
-    draw.text((margin, y), 'PACKING LIST', font=heading_font, fill=BLUE)
+    table_width = round(PAGE_WIDTH * 150 / 210)
+    table_left = (PAGE_WIDTH - table_width) // 2
+    draw.text((table_left, y), 'PACKING LIST', font=heading_font, fill=BLUE)
     y += 26
-    widths = [82, 105, 225, 180, 150, 92, 105, 205]
-    scale = content_width / sum(widths)
-    widths = [round(width * scale) for width in widths]
-    widths[-1] += content_width - sum(widths)
+    widths_mm = [12, 16, 32, 22, 20, 12, 14, 22]
+    widths = [round(width * table_width / 150) for width in widths_mm]
+    widths[-1] += table_width - sum(widths)
     headers = ['CTN No.', '출고처', '제품명', '제조번호', '유통기한', '수량', 'GW (kg)', 'CTN 사이즈']
     header_row_height = 38
-    x = margin
+    x = table_left
     for width, header in zip(widths, headers):
         draw.rectangle((x, y, x + width, y + header_row_height), fill=BLUE)
         _center_text(draw, (x, y, x + width, y + header_row_height), header, table_bold, WHITE)
@@ -173,24 +174,24 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
         ]
         merged_columns = [(0, merged_values[0]), (6, merged_values[1]), (7, merged_values[2])]
         for column, value in merged_columns:
-            left = margin + sum(widths[:column])
+            left = table_left + sum(widths[:column])
             draw.rectangle((left, group_top, left + widths[column], group_bottom), fill=LIGHT, outline=BORDER)
             _cell_text(draw, (left, group_top, left + widths[column], group_bottom), value, table_bold, align='center')
         for row, row_height in zip(rows, row_heights):
             values = [row['business_unit'], row['product_name'], row['lot_no'], row['expiry_date'], fmt_number(row['requested_qty'])]
             columns = [1, 2, 3, 4, 5]
             for column, value in zip(columns, values):
-                left = margin + sum(widths[:column])
+                left = table_left + sum(widths[:column])
                 draw.rectangle((left, y, left + widths[column], y + row_height), fill=WHITE, outline=BORDER)
                 _cell_text(draw, (left, y, left + widths[column], y + row_height), value, table_font,
                            align='right' if column == 5 else 'left')
             y += row_height
 
     total_height = 38
-    draw.rectangle((margin, y, PAGE_WIDTH - margin, y + total_height), fill=TOTAL, outline=BORDER)
-    qty_left = margin + sum(widths[:5])
-    weight_left = margin + sum(widths[:6])
-    _cell_text(draw, (margin, y, qty_left, y + total_height), '합계', table_bold, align='right')
+    draw.rectangle((table_left, y, table_left + table_width, y + total_height), fill=TOTAL, outline=BORDER)
+    qty_left = table_left + sum(widths[:5])
+    weight_left = table_left + sum(widths[:6])
+    _cell_text(draw, (table_left, y, qty_left, y + total_height), '합계', table_bold, align='right')
     _cell_text(draw, (qty_left, y, weight_left, y + total_height), fmt_number(total_quantity), table_bold, align='right')
     total_weight = sum({int(row['box_no']): float(row['weight_kg'] or 0) for row in packed}.values())
     _cell_text(draw, (weight_left, y, weight_left + widths[6], y + total_height), f'{fmt_number(total_weight)} kg', table_bold, align='center')
