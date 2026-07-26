@@ -197,35 +197,7 @@ def render_shipment_product_list(case, actual_rows) -> None:
         rows_html.append('<tr><td colspan="6" class="empty">입력된 출고제품이 없습니다.</td></tr>')
 
     item_count = len(unique_products)
-    total_lines = len(sorted_rows)
-
-    business_summary_cards: list[str] = []
-    for destination, destination_rows in destination_groups.items():
-        destination_products = {
-            normalize_product_group_name(row['product_name'])
-            for row in destination_rows
-            if normalize_product_group_name(row['product_name'])
-        }
-        quantities_by_unit: dict[str, float] = {}
-        for row in destination_rows:
-            try:
-                unit = str(row['unit'] or '').strip() or '-'
-            except (KeyError, IndexError):
-                unit = '-'
-            quantities_by_unit[unit] = quantities_by_unit.get(unit, 0.0) + float(row['requested_qty'] or 0)
-        quantity_summary = ' / '.join(
-            f'{fmt_number(quantity)} {html.escape(unit)}'
-            for unit, quantity in sorted(quantities_by_unit.items())
-        ) or '-'
-        business_summary_cards.append(
-            '<div class="business-card">'
-            f'<div class="business-name">{html.escape(destination)}</div>'
-            '<div class="business-stats">'
-            f'<span><small>품목 수</small><b>{len(destination_products)} 품목</b></span>'
-            f'<span><small>출고수량</small><b>{quantity_summary}</b></span>'
-            '</div></div>'
-        )
-    business_summary_html = ''.join(business_summary_cards)
+    total_quantity = sum(float(row['requested_qty'] or 0) for row in sorted_rows)
 
     document = f'''<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -236,18 +208,18 @@ html,body{{margin:0;padding:0;background:#eef2f6;color:#172033;font-family:-appl
 .sheet{{width:148mm;max-width:100%;margin:auto;background:white;border:1px solid #d7dee7;box-shadow:0 10px 28px rgba(30,45,70,.08)}}
 .header{{padding:18px 20px 15px;border-bottom:3px solid #234f75;display:flex;justify-content:space-between;gap:20px;align-items:flex-end}} .title{{font-size:21px;font-weight:850;color:#173b5f;letter-spacing:.02em}} .export-no{{text-align:right;font-size:9px;color:#758294}} .export-no b{{display:block;font-size:13px;color:#172033;margin-top:3px}}
 .meta{{display:grid;grid-template-columns:repeat(3,1fr);margin:13px 16px 12px;border:1px solid #dce3eb}} .meta div{{padding:7px 8px;border-right:1px solid #e3e8ee}} .meta div:last-child{{border-right:0}} .label{{font-size:12px;color:#7c8797}} .value{{font-size:14px;font-weight:700;margin-top:2px;word-break:break-word}}
-.business-summary{{display:grid;grid-template-columns:repeat(auto-fit,minmax(29mm,1fr));gap:6px;margin:0 16px 12px}} .business-card{{border:1px solid #d8e1ea;border-radius:6px;background:#f7fafc;overflow:hidden}} .business-name{{padding:5px 7px;background:#eaf1f7;color:#234f75;font-size:10px;font-weight:800}} .business-stats{{display:grid;grid-template-columns:1fr 1.35fr}} .business-stats span{{padding:6px 7px;border-right:1px solid #e1e7ed}} .business-stats span:last-child{{border-right:0}} .business-stats small{{display:block;color:#7c8797;font-size:7.5px}} .business-stats b{{display:block;margin-top:2px;font-size:9.5px;color:#172033;word-break:break-word}}
+.list-summary{{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin:0 16px 12px}} .summary-card{{border:1px solid #d8e1ea;border-radius:6px;background:#f7fafc;padding:8px 10px}} .summary-card small{{display:block;color:#7c8797;font-size:8px}} .summary-card b{{display:block;margin-top:3px;font-size:14px;color:#214f76}}
 .content{{padding:0 16px 17px}} .summary{{width:133mm;max-width:100%;margin:0 auto 5px;font-size:8.8px;color:#697586;text-align:right}}
 table{{width:133mm;max-width:100%;margin:0 auto;border-collapse:collapse;table-layout:fixed;font-size:9.2px;border:1px solid #cfd8e2}} col.destination{{width:18mm}} col.product{{width:43mm}} col.lot{{width:28mm}} col.expiry{{width:24mm}} col.qty{{width:12mm}} col.unit{{width:8mm}}
 th{{background:#294f71;color:white;padding:6px 4px;text-align:center;font-weight:750}} td{{padding:5px 5px;border-right:1px solid #dce3ea;border-bottom:1px solid #dce3ea;vertical-align:middle;line-height:1.3}} .center{{text-align:center}} .right{{text-align:right}} .product{{white-space:normal;overflow-wrap:anywhere;word-break:keep-all;font-weight:700;text-align:left;padding-left:8px}} .destination{{font-weight:700}} .merged{{background:#f5f8fb}} .lot,.expiry,.unit{{white-space:nowrap}} .qty{{white-space:nowrap;font-weight:650;padding-left:3px;padding-right:3px}} .unit{{padding-left:2px;padding-right:2px}} .empty{{text-align:center;color:#8993a0;padding:20px}}
 .notice{{padding:10px 20px 14px;font-size:8.2px;color:#788493;border-top:1px solid #e0e6ed}}
-@media print{{html,body{{width:210mm;min-height:297mm;background:white;padding:0}} .toolbar{{display:none!important}} .sheet{{width:148mm;max-width:none;margin:0 auto;border:0;box-shadow:none}} .header{{padding:13px 15px 11px}} .title{{font-size:18px}} .meta{{margin:10px 8px}} .business-summary{{margin:0 8px 9px;gap:4px}} .business-name{{padding:4px 6px}} .business-stats span{{padding:4px 6px}} .content{{padding:0 8px 12px}} .summary,table{{width:133mm;max-width:none}} table{{font-size:8.5px}} th{{padding:4px 3px}} td{{padding:4px}} .product{{padding-left:6px}} .qty,.unit{{padding-left:2px;padding-right:2px}} .notice{{padding:8px 15px 0}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+@media print{{html,body{{width:210mm;min-height:297mm;background:white;padding:0}} .toolbar{{display:none!important}} .sheet{{width:148mm;max-width:none;margin:0 auto;border:0;box-shadow:none}} .header{{padding:13px 15px 11px}} .title{{font-size:18px}} .meta{{margin:10px 8px}} .list-summary{{margin:0 8px 9px;gap:5px}} .summary-card{{padding:6px 8px}} .content{{padding:0 8px 12px}} .summary,table{{width:133mm;max-width:none}} table{{font-size:8.5px}} th{{padding:4px 3px}} td{{padding:4px}} .product{{padding-left:6px}} .qty,.unit{{padding-left:2px;padding-right:2px}} .notice{{padding:8px 15px 0}} .header,th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="sheet"><div class="header"><div class="title">출고 예정 제품 리스트</div><div class="export-no">EXPORT NO.<b>{html.escape(case['export_no'] or '-')}</b></div></div>
 <div class="meta"><div><span class="label">국가 / Country</span><div class="value">{html.escape(case['country'] or '-')}</div></div><div><span class="label">바이어 / Buyer</span><div class="value">{html.escape(case['buyer'] or '-')}</div></div><div><span class="label">운송방식 / Transport</span><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div></div>
-<div class="business-summary">{business_summary_html}</div>
-<div class="content"><div class="summary">총 {item_count}품목 · 제조번호 기준 {total_lines}행</div><table><colgroup><col class="destination"><col class="product"><col class="lot"><col class="expiry"><col class="qty"><col class="unit"></colgroup><thead><tr><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th><th>단위</th></tr></thead><tbody>{''.join(rows_html)}</tbody></table></div>
+<div class="list-summary"><div class="summary-card"><small>전체 품목 수</small><b>{item_count} 품목</b></div><div class="summary-card"><small>총 출고수량</small><b>{fmt_number(total_quantity)}</b></div></div>
+<div class="content"><table><colgroup><col class="destination"><col class="product"><col class="lot"><col class="expiry"><col class="qty"><col class="unit"></colgroup><thead><tr><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>출고수량</th><th>단위</th></tr></thead><tbody>{''.join(rows_html)}</tbody></table></div>
 <div class="notice">본 문서는 패킹 완료 전 작성된 출고 예정 제품 목록이며, 최종 수량 및 패킹 정보는 변경될 수 있습니다.</div></div></body></html>'''
     components.html(document, height=min(1800, max(700, 500 + len(sorted_rows) * 38)), scrolling=True)
 
