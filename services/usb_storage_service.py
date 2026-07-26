@@ -15,6 +15,7 @@ USB_STORAGE_ID = 'NOHTUS_EXPORT_USB'
 USB_DB_DIR = 'EXPORT_DB'
 USB_DB_NAME = 'export.db'
 DB_VERSION = 1
+MAX_DB_SNAPSHOTS = 20
 _USB_CACHE_SECONDS = 5.0
 _USB_CACHE_CHECKED_AT = 0.0
 _USB_CACHE_ROOT: Path | None = None
@@ -187,6 +188,41 @@ def validate_sqlite_database(path: Path) -> None:
         raise ValueError(f'DB가 손상되었습니다: {path} ({detail})')
 
 
+def list_database_snapshots(root: Path | None = None) -> list[Path]:
+    usb_root = root or find_export_usb()
+    if usb_root is None:
+        return []
+    backup_dir = usb_root / USB_DB_DIR
+    if not backup_dir.exists():
+        return []
+    return sorted(
+        backup_dir.glob('*_export.db'),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+
+
+def _create_timestamped_snapshot(temporary: Path, backup_dir: Path) -> Path:
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
+    snapshot = backup_dir / f'{timestamp}_export.db'
+    snapshot_temporary = backup_dir / f'.{timestamp}_export.db.tmp'
+    shutil.copy2(temporary, snapshot_temporary)
+    validate_sqlite_database(snapshot_temporary)
+    _replace_with_retry(snapshot_temporary, snapshot)
+    validate_sqlite_database(snapshot)
+    return snapshot
+
+
+def _prune_database_snapshots(backup_dir: Path) -> None:
+    snapshots = sorted(
+        backup_dir.glob('*_export.db'),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    for old_snapshot in snapshots[MAX_DB_SNAPSHOTS:]:
+        old_snapshot.unlink()
+
+
 def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path | None:
     root = usb_root or find_export_usb()
     if root is None or not local_path.exists():
@@ -219,8 +255,11 @@ def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path
             validate_sqlite_database(previous_temporary)
             _replace_with_retry(previous_temporary, previous)
 
+    snapshot = _create_timestamped_snapshot(temporary, destination.parent)
     _replace_with_retry(temporary, destination)
     validate_sqlite_database(destination)
+    validate_sqlite_database(snapshot)
+    _prune_database_snapshots(destination.parent)
     return destination
 
 
