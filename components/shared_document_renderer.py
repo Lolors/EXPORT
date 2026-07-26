@@ -16,6 +16,19 @@ def render_document(case, packed, actual_rows=None) -> None:
         st.warning('패킹 완료된 CTN 정보가 없어 최종문서를 출력할 수 없습니다.')
         return
 
+    from services.document_image_service import build_final_document_png
+
+    png_data = build_final_document_png(case, packed)
+    safe_export_no = re.sub(r'[^0-9A-Za-z가-힣_-]+', '_', str(case['export_no'] or 'export'))
+    st.download_button(
+        '🖼 PNG 다운로드',
+        data=png_data,
+        file_name=f'{safe_export_no}_패킹리스트.png',
+        mime='image/png',
+        use_container_width=False,
+        key=f'download_final_document_png_{case["id"]}',
+    )
+
     if case['domestic_method'] == '로젠택배':
         detail_label = '송장번호'
         detail_value = case['tracking_no'] or '-'
