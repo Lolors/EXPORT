@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
+from zipfile import BadZipFile, ZipFile
 
 import db
 
@@ -51,6 +53,20 @@ def _shipment_quantity(row) -> float:
 
 def _quantities_equal(left: object, right: object) -> bool:
     return abs(float(left or 0) - float(right or 0)) <= 0.000001
+
+
+def _validate_xlsx(path: Path) -> None:
+    try:
+        with ZipFile(path, 'r') as archive:
+            bad_member = archive.testzip()
+            names = set(archive.namelist())
+    except BadZipFile as exc:
+        raise ValueError(f'생성된 엑셀 파일이 손상되었습니다: {path}') from exc
+    if bad_member:
+        raise ValueError(f'생성된 엑셀 내부 파일이 손상되었습니다: {bad_member}')
+    required = {'[Content_Types].xml', 'xl/workbook.xml'}
+    if not required.issubset(names):
+        raise ValueError(f'생성된 엑셀 파일 구성이 올바르지 않습니다: {path}')
 
 
 def write_case_workbook(case_id: int, folder: Path) -> Path:
@@ -227,5 +243,27 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     ]:
         ws3.append([label, value or ''])
     _style_sheet(ws3, {'A': 24, 'B': 64}, {2})
-    wb.save(workbook_path)
+    temporary_path = workbook_path.with_name(f'{workbook_path.stem}.tmp.xlsx')
+    previous_path = workbook_path.with_name(f'{workbook_path.stem}.previous.xlsx')
+    previous_temporary_path = workbook_path.with_name(f'{workbook_path.stem}.previous.tmp.xlsx')
+
+    if temporary_path.exists():
+        temporary_path.unlink()
+    wb.save(temporary_path)
+    _validate_xlsx(temporary_path)
+
+    if workbook_path.exists():
+        try:
+            _validate_xlsx(workbook_path)
+        except ValueError:
+            pass
+        else:
+            if previous_temporary_path.exists():
+                previous_temporary_path.unlink()
+            shutil.copy2(workbook_path, previous_temporary_path)
+            _validate_xlsx(previous_temporary_path)
+            previous_temporary_path.replace(previous_path)
+
+    temporary_path.replace(workbook_path)
+    _validate_xlsx(workbook_path)
     return workbook_path
