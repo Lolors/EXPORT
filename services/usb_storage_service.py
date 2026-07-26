@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -127,20 +128,37 @@ def usb_database_path(root: Path | None = None) -> Path | None:
 
 def database_info(path: Path) -> dict:
     if not path.exists():
-        return {'exists': False, 'version': 0, 'modified_at': None, 'size': 0}
+        return {
+            'exists': False,
+            'version': 0,
+            'modified_at': None,
+            'size': 0,
+            'logical_digest': '',
+        }
+
     version = DB_VERSION
+    logical_digest = ''
     try:
-        with closing(sqlite3.connect(f'file:{path}?mode=ro&immutable=1', uri=True, timeout=5.0)) as conn:
+        uri_path = path.resolve().as_posix()
+        with closing(sqlite3.connect(f'file:{uri_path}?mode=ro', uri=True, timeout=5.0)) as conn:
             row = conn.execute('PRAGMA user_version').fetchone()
             version = int(row[0] or DB_VERSION) if row else DB_VERSION
-    except sqlite3.Error:
+            digest = hashlib.sha256()
+            for statement in conn.iterdump():
+                digest.update(statement.encode('utf-8'))
+                digest.update(b'\n')
+            logical_digest = digest.hexdigest()
+    except (OSError, sqlite3.Error):
         version = 0
+        logical_digest = ''
+
     stat = path.stat()
     return {
         'exists': True,
         'version': version,
         'modified_at': datetime.fromtimestamp(stat.st_mtime),
         'size': stat.st_size,
+        'logical_digest': logical_digest,
     }
 
 
@@ -151,9 +169,16 @@ def compare_databases(local_path: Path, usb_path: Path | None) -> dict:
         'version': 0,
         'modified_at': None,
         'size': 0,
+        'logical_digest': '',
     }
+    same_database = bool(
+        local['logical_digest']
+        and usb['logical_digest']
+        and local['logical_digest'] == usb['logical_digest']
+    )
     usb_is_newer = bool(
         usb['exists']
+        and not same_database
         and (
             usb['version'] > local['version']
             or (
@@ -163,7 +188,12 @@ def compare_databases(local_path: Path, usb_path: Path | None) -> dict:
             )
         )
     )
-    return {'local': local, 'usb': usb, 'usb_is_newer': usb_is_newer}
+    return {
+        'local': local,
+        'usb': usb,
+        'same_database': same_database,
+        'usb_is_newer': usb_is_newer,
+    }
 
 
 def _replace_with_retry(source: Path, destination: Path, attempts: int = 5) -> None:
