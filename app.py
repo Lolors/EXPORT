@@ -76,6 +76,14 @@ def check_usb_restore_before_start() -> None:
     st.stop()
 
 
+def show_usb_backup_status() -> None:
+    if db.LAST_USB_BACKUP_ERROR:
+        st.error(
+            '자동 USB DB 백업에 실패했습니다. USB 드라이브 사용을 중단하고 '
+            f'내 폴더 메뉴에서 상태를 확인하세요.\n\n오류: {db.LAST_USB_BACKUP_ERROR}'
+        )
+
+
 def initialize_document_filter_defaults() -> None:
     now = datetime.now()
     st.session_state.setdefault('document_case_year', now.year)
@@ -88,6 +96,7 @@ def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
     check_usb_restore_before_start()
     db.init_db()
+    show_usb_backup_status()
     initialize_document_filter_defaults()
 
     st.markdown(
