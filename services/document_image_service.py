@@ -90,17 +90,7 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
     label_font = _font(11)
     value_font = _font(14, bold=True)
     small_font = _font(11)
-    row_count = max(len(packed), 1)
-    if row_count <= 6:
-        table_font_size = 17
-    elif row_count <= 10:
-        table_font_size = 15
-    elif row_count <= 16:
-        table_font_size = 13
-    elif row_count <= 24:
-        table_font_size = 11
-    else:
-        table_font_size = 9
+    table_font_size = 19
     table_font = _font(table_font_size)
     table_bold = _font(table_font_size, bold=True)
 
@@ -165,7 +155,7 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
     for row in packed:
         grouped.setdefault(int(row['box_no']), []).append(row)
     available_height = PAGE_HEIGHT - y - 92
-    base_row_height = max(24, min(74, int((available_height - 38) / max(row_count, 1))))
+    base_row_height = 48
 
     for box_no, rows in grouped.items():
         row_heights = []
