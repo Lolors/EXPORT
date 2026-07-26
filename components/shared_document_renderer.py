@@ -62,7 +62,7 @@ def render_document(case, packed, actual_rows=None) -> None:
         f'<td class="right"><b>{fmt_number(total_qty)}</b></td>'
         f'<td class="center"><b>{fmt_number(total_weight)} kg</b></td><td></td></tr>'
     )
-    table_columns = '<colgroup><col style="width:7.4%"><col style="width:10.5%"><col style="width:22.1%"><col style="width:14.7%"><col style="width:12.6%"><col style="width:7.9%"><col style="width:9.5%"><col style="width:15.3%"></colgroup>'
+    table_columns = '<colgroup><col style="width:10%"><col style="width:10%"><col style="width:20%"><col style="width:15%"><col style="width:13%"><col style="width:8%"><col style="width:9%"><col style="width:15%"></colgroup>'
     table_header = '<tr><th>CTN No.</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>GW (kg)</th><th>CTN 사이즈</th></tr>'
     first_summary = f'{len({row["box_no"] for row in packed})} CTN'
     display_rows = packed
@@ -78,7 +78,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 .body{{padding:12px 8px 10px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 3px}}
 .grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:7px}} .cell{{padding:5px 6px;border-right:1px solid #e5eaf0}} .label{{font-size:11px;color:#7c8797}} .value{{font-size:13px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}}
 .summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:7px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:5px 7px;background:#f8fafc}} .card b{{font-size:16px;color:#214f76}}
-.wrap{{width:100%;max-width:100%;margin:0 auto;overflow:hidden;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:100%;max-width:100%;min-width:0;table-layout:fixed;font-size:13px}} th{{background:#294f71;color:#fff;padding:6px 4px;text-align:left;white-space:normal;line-height:1.2}} td{{padding:6px 4px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.2;overflow-wrap:anywhere}} tr{{break-inside:avoid}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .total-row td{{background:#eef3f8;font-weight:700}}
+.wrap{{width:100%;max-width:100%;margin:0 auto;overflow:hidden;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:100%;max-width:100%;min-width:0;table-layout:fixed;font-size:13px}} th{{background:#294f71;color:#fff;padding:6px 4px;text-align:center;white-space:nowrap;line-height:1.2}} td{{padding:6px 4px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.2;overflow-wrap:anywhere}} tr{{break-inside:avoid}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700;white-space:nowrap}} .total-row td{{background:#eef3f8;font-weight:700}}
 .note-box{{width:100%;margin:6px auto 0;padding:5px 7px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:8px}}
 @media print{{html,body{{width:210mm;height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:198mm;max-width:none;margin:0 auto}} .header,th,.merged,.total-row td{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
