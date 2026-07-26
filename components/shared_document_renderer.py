@@ -53,8 +53,11 @@ def render_document(case, packed, actual_rows=None) -> None:
             rows_html.append('<tr>')
             if index == 0:
                 rows_html.append(f'<td rowspan="{rowspan}" class="center merged">CTN {box_no}</td>')
-            for value in [row['business_unit'], row['product_name'], row['lot_no'], row['expiry_date']]:
-                rows_html.append(f'<td>{html.escape(str(value or ""))}</td>')
+            detail_values = [row['business_unit'], row['product_name'], row['lot_no'], row['expiry_date']]
+            detail_classes = ['center', '', 'center', 'center']
+            for value, css_class in zip(detail_values, detail_classes):
+                class_attr = f' class="{css_class}"' if css_class else ''
+                rows_html.append(f'<td{class_attr}>{html.escape(str(value or ""))}</td>')
             rows_html.append(f'<td class="right">{fmt_number(row["requested_qty"])}</td>')
             if index == 0:
                 weight = f'{fmt_number(row["weight_kg"])} kg' if row['weight_kg'] else '-'
@@ -85,12 +88,12 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 .toolbar{{max-width:1180px;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:8px;background:#173b5f;color:#fff;font-weight:700;padding:10px 18px;cursor:pointer}}
 .document{{width:198mm;max-width:100%;margin:auto;background:#fff;border:1px solid #d8dee8;border-radius:12px;overflow:hidden;box-shadow:0 12px 34px rgba(30,45,70,.08)}}
 .header{{padding:22px 28px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:16px}} .title{{font-size:24px;font-weight:800}} .sub{{font-size:11px;opacity:.8}} .number{{text-align:right}}
-.body{{padding:18px 24px 22px}} .section{{font-size:11px;font-weight:800;color:#294f71;margin:0 0 5px}}
-.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:10px}} .cell{{padding:7px 8px;border-right:1px solid #e5eaf0}} .label{{font-size:8px;color:#7c8797}} .value{{font-size:10.5px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}}
-.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:7px 9px;background:#f8fafc}} .card b{{font-size:14px;color:#214f76}}
+.body{{padding:18px 24px 22px}} .section{{font-size:15px;font-weight:800;color:#294f71;margin:0 0 5px}}
+.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:10px}} .cell{{padding:7px 8px;border-right:1px solid #e5eaf0}} .label{{font-size:12px;color:#7c8797}} .value{{font-size:14.5px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}}
+.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:7px 9px;background:#f8fafc}} .card b{{font-size:18px;color:#214f76}}
 .wrap{{width:100%;max-width:100%;margin:0 auto;overflow:hidden;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:100%;max-width:100%;table-layout:fixed;font-size:13px}} th{{background:#294f71;color:#fff;padding:7px 5px;text-align:left;white-space:normal;line-height:1.2}} td{{padding:7px 5px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.25;overflow-wrap:anywhere}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .total-row td{{background:#eef3f8;font-weight:700}}
 .note-box{{margin:8px auto 0;width:100%;max-width:100%;padding:7px 9px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:9px}}
-@media print{{html,body{{width:210mm;height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:198mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}} .header{{padding:16px 22px}} .title{{font-size:20px}} .sub{{font-size:9px}} .body{{padding:12px 8px 10px}} .grid{{margin-bottom:7px}} .cell{{padding:5px 6px}} .label{{font-size:7px}} .value{{font-size:9px}} .summary{{margin-bottom:7px}} .card{{padding:5px 7px}} .card b{{font-size:12px}} .section{{font-size:9px;margin-bottom:3px}} .wrap{{width:100%;overflow:hidden}} table{{width:100%;min-width:0;font-size:13px;table-layout:fixed}} th{{padding:6px 4px}} td{{padding:6px 4px;line-height:1.2}} tr{{break-inside:avoid}} .note-box{{width:100%;margin-top:6px;padding:5px 7px;font-size:8px}} .header,th,.merged,.total-row td{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+@media print{{html,body{{width:210mm;height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:198mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}} .header{{padding:16px 22px}} .title{{font-size:20px}} .sub{{font-size:9px}} .body{{padding:12px 8px 10px}} .grid{{margin-bottom:7px}} .cell{{padding:5px 6px}} .label{{font-size:11px}} .value{{font-size:13px}} .summary{{margin-bottom:7px}} .card{{padding:5px 7px}} .card b{{font-size:16px}} .section{{font-size:13px;margin-bottom:3px}} .wrap{{width:100%;overflow:hidden}} table{{width:100%;min-width:0;font-size:13px;table-layout:fixed}} th{{padding:6px 4px}} td{{padding:6px 4px;line-height:1.2}} tr{{break-inside:avoid}} .note-box{{width:100%;margin-top:6px;padding:5px 7px;font-size:8px}} .header,th,.merged,.total-row td{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b></div></div>
@@ -106,6 +109,23 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 <div class="cell"><div class="label">수하인주소</div><div class="value">{html.escape(case['consignee_address'] or '-')}</div></div></div>
 <div class="section">PACKING SUMMARY</div><div class="summary"><div class="card"><small>총 CTN 수</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
 <div class="section">PACKING LIST</div><div class="wrap"><table>{table_columns}<thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}</div></div></body></html>'''
+    st.markdown(
+        '''
+        <style>
+        div[data-testid="stCustomComponentV1"]:has(iframe[title="streamlit_components.core.html"]) {
+            width: 80vw !important;
+            max-width: 80vw !important;
+        }
+        @media (max-width: 900px) {
+            div[data-testid="stCustomComponentV1"]:has(iframe[title="streamlit_components.core.html"]) {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+        }
+        </style>
+        ''',
+        unsafe_allow_html=True,
+    )
     components.html(document, height=min(1800, max(850, 760 + len(display_rows) * 44)), scrolling=True)
 
 
