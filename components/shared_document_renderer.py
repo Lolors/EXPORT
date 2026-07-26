@@ -77,7 +77,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 .header{{padding:16px 22px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:16px}} .title{{font-size:20px;font-weight:800}} .sub{{font-size:9px;opacity:.8}} .number{{text-align:right}}
 .body{{padding:12px 8px 10px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 3px}}
 .grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:7px}} .cell{{padding:5px 6px;border-right:1px solid #e5eaf0}} .label{{font-size:11px;color:#7c8797}} .value{{font-size:13px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}}
-.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:7px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:5px 7px;background:#f8fafc}} .card b{{font-size:16px;color:#214f76}}
+.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:20px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:5px 7px;background:#f8fafc}} .card b{{font-size:16px;color:#214f76}}
 .wrap{{width:100%;max-width:100%;margin:0 auto;overflow:hidden;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:100%;max-width:100%;min-width:0;table-layout:fixed;font-size:13px}} th{{background:#294f71;color:#fff;padding:6px 4px;text-align:center;white-space:nowrap;line-height:1.2}} td{{padding:6px 4px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.2;overflow-wrap:anywhere}} tr{{break-inside:avoid}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700;white-space:nowrap}} .total-row td{{background:#eef3f8;font-weight:700}}
 .note-box{{width:100%;margin:6px auto 0;padding:5px 7px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:8px}}
 @media print{{html,body{{width:210mm;height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:198mm;max-width:none;margin:0 auto}} .header,th,.merged,.total-row td{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
@@ -88,7 +88,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 <div class="cell"><div class="label">국가 / Country</div><div class="value">{html.escape(case['country'] or '-')}</div></div>
 <div class="cell"><div class="label">바이어 / Buyer</div><div class="value">{html.escape(case['buyer'] or '-')}</div></div>
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
-<div class="cell"><div class="label">실제출고일 / Ship Date</div><div class="value">{html.escape(shipment_date(case) or '-')}</div></div></div>
+<div class="cell"><div class="label">출고일 / Ship Date</div><div class="value">{html.escape(shipment_date(case) or '-')}</div></div></div>
 <div class="section">DOMESTIC DELIVERY</div><div class="grid">
 <div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div>
 <div class="cell"><div class="label">{html.escape(detail_label)}</div><div class="value">{html.escape(detail_value)}</div></div>
