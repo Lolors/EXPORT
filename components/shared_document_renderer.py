@@ -112,11 +112,13 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
     st.markdown(
         '''
         <style>
+        div[data-testid="stElementContainer"]:has(iframe[title="streamlit_components.core.html"]),
         div[data-testid="stCustomComponentV1"]:has(iframe[title="streamlit_components.core.html"]) {
             width: 80vw !important;
             max-width: 80vw !important;
         }
         @media (max-width: 900px) {
+            div[data-testid="stElementContainer"]:has(iframe[title="streamlit_components.core.html"]),
             div[data-testid="stCustomComponentV1"]:has(iframe[title="streamlit_components.core.html"]) {
                 width: 100% !important;
                 max-width: 100% !important;
