@@ -72,11 +72,22 @@ def render_document(case, packed, actual_rows=None) -> None:
         f'<td class="right"><b>{fmt_number(total_qty)}</b></td>'
         f'<td class="center"><b>{fmt_number(total_weight)} kg</b></td><td></td></tr>'
     )
-    table_columns = '<colgroup><col style="width:12mm"><col style="width:16mm"><col style="width:32mm"><col style="width:22mm"><col style="width:20mm"><col style="width:12mm"><col style="width:14mm"><col style="width:22mm"></colgroup>'
+    table_columns = '<colgroup><col style="width:14mm"><col style="width:20mm"><col style="width:42mm"><col style="width:28mm"><col style="width:24mm"><col style="width:15mm"><col style="width:18mm"><col style="width:29mm"></colgroup>'
     table_header = '<tr><th>CTN No.</th><th>출고처</th><th>제품명</th><th>제조번호</th><th>유통기한</th><th>수량</th><th>GW (kg)</th><th>CTN 사이즈</th></tr>'
     first_summary = f'{len({row["box_no"] for row in packed})} CTN'
     display_rows = packed
     item_count = len({str(row['product_name']).strip() for row in display_rows if str(row['product_name']).strip()})
+    row_count = max(len(display_rows), 1)
+    if row_count <= 6:
+        table_font_size, print_font_size, row_padding = 12.0, 11.0, 9.0
+    elif row_count <= 10:
+        table_font_size, print_font_size, row_padding = 10.8, 10.0, 7.0
+    elif row_count <= 16:
+        table_font_size, print_font_size, row_padding = 9.5, 9.0, 5.0
+    elif row_count <= 24:
+        table_font_size, print_font_size, row_padding = 8.3, 8.0, 4.0
+    else:
+        table_font_size, print_font_size, row_padding = 7.3, 7.0, 3.0
 
     document = f'''<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -89,9 +100,9 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 .body{{padding:18px 24px 22px}} .section{{font-size:11px;font-weight:800;color:#294f71;margin:0 0 5px}}
 .grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:10px}} .cell{{padding:7px 8px;border-right:1px solid #e5eaf0}} .label{{font-size:8px;color:#7c8797}} .value{{font-size:10.5px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}}
 .summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:7px 9px;background:#f8fafc}} .card b{{font-size:14px;color:#214f76}}
-.wrap{{width:150mm;max-width:100%;margin:0 auto;overflow-x:auto;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:150mm;max-width:100%;table-layout:fixed;font-size:9px}} th{{background:#294f71;color:#fff;padding:5px 4px;text-align:left;white-space:nowrap}} td{{padding:5px 4px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.25;overflow-wrap:anywhere}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .total-row td{{background:#eef3f8;font-weight:700}}
-.note-box{{margin:8px auto 0;width:150mm;max-width:100%;padding:7px 9px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:9px}}
-@media print{{html,body{{width:210mm;height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:190mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}} .header{{padding:16px 22px}} .title{{font-size:20px}} .sub{{font-size:9px}} .body{{padding:12px 8px 10px}} .grid{{margin-bottom:7px}} .cell{{padding:5px 6px}} .label{{font-size:7px}} .value{{font-size:9px}} .summary{{margin-bottom:7px}} .card{{padding:5px 7px}} .card b{{font-size:12px}} .section{{font-size:9px;margin-bottom:3px}} .wrap{{width:150mm;overflow:visible}} table{{width:150mm;min-width:0;font-size:7.8px;table-layout:fixed}} th{{padding:4px 3px}} td{{padding:3.5px 3px;line-height:1.15}} tr{{break-inside:avoid}} .note-box{{width:150mm;margin-top:6px;padding:5px 7px;font-size:8px}} .header,th,.merged,.total-row td{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+.wrap{{width:190mm;max-width:100%;margin:0 auto;overflow-x:auto;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:190mm;max-width:100%;table-layout:fixed;font-size:{table_font_size}px}} th{{background:#294f71;color:#fff;padding:5px 4px;text-align:left;white-space:nowrap}} td{{padding:{row_padding}px 4px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.25;overflow-wrap:anywhere}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700}} .total-row td{{background:#eef3f8;font-weight:700}}
+.note-box{{margin:8px auto 0;width:190mm;max-width:100%;padding:7px 9px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:9px}}
+@media print{{html,body{{width:210mm;height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:190mm;max-width:none;margin:0 auto;border:0;border-radius:0;box-shadow:none;overflow:visible}} .header{{padding:16px 22px}} .title{{font-size:20px}} .sub{{font-size:9px}} .body{{padding:12px 8px 10px}} .grid{{margin-bottom:7px}} .cell{{padding:5px 6px}} .label{{font-size:7px}} .value{{font-size:9px}} .summary{{margin-bottom:7px}} .card{{padding:5px 7px}} .card b{{font-size:12px}} .section{{font-size:9px;margin-bottom:3px}} .wrap{{width:190mm;overflow:visible}} table{{width:190mm;min-width:0;font-size:{print_font_size}px;table-layout:fixed}} th{{padding:4px 3px}} td{{padding:{max(2.5, row_padding - 2)}px 3px;line-height:1.15}} tr{{break-inside:avoid}} .note-box{{width:190mm;margin-top:6px;padding:5px 7px;font-size:8px}} .header,th,.merged,.total-row td{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b></div></div>
