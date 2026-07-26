@@ -164,6 +164,14 @@ with usb_col:
         st.success(f'수출 USB를 자동으로 찾았습니다: {detected_usb}')
         usb_db = usb_storage_service.usb_database_path(detected_usb)
         st.caption(f'최신 DB 백업 위치: {usb_db}')
+        incomplete_backup = usb_db.with_suffix('.db.tmp')
+        if incomplete_backup.exists():
+            st.error(
+                f'완료되지 않은 DB 백업이 남아 있습니다: {incomplete_backup}\n\n'
+                '이 파일만으로는 정상 백업 완료로 판단하지 않습니다.'
+            )
+        if db.LAST_USB_BACKUP_ERROR:
+            st.error(f'최근 자동 백업 실패: {db.LAST_USB_BACKUP_ERROR}')
     else:
         st.warning('등록된 수출 USB를 찾지 못했습니다.')
 
@@ -175,7 +183,9 @@ with usb_col:
             try:
                 root = usb_storage_service.register_export_usb(Path(folder_text))
                 destination = db.backup_to_usb()
-                st.success(f'수출 USB로 등록했습니다: {root}\n\nDB 백업: {destination or "백업할 DB 없음"}')
+                if destination is None:
+                    raise OSError(db.LAST_USB_BACKUP_ERROR or 'DB 백업 파일을 만들지 못했습니다.')
+                st.success(f'수출 USB로 등록했습니다: {root}\n\nDB 백업: {destination}')
                 st.rerun()
             except Exception as exc:
                 st.error(f'USB 등록에 실패했습니다: {exc}')
