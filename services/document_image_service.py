@@ -90,7 +90,17 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
     label_font = _font(11)
     value_font = _font(14, bold=True)
     small_font = _font(11)
-    table_font_size = 12 if len(packed) <= 14 else 10
+    row_count = max(len(packed), 1)
+    if row_count <= 6:
+        table_font_size = 17
+    elif row_count <= 10:
+        table_font_size = 15
+    elif row_count <= 16:
+        table_font_size = 13
+    elif row_count <= 24:
+        table_font_size = 11
+    else:
+        table_font_size = 9
     table_font = _font(table_font_size)
     table_bold = _font(table_font_size, bold=True)
 
@@ -135,12 +145,12 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
         draw.text((left + 12, y + 29), value, font=heading_font, fill=BLUE)
     y += 78
 
-    table_width = round(PAGE_WIDTH * 150 / 210)
+    table_width = round(PAGE_WIDTH * 190 / 210)
     table_left = (PAGE_WIDTH - table_width) // 2
     draw.text((table_left, y), 'PACKING LIST', font=heading_font, fill=BLUE)
     y += 26
-    widths_mm = [12, 16, 32, 22, 20, 12, 14, 22]
-    widths = [round(width * table_width / 150) for width in widths_mm]
+    widths_mm = [14, 20, 42, 28, 24, 15, 18, 29]
+    widths = [round(width * table_width / 190) for width in widths_mm]
     widths[-1] += table_width - sum(widths)
     headers = ['CTN No.', '출고처', '제품명', '제조번호', '유통기한', '수량', 'GW (kg)', 'CTN 사이즈']
     header_row_height = 38
@@ -155,7 +165,7 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
     for row in packed:
         grouped.setdefault(int(row['box_no']), []).append(row)
     available_height = PAGE_HEIGHT - y - 92
-    base_row_height = max(27, min(42, int(available_height / max(len(packed) + 1, 1))))
+    base_row_height = max(24, min(74, int((available_height - 38) / max(row_count, 1))))
 
     for box_no, rows in grouped.items():
         row_heights = []
