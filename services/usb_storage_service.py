@@ -215,6 +215,8 @@ def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path
 def restore_database_from_usb(local_path: Path, usb_path: Path) -> Path:
     if not usb_path.exists():
         raise FileNotFoundError('USB 백업 DB를 찾을 수 없습니다.')
+    validate_sqlite_database(usb_path)
+
     temporary = local_path.with_suffix('.db.restore.tmp')
     if temporary.exists():
         temporary.unlink()
@@ -222,5 +224,8 @@ def restore_database_from_usb(local_path: Path, usb_path: Path) -> Path:
         with sqlite3.connect(temporary, timeout=10.0) as target:
             source.backup(target)
             target.commit()
+
+    validate_sqlite_database(temporary)
     temporary.replace(local_path)
+    validate_sqlite_database(local_path)
     return local_path
