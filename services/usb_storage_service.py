@@ -130,7 +130,7 @@ def database_info(path: Path) -> dict:
         return {'exists': False, 'version': 0, 'modified_at': None, 'size': 0}
     version = DB_VERSION
     try:
-        with closing(sqlite3.connect(path, timeout=5.0)) as conn:
+        with closing(sqlite3.connect(f'file:{path}?mode=ro&immutable=1', uri=True, timeout=5.0)) as conn:
             row = conn.execute('PRAGMA user_version').fetchone()
             version = int(row[0] or DB_VERSION) if row else DB_VERSION
     except sqlite3.Error:
@@ -179,13 +179,32 @@ def _replace_with_retry(source: Path, destination: Path, attempts: int = 5) -> N
 
 def validate_sqlite_database(path: Path) -> None:
     try:
-        with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=10.0)) as connection:
+        with closing(sqlite3.connect(f'file:{path}?mode=ro&immutable=1', uri=True, timeout=10.0)) as connection:
             result = connection.execute('PRAGMA quick_check').fetchone()
     except sqlite3.DatabaseError as exc:
         raise ValueError(f'DB 무결성 검사에 실패했습니다: {path}') from exc
     if not result or str(result[0]).strip().casefold() != 'ok':
         detail = str(result[0]) if result else '검사 결과 없음'
         raise ValueError(f'DB가 손상되었습니다: {path} ({detail})')
+
+
+def _finish_standalone_database(connection: sqlite3.Connection) -> None:
+    connection.commit()
+    connection.execute('PRAGMA journal_mode=DELETE')
+    connection.commit()
+
+
+def _cleanup_backup_artifacts(backup_dir: Path) -> None:
+    patterns = ('*.db-wal', '*.db-shm', '*.tmp-wal', '*.tmp-shm')
+    for pattern in patterns:
+        for artifact in backup_dir.glob(pattern):
+            try:
+                artifact.unlink()
+            except FileNotFoundError:
+                pass
+    legacy_backup = backup_dir / 'export.db.bak'
+    if legacy_backup.exists():
+        legacy_backup.unlink()
 
 
 def list_database_snapshots(root: Path | None = None) -> list[Path]:
@@ -230,8 +249,6 @@ def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path
     destination = root / USB_DB_DIR / USB_DB_NAME
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix('.db.tmp')
-    previous = destination.with_suffix('.db.bak')
-    previous_temporary = destination.with_suffix('.db.bak.tmp')
     if temporary.exists():
         temporary.unlink()
 
@@ -239,27 +256,16 @@ def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path
         with closing(sqlite3.connect(temporary, timeout=10.0)) as target:
             source.backup(target)
             target.execute(f'PRAGMA user_version = {DB_VERSION}')
-            target.commit()
+            _finish_standalone_database(target)
 
     validate_sqlite_database(temporary)
-
-    if destination.exists():
-        try:
-            validate_sqlite_database(destination)
-        except ValueError:
-            pass
-        else:
-            if previous_temporary.exists():
-                previous_temporary.unlink()
-            shutil.copy2(destination, previous_temporary)
-            validate_sqlite_database(previous_temporary)
-            _replace_with_retry(previous_temporary, previous)
 
     snapshot = _create_timestamped_snapshot(temporary, destination.parent)
     _replace_with_retry(temporary, destination)
     validate_sqlite_database(destination)
     validate_sqlite_database(snapshot)
     _prune_database_snapshots(destination.parent)
+    _cleanup_backup_artifacts(destination.parent)
     return destination
 
 
@@ -274,7 +280,7 @@ def restore_database_from_usb(local_path: Path, usb_path: Path) -> Path:
     with closing(sqlite3.connect(usb_path, timeout=10.0)) as source:
         with closing(sqlite3.connect(temporary, timeout=10.0)) as target:
             source.backup(target)
-            target.commit()
+            _finish_standalone_database(target)
 
     validate_sqlite_database(temporary)
     _replace_with_retry(temporary, local_path)
