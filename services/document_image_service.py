@@ -86,10 +86,10 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
     content_width = PAGE_WIDTH - margin * 2
 
     title_font = _font(29, bold=True)
-    heading_font = _font(16, bold=True)
-    label_font = _font(11)
-    value_font = _font(14, bold=True)
-    small_font = _font(11)
+    heading_font = _font(22, bold=True)
+    label_font = _font(17)
+    value_font = _font(20, bold=True)
+    small_font = _font(17)
     table_font_size = 19
     table_font = _font(table_font_size)
     table_bold = _font(table_font_size, bold=True)
@@ -112,7 +112,7 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
     ]
     box_width = content_width / 4
     for info_row in info_rows:
-        row_height = 66
+        row_height = 82
         draw.rounded_rectangle((margin, y, PAGE_WIDTH - margin, y + row_height), radius=7, outline=BORDER, width=2)
         for index, (label, value) in enumerate(info_row):
             left = margin + index * box_width
@@ -130,10 +130,10 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
     card_width = (content_width - card_gap * 2) / 3
     for index, (value, label) in enumerate(summary_values):
         left = margin + index * (card_width + card_gap)
-        draw.rounded_rectangle((left, y, left + card_width, y + 62), radius=7, fill=LIGHT, outline=BORDER)
+        draw.rounded_rectangle((left, y, left + card_width, y + 76), radius=7, fill=LIGHT, outline=BORDER)
         draw.text((left + 12, y + 8), label, font=label_font, fill=MUTED)
-        draw.text((left + 12, y + 29), value, font=heading_font, fill=BLUE)
-    y += 78
+        draw.text((left + 12, y + 37), value, font=heading_font, fill=BLUE)
+    y += 92
 
     table_width = round(PAGE_WIDTH * 190 / 210)
     table_left = (PAGE_WIDTH - table_width) // 2
@@ -183,8 +183,14 @@ def build_final_document_png(case, packed: list[dict]) -> bytes:
             for column, value in zip(columns, values):
                 left = table_left + sum(widths[:column])
                 draw.rectangle((left, y, left + widths[column], y + row_height), fill=WHITE, outline=BORDER)
-                _cell_text(draw, (left, y, left + widths[column], y + row_height), value, table_font,
-                           align='right' if column == 5 else 'left')
+                alignment = 'right' if column == 5 else ('center' if column in {1, 3, 4} else 'left')
+                _cell_text(
+                    draw,
+                    (left, y, left + widths[column], y + row_height),
+                    value,
+                    table_font,
+                    align=alignment,
+                )
             y += row_height
 
     total_height = 38
