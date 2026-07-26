@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
 import string
 import time
@@ -163,6 +164,17 @@ def compare_databases(local_path: Path, usb_path: Path | None) -> dict:
     return {'local': local, 'usb': usb, 'usb_is_newer': usb_is_newer}
 
 
+def validate_sqlite_database(path: Path) -> None:
+    try:
+        with sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=10.0) as connection:
+            result = connection.execute('PRAGMA quick_check').fetchone()
+    except sqlite3.DatabaseError as exc:
+        raise ValueError(f'DB 무결성 검사에 실패했습니다: {path}') from exc
+    if not result or str(result[0]).strip().casefold() != 'ok':
+        detail = str(result[0]) if result else '검사 결과 없음'
+        raise ValueError(f'DB가 손상되었습니다: {path} ({detail})')
+
+
 def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path | None:
     root = usb_root or find_export_usb()
     if root is None or not local_path.exists():
@@ -170,14 +182,33 @@ def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path
     destination = root / USB_DB_DIR / USB_DB_NAME
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix('.db.tmp')
+    previous = destination.with_suffix('.db.bak')
+    previous_temporary = destination.with_suffix('.db.bak.tmp')
     if temporary.exists():
         temporary.unlink()
+
     with sqlite3.connect(local_path, timeout=10.0) as source:
         with sqlite3.connect(temporary, timeout=10.0) as target:
             source.backup(target)
             target.execute(f'PRAGMA user_version = {DB_VERSION}')
             target.commit()
+
+    validate_sqlite_database(temporary)
+
+    if destination.exists():
+        try:
+            validate_sqlite_database(destination)
+        except ValueError:
+            pass
+        else:
+            if previous_temporary.exists():
+                previous_temporary.unlink()
+            shutil.copy2(destination, previous_temporary)
+            validate_sqlite_database(previous_temporary)
+            previous_temporary.replace(previous)
+
     temporary.replace(destination)
+    validate_sqlite_database(destination)
     return destination
 
 
