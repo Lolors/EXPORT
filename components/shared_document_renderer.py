@@ -16,19 +16,6 @@ def render_document(case, packed, actual_rows=None) -> None:
         st.warning('패킹 완료된 CTN 정보가 없어 최종문서를 출력할 수 없습니다.')
         return
 
-    from services.document_image_service import build_final_document_png
-
-    png_data = build_final_document_png(case, packed)
-    safe_export_no = re.sub(r'[^0-9A-Za-z가-힣_-]+', '_', str(case['export_no'] or 'export'))
-    st.download_button(
-        '🖼 PNG 다운로드',
-        data=png_data,
-        file_name=f'{safe_export_no}_패킹리스트.png',
-        mime='image/png',
-        use_container_width=False,
-        key=f'download_final_document_png_{case["id"]}',
-    )
-
     if case['domestic_method'] == '로젠택배':
         detail_label = '송장번호'
         detail_value = case['tracking_no'] or '-'
@@ -114,8 +101,8 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
         <style>
         div[data-testid="stElementContainer"]:has(iframe[title="streamlit_components.core.html"]),
         div[data-testid="stCustomComponentV1"]:has(iframe[title="streamlit_components.core.html"]) {
-            width: 80vw !important;
-            max-width: 80vw !important;
+            width: 100vw !important;
+            max-width: 100vw !important;
         }
         @media (max-width: 900px) {
             div[data-testid="stElementContainer"]:has(iframe[title="streamlit_components.core.html"]),
@@ -219,7 +206,7 @@ html,body{{margin:0;padding:0;background:#eef2f6;color:#172033;font-family:-appl
 .toolbar{{width:148mm;max-width:100%;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:7px;background:#173b5f;color:white;font-weight:700;padding:9px 16px;cursor:pointer}}
 .sheet{{width:148mm;max-width:100%;margin:auto;background:white;border:1px solid #d7dee7;box-shadow:0 10px 28px rgba(30,45,70,.08)}}
 .header{{padding:18px 20px 15px;border-bottom:3px solid #234f75;display:flex;justify-content:space-between;gap:20px;align-items:flex-end}} .title{{font-size:21px;font-weight:850;color:#173b5f;letter-spacing:.02em}} .export-no{{text-align:right;font-size:9px;color:#758294}} .export-no b{{display:block;font-size:13px;color:#172033;margin-top:3px}}
-.meta{{display:grid;grid-template-columns:repeat(3,1fr);margin:13px 16px 12px;border:1px solid #dce3eb}} .meta div{{padding:7px 8px;border-right:1px solid #e3e8ee}} .meta div:last-child{{border-right:0}} .label{{font-size:8px;color:#7c8797}} .value{{font-size:10px;font-weight:700;margin-top:2px;word-break:break-word}}
+.meta{{display:grid;grid-template-columns:repeat(3,1fr);margin:13px 16px 12px;border:1px solid #dce3eb}} .meta div{{padding:7px 8px;border-right:1px solid #e3e8ee}} .meta div:last-child{{border-right:0}} .label{{font-size:12px;color:#7c8797}} .value{{font-size:14px;font-weight:700;margin-top:2px;word-break:break-word}}
 .content{{padding:0 16px 17px}} .summary{{width:133mm;max-width:100%;margin:0 auto 5px;font-size:8.8px;color:#697586;text-align:right}}
 table{{width:133mm;max-width:100%;margin:0 auto;border-collapse:collapse;table-layout:fixed;font-size:9.2px;border:1px solid #cfd8e2}} col.destination{{width:18mm}} col.product{{width:43mm}} col.lot{{width:28mm}} col.expiry{{width:24mm}} col.qty{{width:12mm}} col.unit{{width:8mm}}
 th{{background:#294f71;color:white;padding:6px 4px;text-align:center;font-weight:750}} td{{padding:5px 5px;border-right:1px solid #dce3ea;border-bottom:1px solid #dce3ea;vertical-align:middle;line-height:1.3}} .center{{text-align:center}} .right{{text-align:right}} .product{{white-space:normal;overflow-wrap:anywhere;word-break:keep-all;font-weight:700;text-align:left;padding-left:8px}} .destination{{font-weight:700}} .merged{{background:#f5f8fb}} .lot,.expiry,.unit{{white-space:nowrap}} .qty{{white-space:nowrap;font-weight:650;padding-left:3px;padding-right:3px}} .unit{{padding-left:2px;padding-right:2px}} .empty{{text-align:center;color:#8993a0;padding:20px}}
