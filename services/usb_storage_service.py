@@ -165,6 +165,17 @@ def compare_databases(local_path: Path, usb_path: Path | None) -> dict:
     return {'local': local, 'usb': usb, 'usb_is_newer': usb_is_newer}
 
 
+def _replace_with_retry(source: Path, destination: Path, attempts: int = 5) -> None:
+    for attempt in range(attempts):
+        try:
+            source.replace(destination)
+            return
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) != 32 or attempt == attempts - 1:
+                raise
+            time.sleep(0.2 * (attempt + 1))
+
+
 def validate_sqlite_database(path: Path) -> None:
     try:
         with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=10.0)) as connection:
@@ -206,9 +217,9 @@ def safe_backup_database(local_path: Path, usb_root: Path | None = None) -> Path
                 previous_temporary.unlink()
             shutil.copy2(destination, previous_temporary)
             validate_sqlite_database(previous_temporary)
-            previous_temporary.replace(previous)
+            _replace_with_retry(previous_temporary, previous)
 
-    temporary.replace(destination)
+    _replace_with_retry(temporary, destination)
     validate_sqlite_database(destination)
     return destination
 
@@ -227,6 +238,6 @@ def restore_database_from_usb(local_path: Path, usb_path: Path) -> Path:
             target.commit()
 
     validate_sqlite_database(temporary)
-    temporary.replace(local_path)
+    _replace_with_retry(temporary, local_path)
     validate_sqlite_database(local_path)
     return local_path
