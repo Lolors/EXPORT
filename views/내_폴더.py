@@ -77,6 +77,7 @@ with management_col:
         all_cases = export_service.list_cases(include_cancelled=False)
         successes: list[str] = []
         failures: list[str] = []
+        drive_corruption_detected = False
         progress = st.progress(0, text='수출 폴더를 확인하고 있습니다.')
         total = max(len(all_cases), 1)
         for index, case in enumerate(all_cases, start=1):
@@ -85,6 +86,9 @@ with management_col:
                 successes.append(f"{case['export_no']} → {folder}")
             except Exception as exc:
                 failures.append(f"{case['export_no']}: {exc}")
+                if getattr(exc, 'winerror', None) == 1392:
+                    drive_corruption_detected = True
+                    break
             progress.progress(index / total, text=f'{index}/{len(all_cases)} 처리 중')
         progress.empty()
         if successes:
@@ -96,6 +100,11 @@ with management_col:
             st.success(f'취소 건을 제외하고 {len(successes)}건의 폴더를 동기화했습니다.')
         elif not failures:
             st.info('동기화할 유효한 수출 건이 없습니다.')
+        if drive_corruption_detected:
+            st.error(
+                '저장장치 파일시스템 손상(WinError 1392)을 감지해 추가 쓰기 작업을 중단했습니다. '
+                '정상 드라이브로 저장 위치를 변경한 뒤 다시 동기화하세요.'
+            )
         if failures:
             st.error('일부 폴더를 처리하지 못했습니다.\n\n' + '\n'.join(f'- {item}' for item in failures))
 
