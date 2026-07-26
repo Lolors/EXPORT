@@ -173,6 +173,11 @@ with usb_col:
         st.success(f'수출 USB를 자동으로 찾았습니다: {detected_usb}')
         usb_db = usb_storage_service.usb_database_path(detected_usb)
         st.caption(f'최신 DB 백업 위치: {usb_db}')
+        snapshots = usb_storage_service.list_database_snapshots(detected_usb)
+        if snapshots:
+            st.caption(
+                f'시점별 복구 DB: {len(snapshots)}개 / 최근 파일: {snapshots[0].name}'
+            )
         incomplete_backup = usb_db.with_suffix('.db.tmp')
         if incomplete_backup.exists():
             st.error(
