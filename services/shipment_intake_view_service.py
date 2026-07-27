@@ -27,6 +27,21 @@ def order_state(order_qty: float, linked_qty: float) -> tuple[str, str]:
     return '🔴', '미입고'
 
 
+def sort_orders_for_intake(orders: list, linked_rows_by_order: dict[int, list]) -> list:
+    def sort_key(order) -> tuple[int, str]:
+        order_id = int(order['id'])
+        ordered_qty = safe_number(order['quantity'])
+        received_qty = sum(
+            safe_number(row['requested_qty'])
+            for row in linked_rows_by_order.get(order_id, [])
+        )
+        is_completed = ordered_qty > 0 and received_qty + 0.000001 >= ordered_qty
+        product_name = order_service.normalize_product_name(order['product_name'])
+        return (1 if is_completed else 0, product_name)
+
+    return sorted(orders, key=sort_key)
+
+
 def product_name_similarity(order_name: str, actual_name: str) -> float:
     normalized_order = order_service.normalize_product_name(order_name)
     normalized_actual = order_service.normalize_product_name(actual_name)
