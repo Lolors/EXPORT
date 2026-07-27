@@ -26,7 +26,7 @@ PAGES = {
         st.Page('views/수출_주문_입력_및_수정.py', title='주문 입력', icon='📝'),
         st.Page('views/주문_검색_및_수정.py', title='주문 검색 및 수정', icon='🔎'),
         st.Page('views/실출고_입력.py', title='수출대기 입고', icon='📦'),
-        st.Page('views/박스_패킹.py', title='박스 패킹', icon='📦'),
+        st.Page('views/박스_패킹_edit.py', title='박스 패킹', icon='📦'),
         st.Page('views/국내배송.py', title='국내배송', icon='🚚'),
         st.Page('views/공유문서.py', title='공유용 자료', icon='📄'),
         st.Page('views/기간별_통계.py', title='기간별 통계', icon='📈'),
