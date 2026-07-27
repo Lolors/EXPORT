@@ -13,6 +13,7 @@ from services import (
     folder_service,
     order_save_guard,
     order_service,
+    packing_edit_service,
     packing_service,
     product_name_match_service,
     shipment_service,
@@ -131,6 +132,7 @@ def main() -> None:
     order_service.normalize_product_name = product_name_match_service.normalize_for_match
     order_save_guard.install()
     packing_service.list_items = shipment_service.list_case_items
+    packing_service.next_box_no = packing_edit_service.next_available_box_no
     shipment_service.sync_case_stage = stage_service.sync_case_stage
     shipment_service.sync_active_case_stages = stage_service.sync_active_case_stages
     packing_service._sync_packing_stage = stage_service.sync_case_stage
