@@ -60,16 +60,17 @@ management_col, example_col = st.columns(2, gap='large')
 with management_col:
     st.markdown('#### 수출 폴더 관리')
     st.caption(
-        '취소되지 않은 수출 건의 누락 폴더를 만들고, 변경된 폴더명과 수출진행내역.xlsx를 갱신합니다. '
+        '취소되지 않은 모든 수출 건의 폴더를 현재 구조로 맞추고, '
+        '수출진행내역.xlsx를 현재 DB의 주문·출고·CTN 정보로 완전히 새로 생성합니다. '
         '사진·CI·Shipping Mark·기타 파일은 유지합니다.'
     )
     folder_confirm = st.checkbox(
-        '기존 수출 폴더를 현재 구조로 이동·이름 변경하는 것에 동의합니다.',
+        '기존 수출 폴더를 현재 구조로 이동·이름 변경하고 엑셀을 재생성하는 것에 동의합니다.',
         key='folder_sync_confirm',
     )
 
     if st.button(
-        '수출 폴더 동기화',
+        '수출 폴더 및 엑셀 전체 재생성',
         type='primary',
         disabled=not folder_confirm,
         use_container_width=True,
@@ -78,11 +79,14 @@ with management_col:
         successes: list[str] = []
         failures: list[str] = []
         drive_corruption_detected = False
-        progress = st.progress(0, text='수출 폴더를 확인하고 있습니다.')
+        progress = st.progress(0, text='수출 폴더와 엑셀을 새로 생성하고 있습니다.')
         total = max(len(all_cases), 1)
         for index, case in enumerate(all_cases, start=1):
             try:
-                folder = folder_service.sync_case_folder(int(case['id']))
+                folder = folder_service.sync_case_folder(
+                    int(case['id']),
+                    force_workbook=True,
+                )
                 successes.append(f"{case['export_no']} → {folder}")
             except Exception as exc:
                 failures.append(f"{case['export_no']}: {exc}")
@@ -94,19 +98,22 @@ with management_col:
         if successes:
             history_service.add_history(
                 None,
-                '수출 폴더 동기화',
+                '수출 폴더 및 엑셀 전체 재생성',
                 f'유효 수출 {len(successes)}건 완료 / {len(failures)}건 실패 / 취소 건 제외',
             )
-            st.success(f'취소 건을 제외하고 {len(successes)}건의 폴더를 동기화했습니다.')
+            st.success(
+                f'취소 건을 제외한 {len(successes)}건의 폴더를 동기화하고 '
+                '수출진행내역.xlsx를 새로 생성했습니다.'
+            )
         elif not failures:
-            st.info('동기화할 유효한 수출 건이 없습니다.')
+            st.info('재생성할 유효한 수출 건이 없습니다.')
         if drive_corruption_detected:
             st.error(
                 '저장장치 파일시스템 손상(WinError 1392)을 감지해 추가 쓰기 작업을 중단했습니다. '
-                '정상 드라이브로 저장 위치를 변경한 뒤 다시 동기화하세요.'
+                '정상 드라이브로 저장 위치를 변경한 뒤 다시 실행하세요.'
             )
         if failures:
-            st.error('일부 폴더를 처리하지 못했습니다.\n\n' + '\n'.join(f'- {item}' for item in failures))
+            st.error('일부 폴더 또는 엑셀을 처리하지 못했습니다.\n\n' + '\n'.join(f'- {item}' for item in failures))
 
 with example_col:
     st.markdown('#### 자동 생성 예시')
