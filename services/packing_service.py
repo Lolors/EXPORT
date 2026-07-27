@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 
-import streamlit as st
-
 import db
 from utils.dates import now_text
 
