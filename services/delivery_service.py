@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import db
+from services import order_service
 from utils.dates import now_text
 
 
@@ -33,3 +34,4 @@ def save_delivery(
             case_id,
         ),
     )
+    order_service.clear_editable_cases_cache()
