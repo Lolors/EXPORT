@@ -13,6 +13,12 @@ from utils.formatters import sanitize_folder_part
 
 CASE_MARKER_NAME = '.export_case.json'
 CATEGORY_FOLDERS = {
+    '출고사진': '01 출고제품사진',
+    'CI': '02 CI',
+    'Shipping Mark': '03 Shipping Mark',
+    '기타': '04 기타',
+}
+LEGACY_CATEGORY_FOLDERS = {
     '출고사진': '01_출고제품사진',
     'CI': '02_CI',
     'Shipping Mark': '03_Shipping Mark',
@@ -210,8 +216,12 @@ def find_case_folder(case_id: int) -> Path | None:
 
 
 def ensure_category_folders(folder: Path) -> None:
-    for name in CATEGORY_FOLDERS.values():
-        (folder / name).mkdir(parents=True, exist_ok=True)
+    for category, name in CATEGORY_FOLDERS.items():
+        target = folder / name
+        legacy = folder / LEGACY_CATEGORY_FOLDERS[category]
+        if legacy.exists() and not target.exists():
+            legacy.rename(target)
+        target.mkdir(parents=True, exist_ok=True)
 
 
 def category_folder(case_id: int, category: str) -> Path:
