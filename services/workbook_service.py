@@ -60,13 +60,34 @@ def _validate_xlsx(path: Path) -> None:
         with ZipFile(path, 'r') as archive:
             bad_member = archive.testzip()
             names = set(archive.namelist())
-    except BadZipFile as exc:
+    except (BadZipFile, OSError) as exc:
         raise ValueError(f'생성된 엑셀 파일이 손상되었습니다: {path}') from exc
     if bad_member:
         raise ValueError(f'생성된 엑셀 내부 파일이 손상되었습니다: {bad_member}')
     required = {'[Content_Types].xml', 'xl/workbook.xml'}
     if not required.issubset(names):
         raise ValueError(f'생성된 엑셀 파일 구성이 올바르지 않습니다: {path}')
+
+
+def is_valid_xlsx(path: Path) -> bool:
+    try:
+        _validate_xlsx(path)
+    except ValueError:
+        return False
+    return True
+
+
+def _contiguous_runs(rows: list[int]) -> list[list[int]]:
+    if not rows:
+        return []
+    ordered = sorted(set(rows))
+    runs: list[list[int]] = [[ordered[0]]]
+    for row_no in ordered[1:]:
+        if row_no == runs[-1][-1] + 1:
+            runs[-1].append(row_no)
+        else:
+            runs.append([row_no])
+    return runs
 
 
 def write_case_workbook(case_id: int, folder: Path) -> Path:
@@ -90,7 +111,8 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
                   s.expiry_date, s.requested_qty, s.box_no, s.updated_at,
                   b.length_cm, b.width_cm, b.height_cm, b.weight_kg
            FROM order_items o
-           LEFT JOIN shipment_items s ON s.order_item_id=o.id
+           LEFT JOIN shipment_items s
+             ON s.order_item_id=o.id AND s.case_id=o.case_id
            LEFT JOIN boxes b ON b.case_id=s.case_id AND b.box_no=s.box_no
            WHERE o.case_id=?
            ORDER BY o.id,
@@ -149,7 +171,7 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
         if total_order_quantity != '':
             ws2.cell(row_no, 2).number_format = '#,##0'
         ws2.cell(row_no, 7).number_format = '#,##0'
-        ws2.cell(row_no, 10).number_format = '0" kg"'
+        ws2.cell(row_no, 10).number_format = '0.00" kg"'
         if box_no is not None:
             box_rows.setdefault(box_no, []).append(row_no)
         return row_no
@@ -198,24 +220,36 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
             )
             ws2.cell(row_no, 1).alignment = Alignment(indent=1, vertical='center', wrap_text=True)
 
+    # 같은 CTN이 떨어진 행에 다시 등장할 수 있으므로 연속된 구간만 병합합니다.
+    # 비연속 행 전체를 병합하면 서로 다른 CTN의 병합 범위가 겹쳐 Excel이 파일을 복구하게 됩니다.
     for box_no in sorted(box_rows):
-        rows = box_rows[box_no]
-        if len(rows) > 1:
+        for run in _contiguous_runs(box_rows[box_no]):
+            first_row = run[0]
+            last_row = run[-1]
+            if len(run) > 1:
+                for column in (8, 9, 10):
+                    ws2.merge_cells(
+                        start_row=first_row,
+                        start_column=column,
+                        end_row=last_row,
+                        end_column=column,
+                    )
             for column in (8, 9, 10):
-                ws2.merge_cells(start_row=rows[0], start_column=column, end_row=rows[-1], end_column=column)
-        for column in (8, 9, 10):
-            ws2.cell(rows[0], column).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                ws2.cell(first_row, column).alignment = Alignment(
+                    horizontal='center', vertical='center', wrap_text=True
+                )
 
     total_row = ws2.max_row + 1
     ws2.append(['합계', '', '', '', '', '', '', '', '', '', ''])
     ws2.cell(total_row, 7, f'=SUM(G3:G{total_row - 1})')
     if box_rows:
-        gw_cells = ','.join(f'J{rows[0]}' for rows in box_rows.values())
+        first_rows = [run[0] for rows in box_rows.values() for run in _contiguous_runs(rows)]
+        gw_cells = ','.join(f'J{row_no}' for row_no in first_rows)
         ws2.cell(total_row, 10, f'=SUM({gw_cells})')
     else:
         ws2.cell(total_row, 10, 0)
     ws2.cell(total_row, 7).number_format = '#,##0'
-    ws2.cell(total_row, 10).number_format = '0" kg"'
+    ws2.cell(total_row, 10).number_format = '0.00" kg"'
     for cell in ws2[total_row]:
         cell.font = Font(bold=True)
         cell.fill = PatternFill('solid', fgColor='D9EAF7')
@@ -243,6 +277,7 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     ]:
         ws3.append([label, value or ''])
     _style_sheet(ws3, {'A': 24, 'B': 64}, {2})
+
     temporary_path = workbook_path.with_name(f'{workbook_path.stem}.tmp.xlsx')
     previous_path = workbook_path.with_name(f'{workbook_path.stem}.previous.xlsx')
     previous_temporary_path = workbook_path.with_name(f'{workbook_path.stem}.previous.tmp.xlsx')
@@ -252,17 +287,12 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     wb.save(temporary_path)
     _validate_xlsx(temporary_path)
 
-    if workbook_path.exists():
-        try:
-            _validate_xlsx(workbook_path)
-        except ValueError:
-            pass
-        else:
-            if previous_temporary_path.exists():
-                previous_temporary_path.unlink()
-            shutil.copy2(workbook_path, previous_temporary_path)
-            _validate_xlsx(previous_temporary_path)
-            previous_temporary_path.replace(previous_path)
+    if workbook_path.exists() and is_valid_xlsx(workbook_path):
+        if previous_temporary_path.exists():
+            previous_temporary_path.unlink()
+        shutil.copy2(workbook_path, previous_temporary_path)
+        _validate_xlsx(previous_temporary_path)
+        previous_temporary_path.replace(previous_path)
 
     temporary_path.replace(workbook_path)
     _validate_xlsx(workbook_path)
