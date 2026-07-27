@@ -101,16 +101,25 @@ method = st.radio(
 )
 with st.form(f'delivery_{case_id}_{method}'):
     actual_date = st.date_input('국내배송 일자', value=date_value(case['actual_ship_date']))
-    receiver_cols = st.columns([1, 2])
-    consignee_name = receiver_cols[0].text_input('수하인명', value=case['consignee_name'] or '')
-    consignee_address = receiver_cols[1].text_input('수하인주소', value=case['consignee_address'] or '')
-    tracking = st.text_input('송장번호', value=case['tracking_no'] or '') if method == '로젠택배' else ''
-    if method == '퀵배송':
-        c1, c2 = st.columns(2)
-        driver = c1.text_input('배송기사 이름', value=case['driver_name'] or '')
-        phone = c2.text_input('연락처', value=case['driver_phone'] or '')
+
+    if method == '핸드캐리':
+        consignee_name = ''
+        consignee_address = ''
+        tracking = ''
+        driver = ''
+        phone = ''
     else:
-        driver = phone = ''
+        receiver_cols = st.columns([1, 2])
+        consignee_name = receiver_cols[0].text_input('수하인명', value=case['consignee_name'] or '')
+        consignee_address = receiver_cols[1].text_input('수하인주소', value=case['consignee_address'] or '')
+        tracking = st.text_input('송장번호', value=case['tracking_no'] or '') if method == '로젠택배' else ''
+        if method == '퀵배송':
+            c1, c2 = st.columns(2)
+            driver = c1.text_input('배송기사 이름', value=case['driver_name'] or '')
+            phone = c2.text_input('연락처', value=case['driver_phone'] or '')
+        else:
+            driver = phone = ''
+
     submitted = st.form_submit_button('배송정보 저장 및 완료 처리', type='primary')
 
 if submitted:
