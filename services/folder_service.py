@@ -248,10 +248,16 @@ def _parse_timestamp(value: object) -> datetime | None:
         return None
 
 
-def _workbook_needs_update(case_id: int, folder: Path) -> bool:
+def _workbook_needs_update(case_id: int, folder: Path, *, force: bool = False) -> bool:
     workbook_path = folder / '수출진행내역.xlsx'
-    if not workbook_path.exists():
+    if force or not workbook_path.exists():
         return True
+
+    from services.workbook_service import is_valid_xlsx
+
+    if not is_valid_xlsx(workbook_path):
+        return True
+
     timestamps: list[datetime] = []
     queries = [
         ('SELECT updated_at AS value FROM export_cases WHERE id=?', (case_id,)),
@@ -271,17 +277,16 @@ def _workbook_needs_update(case_id: int, folder: Path) -> bool:
 
 
 def _write_case_workbook(case_id: int, folder: Path) -> None:
-    # openpyxl is expensive to import, so load it only when a workbook is actually rebuilt.
     from services.workbook_service import write_case_workbook
 
     write_case_workbook(case_id, folder)
 
 
-def _prepare_folder(case, folder: Path) -> Path:
+def _prepare_folder(case, folder: Path, *, force_workbook: bool = False) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     write_case_marker(folder, case)
     ensure_category_folders(folder)
-    if _workbook_needs_update(int(case['id']), folder):
+    if _workbook_needs_update(int(case['id']), folder, force=force_workbook):
         _write_case_workbook(int(case['id']), folder)
     return folder
 
@@ -318,7 +323,7 @@ def refresh_attachment_paths(case_id: int, old_root: Path, new_root: Path) -> No
 
 
 @db.backup_batch
-def sync_case_folder(case_id: int) -> Path:
+def sync_case_folder(case_id: int, *, force_workbook: bool = False) -> Path:
     case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
     if not case:
         raise ValueError(f'수출 건을 찾을 수 없습니다: {case_id}')
@@ -339,7 +344,7 @@ def sync_case_folder(case_id: int) -> Path:
             (stored_target, now_text(), case_id),
         )
         case = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
-    _prepare_folder(case, target)
+    _prepare_folder(case, target, force_workbook=force_workbook)
     return target
 
 
@@ -349,29 +354,41 @@ def rebuild_all_case_folders() -> list[tuple[int, Path]]:
            WHERE status<>'취소' AND stage<>'취소'
            ORDER BY id"""
     )
-    return [(int(case['id']), sync_case_folder(int(case['id']))) for case in cases]
+    return [
+        (int(case['id']), sync_case_folder(int(case['id']), force_workbook=True))
+        for case in cases
+    ]
 
 
 @db.backup_batch
 def move_file_to_case(case_id: int, source: Path, category: str = '출고사진') -> Path:
     destination_folder = category_folder(case_id, category)
-    source = Path(source)
     destination = destination_folder / source.name
     counter = 2
     while destination.exists():
         destination = destination_folder / f'{source.stem}_{counter}{source.suffix}'
         counter += 1
-    shutil.move(str(source), str(destination))
+    shutil.copy2(source, destination)
     db.execute(
-        'INSERT INTO attachments(case_id,file_name,stored_path,category,uploaded_at) VALUES (?,?,?,?,?)',
-        (case_id, destination.name, _path_for_database(destination), category, now_text()),
+        '''INSERT INTO attachments(case_id,category,original_name,stored_path,created_at)
+           VALUES (?,?,?,?,?)''',
+        (case_id, category, source.name, _path_for_database(destination), now_text()),
     )
     return destination
 
 
-def open_in_explorer(path: Path) -> None:
-    if not path.exists():
-        raise FileNotFoundError(f'경로를 찾을 수 없습니다: {path}')
-    if os.name != 'nt':
-        raise OSError('Windows에서만 탐색기 열기를 사용할 수 있습니다.')
-    os.startfile(str(path))
+def delete_attachment(attachment_id: int) -> None:
+    attachment = db.row('SELECT stored_path FROM attachments WHERE id=?', (attachment_id,))
+    if not attachment:
+        return
+    path = resolve_database_path(attachment['stored_path']) or Path(str(attachment['stored_path']))
+    if path.exists():
+        path.unlink()
+    db.execute('DELETE FROM attachments WHERE id=?', (attachment_id,))
+
+
+def list_attachments(case_id: int):
+    return db.rows(
+        'SELECT id,category,original_name,stored_path,created_at FROM attachments WHERE case_id=? ORDER BY id',
+        (case_id,),
+    )
