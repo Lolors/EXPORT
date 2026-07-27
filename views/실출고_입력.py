@@ -21,6 +21,7 @@ from services.shipment_intake_view_service import (
     intake_progress,
     order_state,
     safe_number,
+    sort_orders_for_intake,
 )
 
 
@@ -286,8 +287,9 @@ with right:
     if not orders:
         st.info('왼쪽에서 주문목록을 입력하고 저장하세요.')
     else:
+        sorted_orders = sort_orders_for_intake(orders, linked_rows_by_order)
         order_options: dict[str, int] = {}
-        for order in orders:
+        for order in sorted_orders:
             order_id = int(order['id'])
             order_qty = safe_number(order['quantity'])
             unit = str(order['unit'] or 'EA')
@@ -306,7 +308,10 @@ with right:
             key=f'linked_selected_order_{case_id}',
         )
         selected_order_id = order_options[selected_label]
-        selected_order = next(order for order in orders if int(order['id']) == selected_order_id)
+        selected_order = next(
+            order for order in sorted_orders
+            if int(order['id']) == selected_order_id
+        )
         selected_order_name = str(selected_order['product_name'] or '').strip()
         order_qty = safe_number(selected_order['quantity'])
         unit = str(selected_order['unit'] or 'EA')
