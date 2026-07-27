@@ -23,8 +23,7 @@ def normalize_product_name(value: str) -> str:
     return re.sub(r'[^0-9a-z가-힣%]+', '', text)
 
 
-@st.cache_data(persist='disk', show_spinner=False)
-def _cached_editable_cases() -> list[dict]:
+def _editable_cases_query() -> list[dict]:
     rows = db.rows(
         '''WITH product_summary AS (
                SELECT case_id, GROUP_CONCAT(product_name, ', ') AS product_names
@@ -43,11 +42,12 @@ def _cached_editable_cases() -> list[dict]:
 
 
 def clear_editable_cases_cache() -> None:
-    _cached_editable_cases.clear()
+    # 목록은 항상 DB에서 직접 읽으므로 별도 캐시를 비울 필요가 없다.
+    return None
 
 
 def list_editable_cases() -> list[dict]:
-    return _cached_editable_cases()
+    return _editable_cases_query()
 
 
 def list_for_case(case_id: int):
@@ -123,7 +123,6 @@ def create_order_items(
                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
                 (case_id, order_id, '', '', product_name, '', '', quantity, None, now, now),
             )
-    clear_editable_cases_cache()
 
 
 def create_historical_case_details(
@@ -183,7 +182,6 @@ def create_historical_case_details(
             case_id,
         ),
     )
-    clear_editable_cases_cache()
 
 
 def find_similar_purchase_prices(product_name: str, limit: int = 8):
@@ -371,40 +369,9 @@ def save_order_items(case_id: int, edited) -> None:
 
         removed_ids = [order_id for order_id in existing if order_id not in seen_ids]
         for order_id in removed_ids:
-            conn.execute(
-                'DELETE FROM shipment_items WHERE case_id=? AND order_item_id=?',
-                (case_id, order_id),
-            )
-            conn.execute(
-                'DELETE FROM order_items WHERE id=? AND case_id=?',
-                (order_id, case_id),
-            )
+            conn.execute('DELETE FROM order_items WHERE id=? AND case_id=?', (order_id, case_id))
 
-        conn.execute(
-            '''DELETE FROM shipment_items
-               WHERE case_id=?
-                 AND (
-                     order_item_id IS NULL
-                     OR NOT EXISTS(
-                         SELECT 1
-                         FROM order_items o
-                         WHERE o.id=shipment_items.order_item_id
-                           AND o.case_id=shipment_items.case_id
-                     )
-                 )''',
-            (case_id,),
-        )
-        conn.execute(
-            '''DELETE FROM boxes
-               WHERE case_id=?
-                 AND NOT EXISTS(
-                     SELECT 1
-                     FROM shipment_items s
-                     WHERE s.case_id=boxes.case_id
-                       AND s.box_no=boxes.box_no
-                 )''',
-            (case_id,),
-        )
+        conn.execute('UPDATE export_cases SET updated_at=? WHERE id=?', (now, case_id))
 
-    sync_historical_shipments(case_id)
+    db.backup_to_usb()
     clear_editable_cases_cache()
