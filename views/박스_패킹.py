@@ -15,6 +15,30 @@ from services.packing_view_service import (
 from utils.formatters import fmt_number
 
 
+def sync_grid_checkbox_selection(
+    widget_key: str,
+    selection_key: str,
+    version_key: str,
+    row_ids: list[int],
+) -> None:
+    editor_state = st.session_state.get(widget_key, {})
+    edited_rows = editor_state.get('edited_rows', {}) if isinstance(editor_state, dict) else {}
+    selected_ids = {int(item_id) for item_id in st.session_state.get(selection_key, [])}
+
+    for row_index, changes in edited_rows.items():
+        index = int(row_index)
+        if index < 0 or index >= len(row_ids) or '선택' not in changes:
+            continue
+        item_id = int(row_ids[index])
+        if bool(changes['선택']):
+            selected_ids.add(item_id)
+        else:
+            selected_ids.discard(item_id)
+
+    st.session_state[selection_key] = sorted(selected_ids)
+    st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+
+
 st.title('CTN 패킹')
 st.caption('미패킹 제품을 빠르게 선택해 현재 CTN에 담고, 오른쪽에서 CTN 정보와 관리 작업을 처리합니다.')
 
@@ -257,6 +281,7 @@ with left_column:
     )
     selection_key = f'packing_selected_ids_{case_id}'
     version_key = f'packing_grid_version_{case_id}'
+    grid_version = int(st.session_state.get(version_key, 0))
     selected_state = {int(item_id) for item_id in st.session_state.get(selection_key, [])}
     grid_rows = [
         {
@@ -282,6 +307,10 @@ with left_column:
         lot_query,
         bool(unpacked_only),
     )))
+    row_ids = [int(item['id']) for item in visible_items]
+    grid_widget_key = (
+        f"packing_item_grid_{case_id}_{grid_version}_{filter_signature}"
+    )
     edited_grid = st.data_editor(
         grid_df,
         hide_index=True,
@@ -298,13 +327,14 @@ with left_column:
             '출고수량': st.column_config.NumberColumn('출고수량', format='%.0f'),
             '현재 CTN': st.column_config.TextColumn('현재 CTN', width='small'),
         },
-        key=(
-            f"packing_item_grid_{case_id}_"
-            f"{int(st.session_state.get(version_key, 0))}_{filter_signature}"
-        ),
+        key=grid_widget_key,
+        on_change=sync_grid_checkbox_selection,
+        args=(grid_widget_key, selection_key, version_key, row_ids),
     )
-    selected_ids = [int(row['_id']) for _, row in edited_grid.iterrows() if bool(row['선택'])]
-    st.session_state[selection_key] = selected_ids
+    selected_ids = sorted({
+        int(item_id)
+        for item_id in st.session_state.get(selection_key, [])
+    })
 
     quick_cols = st.columns(3)
     same_product = quick_cols[0].button('동일제품 전체선택', use_container_width=True)
