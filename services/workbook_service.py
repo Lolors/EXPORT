@@ -240,8 +240,18 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     _style_sheet(ws3, {'A': 24, 'B': 64}, {2})
 
     temporary_path = workbook_path.with_name(f'{workbook_path.stem}.tmp.xlsx')
-    previous_path = workbook_path.with_name(f'{workbook_path.stem}.previous.xlsx')
-    previous_temporary_path = workbook_path.with_name(f'{workbook_path.stem}.previous.tmp.xlsx')
+    backup_folder = folder / '.backup'
+    previous_path = backup_folder / f'{workbook_path.stem}.previous.xlsx'
+    previous_temporary_path = backup_folder / f'{workbook_path.stem}.previous.tmp.xlsx'
+    legacy_previous_path = workbook_path.with_name(f'{workbook_path.stem}.previous.xlsx')
+
+    if legacy_previous_path.exists():
+        backup_folder.mkdir(parents=True, exist_ok=True)
+        legacy_destination = previous_path
+        if legacy_destination.exists():
+            legacy_destination = backup_folder / f'{workbook_path.stem}.legacy.previous.xlsx'
+        if not legacy_destination.exists():
+            legacy_previous_path.replace(legacy_destination)
 
     if temporary_path.exists():
         temporary_path.unlink()
@@ -249,6 +259,7 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     _validate_xlsx(temporary_path)
 
     if workbook_path.exists() and is_valid_xlsx(workbook_path):
+        backup_folder.mkdir(parents=True, exist_ok=True)
         if previous_temporary_path.exists():
             previous_temporary_path.unlink()
         shutil.copy2(workbook_path, previous_temporary_path)
