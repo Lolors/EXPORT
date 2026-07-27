@@ -19,6 +19,51 @@ if source.count(layout_marker) != 1:
     raise RuntimeError('박스 패킹 좌우 영역 비율 구간을 찾지 못했습니다.')
 source = source.replace(layout_marker, layout_replacement, 1)
 
+style_marker = "st.title('CTN 패킹')\n"
+style_replacement = '''st.title('CTN 패킹')
+st.markdown(
+    """
+    <style>
+    div[data-testid="stDataEditor"] {
+        font-size: 0.76rem;
+    }
+    div[data-testid="stDataEditor"] [role="columnheader"],
+    div[data-testid="stDataEditor"] [role="gridcell"] {
+        font-size: 0.76rem !important;
+        padding-left: 3px !important;
+        padding-right: 3px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+'''
+if source.count(style_marker) != 1:
+    raise RuntimeError('박스 패킹 제목 구간을 찾지 못했습니다.')
+source = source.replace(style_marker, style_replacement, 1)
+
+grid_config_marker = '''            '선택': st.column_config.CheckboxColumn('선택', width='small'),
+            '_id': None,
+            '사업장': st.column_config.TextColumn('사업장', width='small'),
+            '실제 제품명': st.column_config.TextColumn('실제 제품명', width='large'),
+            '제조번호': st.column_config.TextColumn('제조번호', width='medium'),
+            '유통기한': st.column_config.TextColumn('유통기한', width='medium'),
+            '출고수량': st.column_config.NumberColumn('출고수량', format='%.0f'),
+            '현재 CTN': st.column_config.TextColumn('현재 CTN', width='small'),
+'''
+grid_config_replacement = '''            '선택': st.column_config.CheckboxColumn('선택', width=46),
+            '_id': None,
+            '사업장': st.column_config.TextColumn('사업장', width=62),
+            '실제 제품명': st.column_config.TextColumn('실제 제품명', width=190),
+            '제조번호': st.column_config.TextColumn('제조번호', width=88),
+            '유통기한': st.column_config.TextColumn('유통기한', width=88),
+            '출고수량': st.column_config.NumberColumn('출고수량', format='%.0f', width=72),
+            '현재 CTN': st.column_config.TextColumn('현재 CTN', width=68),
+'''
+if source.count(grid_config_marker) != 1:
+    raise RuntimeError('미패킹 제품 표 컬럼 설정 구간을 찾지 못했습니다.')
+source = source.replace(grid_config_marker, grid_config_replacement, 1)
+
 active_items_pattern = re.compile(
     r"    if active_items:\n"
     r"        st\.dataframe\(.*?"
@@ -45,12 +90,12 @@ active_items_replacement = '''    if active_items:
             height=min(300, 70 + len(active_items) * 35),
             disabled=['_id', '제품명', '제조번호', '유통기한', '수량'],
             column_config={
-                '빼기': st.column_config.CheckboxColumn('빼기', width='small'),
+                '빼기': st.column_config.CheckboxColumn('빼기', width=46),
                 '_id': None,
-                '제품명': st.column_config.TextColumn('제품명', width='large'),
-                '제조번호': st.column_config.TextColumn('제조번호', width='medium'),
-                '유통기한': st.column_config.TextColumn('유통기한', width='medium'),
-                '수량': st.column_config.NumberColumn('수량', format='%.0f'),
+                '제품명': st.column_config.TextColumn('제품명', width=150),
+                '제조번호': st.column_config.TextColumn('제조번호', width=82),
+                '유통기한': st.column_config.TextColumn('유통기한', width=82),
+                '수량': st.column_config.NumberColumn('수량', format='%.0f', width=62),
             },
             key=f'active_ctn_items_{case_id}_{active_box_no}',
         )
