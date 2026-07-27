@@ -158,14 +158,14 @@ else:
     if stored_folder_path:
         st.caption(stored_folder_path)
 
-is_final_document_available = str(case['stage'] or '').strip() in {'패킹 완료', '국내배송'}
+is_final_document_available = str(case['stage'] or '').strip() in {'패킹 대기', '패킹 완료', '국내배송'}
 output_cols = st.columns(2)
 if output_cols[0].button(
     '최종문서 출력하기',
     type='primary',
     use_container_width=True,
     disabled=not is_final_document_available,
-    help=None if is_final_document_available else '패킹 완료 또는 국내배송 단계에서 최종문서를 출력할 수 있습니다.',
+    help=None if is_final_document_available else '패킹 대기, 패킹 완료 또는 국내배송 단계에서 최종문서를 출력할 수 있습니다.',
 ):
     st.session_state['shared_document_view'] = 'final'
 if output_cols[1].button('출고 예정 제품 리스트', use_container_width=True):
@@ -190,5 +190,5 @@ elif selected_view == 'shipment_products':
     render_shipment_product_list(case, actual_rows)
 else:
     if not is_final_document_available:
-        st.caption('최종문서는 패킹 완료 또는 국내배송 단계에서 출력할 수 있습니다.')
+        st.caption('최종문서는 패킹 대기, 패킹 완료 또는 국내배송 단계에서 출력할 수 있습니다.')
     st.info('출력할 문서 종류를 선택하세요.')
