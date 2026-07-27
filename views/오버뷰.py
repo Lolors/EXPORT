@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from html import escape
 
 import pandas as pd
@@ -14,7 +15,7 @@ from services.dashboard_view_service import (
 
 
 st.title('대시보드')
-st.caption('지금 진행 중인 수출 건과 직접 기록한 확인사항을 한 화면에서 관리합니다.')
+st.caption('이번 달의 모든 수출 건과 직접 기록한 확인사항을 한 화면에서 관리합니다.')
 
 st.markdown(
     '''
@@ -60,8 +61,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+current_month = datetime.now().strftime('%Y-%m')
+cases = [
+    case
+    for case in export_service.list_cases(include_cancelled=True)
+    if str(case['actual_ship_date'] or case['created_at'] or '').startswith(current_month)
+]
 cases = sorted(
-    export_service.active_cases(),
+    cases,
     key=lambda case: (
         str(case['country'] or '').casefold(),
         str(case['buyer'] or '').casefold(),
@@ -70,9 +77,9 @@ cases = sorted(
     ),
 )
 
-st.markdown('### 진행 중 수출 건')
+st.markdown(f'### {datetime.now().year}년 {datetime.now().month}월 수출 건')
 if not cases:
-    st.success('현재 진행 중인 수출 건이 없습니다.')
+    st.info('이번 달에 등록되거나 출고된 수출 건이 없습니다.')
 else:
     table_rows = []
     for index, case in enumerate(cases, start=1):
