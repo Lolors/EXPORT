@@ -171,22 +171,6 @@ with right_column:
             st.success(f'CTN {active_box_no}을 저장했습니다.')
             st.rerun()
 
-        st.markdown('#### CTN 구성 복제')
-        clone_count = st.number_input(
-            '복제할 CTN 개수', min_value=1, value=1, step=1,
-            key=f'clone_count_{case_id}_{active_box_no}',
-        )
-        if st.button('현재 CTN 복제', use_container_width=True, key=f'clone_ctn_{case_id}_{active_box_no}'):
-            try:
-                created_boxes = packing_service.clone_box(case_id, active_box_no, int(clone_count))
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                created_text = ', '.join(f'CTN {number}' for number in created_boxes)
-                history_service.add(case_id, 'CTN 구성 복제', f'CTN {active_box_no} → {created_text}')
-                st.session_state[pending_active_key] = f'CTN {created_boxes[0]}'
-                st.success(f'{created_text}을 생성했습니다.')
-                st.rerun()
     else:
         st.caption('제품을 담으면 규격·GW 입력과 복제 기능이 활성화됩니다.')
 
@@ -230,6 +214,36 @@ with right_column:
                 st.error(str(exc))
             else:
                 st.success(f'{preset_name.strip()} 프리셋을 저장했습니다.')
+                st.rerun()
+
+    if active_box is not None:
+        st.markdown('#### CTN 구성 복제')
+        clone_count = st.number_input(
+            '복제할 CTN 개수', min_value=1, value=1, step=1,
+            key=f'clone_count_{case_id}_{active_box_no}',
+        )
+        if st.button(
+            '현재 CTN 복제',
+            use_container_width=True,
+            key=f'clone_ctn_{case_id}_{active_box_no}',
+        ):
+            try:
+                created_boxes = packing_service.clone_box(
+                    case_id,
+                    active_box_no,
+                    int(clone_count),
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                created_text = ', '.join(f'CTN {number}' for number in created_boxes)
+                history_service.add(
+                    case_id,
+                    'CTN 구성 복제',
+                    f'CTN {active_box_no} → {created_text}',
+                )
+                st.session_state[pending_active_key] = f'CTN {created_boxes[0]}'
+                st.success(f'{created_text}을 생성했습니다.')
                 st.rerun()
 
     st.divider()
