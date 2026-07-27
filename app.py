@@ -85,11 +85,17 @@ def show_usb_backup_status() -> None:
 
 
 def initialize_document_filter_defaults() -> None:
-    now = datetime.now()
-    st.session_state.setdefault('document_case_year', now.year)
-    st.session_state.setdefault('document_case_month', now.month)
-    st.session_state.setdefault('document_case_country', '전체')
+    filter_version = 2
+    if st.session_state.get('document_filter_default_version') != filter_version:
+        st.session_state['document_case_year'] = '전체'
+        st.session_state['document_case_month'] = '전체'
+        st.session_state['document_case_country'] = '전체'
+        st.session_state['document_filter_default_version'] = filter_version
+        return
 
+    st.session_state.setdefault('document_case_year', '전체')
+    st.session_state.setdefault('document_case_month', '전체')
+    st.session_state.setdefault('document_case_country', '전체')
 
 
 def main() -> None:
