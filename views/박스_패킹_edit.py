@@ -13,6 +13,12 @@ if source.count(import_marker) != 1:
     raise RuntimeError('박스 패킹 서비스 import 구간을 찾지 못했습니다.')
 source = source.replace(import_marker, import_replacement, 1)
 
+layout_marker = "left_column, right_column = st.columns([7, 3], gap='large')"
+layout_replacement = "left_column, right_column = st.columns([6, 4], gap='large')"
+if source.count(layout_marker) != 1:
+    raise RuntimeError('박스 패킹 좌우 영역 비율 구간을 찾지 못했습니다.')
+source = source.replace(layout_marker, layout_replacement, 1)
+
 active_items_pattern = re.compile(
     r"    if active_items:\n"
     r"        st\.dataframe\(.*?"
