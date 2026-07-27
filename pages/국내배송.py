@@ -91,10 +91,12 @@ case = export_service.get_case(case_id)
 render_packed_details(case_id)
 st.divider()
 
+method_options = ['로젠택배', '퀵배송', '핸드캐리']
+saved_method = str(case['domestic_method'] or '').strip()
 method = st.radio(
     '배송 방식',
-    ['로젠택배', '퀵배송'],
-    index=1 if case['domestic_method'] == '퀵배송' else 0,
+    method_options,
+    index=method_options.index(saved_method) if saved_method in method_options else 0,
     horizontal=True,
 )
 with st.form(f'delivery_{case_id}_{method}'):
