@@ -4,6 +4,23 @@ import db
 from utils.dates import now_text
 
 
+def next_available_box_no(case_id: int) -> int:
+    rows = db.rows(
+        'SELECT box_no FROM boxes WHERE case_id=? AND box_no>=1 ORDER BY box_no',
+        (case_id,),
+    )
+    expected = 1
+    for row in rows:
+        box_no = int(row['box_no'])
+        if box_no < expected:
+            continue
+        if box_no == expected:
+            expected += 1
+            continue
+        break
+    return expected
+
+
 @db.backup_batch
 def rename_box(case_id: int, current_box_no: int, new_box_no: int) -> None:
     current_box_no = int(current_box_no)
