@@ -1,7 +1,26 @@
 from __future__ import annotations
 
+from functools import wraps
+
 import db
 from utils.dates import now_text
+
+
+def _backup_compatible(func):
+    """Use batched USB backup when supported, while remaining compatible with older db.py files."""
+    batch_decorator = getattr(db, 'backup_batch', None)
+    if callable(batch_decorator):
+        return batch_decorator(func)
+
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        result = func(*args, **kwargs)
+        backup = getattr(db, 'backup_to_usb', None)
+        if callable(backup):
+            backup()
+        return result
+
+    return wrapped
 
 
 def next_available_box_no(case_id: int) -> int:
@@ -21,7 +40,7 @@ def next_available_box_no(case_id: int) -> int:
     return expected
 
 
-@db.backup_batch
+@_backup_compatible
 def rename_box(case_id: int, current_box_no: int, new_box_no: int) -> None:
     current_box_no = int(current_box_no)
     new_box_no = int(new_box_no)
