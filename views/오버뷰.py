@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from html import escape
 
 import pandas as pd
@@ -9,13 +8,15 @@ import streamlit as st
 from services import export_service, overview_service
 from services.dashboard_view_service import (
     order_products_summary as _order_products_summary,
+    recent_order_cases,
+    recent_order_period_label,
     stage_label,
     stage_style as _stage_style,
 )
 
 
 st.title('대시보드')
-st.caption('이번 달의 취소되지 않은 모든 수출 건과 직접 기록한 확인사항을 한 화면에서 관리합니다.')
+st.caption('최근 2개월에 등록된 주문과 직접 기록한 확인사항을 한 화면에서 관리합니다.')
 
 st.markdown(
     '''
@@ -61,12 +62,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-current_month = datetime.now().strftime('%Y-%m')
-cases = [
-    case
-    for case in export_service.list_cases()
-    if str(case['actual_ship_date'] or case['created_at'] or '').startswith(current_month)
-]
+cases = recent_order_cases(
+    export_service.list_cases(),
+    month_count=2,
+)
 cases = sorted(
     cases,
     key=lambda case: (
@@ -77,9 +76,9 @@ cases = sorted(
     ),
 )
 
-st.markdown(f'### {datetime.now().year}년 {datetime.now().month}월 수출 건')
+st.markdown(f'### 최근 2개월 주문 건 ({recent_order_period_label(month_count=2)})')
 if not cases:
-    st.info('이번 달에 등록되거나 출고된 수출 건이 없습니다.')
+    st.info('최근 2개월에 등록된 주문 건이 없습니다.')
 else:
     table_rows = []
     for index, case in enumerate(cases, start=1):
