@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from services import export_service
 
 
@@ -19,6 +21,49 @@ STAGE_COLORS = {
     '완료': 'background-color: #dff5e7; color: #17683a; font-weight: 700;',
 }
 
+
+
+def _recent_month_prefixes(reference: datetime, month_count: int) -> list[str]:
+    prefixes: list[str] = []
+    year = reference.year
+    month = reference.month
+    for _ in range(max(1, month_count)):
+        prefixes.append(f'{year:04d}-{month:02d}')
+        month -= 1
+        if month == 0:
+            year -= 1
+            month = 12
+    return prefixes
+
+
+def recent_order_cases(
+    cases: list,
+    *,
+    reference: datetime | None = None,
+    month_count: int = 2,
+) -> list:
+    prefixes = set(_recent_month_prefixes(reference or datetime.now(), month_count))
+    return [
+        case
+        for case in cases
+        if str(case['created_at'] or '')[:7] in prefixes
+    ]
+
+
+def recent_order_period_label(
+    *,
+    reference: datetime | None = None,
+    month_count: int = 2,
+) -> str:
+    prefixes = list(reversed(_recent_month_prefixes(reference or datetime.now(), month_count)))
+    start_year, start_month = prefixes[0].split('-')
+    end_year, end_month = prefixes[-1].split('-')
+    if start_year == end_year:
+        return f'{start_year}년 {int(start_month)}월~{int(end_month)}월'
+    return (
+        f'{start_year}년 {int(start_month)}월~'
+        f'{end_year}년 {int(end_month)}월'
+    )
 
 def stage_label(value: object) -> str:
     stage = str(value or '').strip()
