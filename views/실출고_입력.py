@@ -129,7 +129,7 @@ def render_similar_price_lookup(*, key: str) -> None:
 
 
 st.title('수출대기 입고')
-st.caption('왼쪽에서 주문목록을 수정하고, 오른쪽에서 주문을 선택해 실제 수출대기 입고제품을 입력합니다.')
+st.caption('국내배송 단계까지 진행된 건도 선택해 주문과 실제 입고제품을 수정할 수 있습니다.')
 
 if success_message := st.session_state.pop('shipment_intake_success_message', None):
     st.success(success_message)
@@ -158,9 +158,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-cases = export_service.active_cases()
+cases = export_service.intake_editable_cases()
 if not cases:
-    st.info('진행 중인 수출 건이 없습니다.')
+    st.info('수정할 수 있는 수출 건이 없습니다.')
     st.stop()
 
 case_id = select_export_case(
@@ -172,6 +172,12 @@ case_id = select_export_case(
 st.session_state['actual_packing_case_id'] = case_id
 
 shipment_service.cleanup_invalid_links(case_id)
+selected_case = next(case for case in cases if int(case['id']) == case_id)
+if str(selected_case['stage'] or '').strip() == '국내배송':
+    st.warning(
+        '국내배송 완료 건입니다. 주문 또는 입고제품을 변경하면 완료 상태가 해제되고, '
+        '변경된 제품은 CTN에서 빠져 다시 패킹해야 합니다. 국내배송 입력값은 보존됩니다.'
+    )
 orders = order_service.list_for_case(case_id)
 all_linked_rows = shipment_service.list_case_items(case_id)
 linked_rows_by_order: dict[int, list] = {}
@@ -346,6 +352,13 @@ with right:
             f'{preview_icon} 입력 합계 {fmt_number(preview_qty)} / '
             f'주문 {fmt_number(order_qty)} {unit} · {preview_state}'
         )
+        packing_impact = shipment_service.packing_impact_for_order(case_id, selected_order_id)
+        if packing_impact['packed_row_count']:
+            st.warning(
+                f"저장하면 이 주문품목의 패킹된 {packing_impact['packed_row_count']}개 행이 "
+                f"{packing_impact['affected_box_count']}개 CTN에서 빠져 미패킹 상태로 돌아갑니다. "
+                '다른 주문품목의 CTN 배치는 유지되고, 빈 CTN만 삭제됩니다.'
+            )
 
         if st.button(
             '선택 주문품목 입고 저장',

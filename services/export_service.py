@@ -26,6 +26,21 @@ def active_cases(country: str | None = None):
     return db.rows(sql + ' ORDER BY created_at', params)
 
 
+def intake_editable_cases():
+    """Current export cases whose intake may still need correction."""
+    return db.rows(
+        '''SELECT *
+           FROM export_cases
+           WHERE case_type<>'historical'
+             AND status<>'취소'
+             AND stage IN (
+                 '주문 접수','출고 대기','입고 진행',
+                 '패킹 대기','패킹 진행','패킹 완료','국내배송'
+             )
+           ORDER BY COALESCE(NULLIF(actual_ship_date,''),created_at) DESC'''
+    )
+
+
 def get_order_items(case_id: int):
     return db.rows(
         'SELECT id, product_name, quantity, unit, created_at FROM order_items WHERE case_id=? ORDER BY id',

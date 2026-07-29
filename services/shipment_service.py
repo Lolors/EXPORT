@@ -14,6 +14,22 @@ PACKING_STAGE_NAMES = {
 }
 
 
+def _reopen_delivered_case(case_id: int, now: str) -> None:
+    case = db.row(
+        'SELECT stage, status, case_type FROM export_cases WHERE id=?',
+        (case_id,),
+    )
+    if (
+        case
+        and case['case_type'] != 'historical'
+        and str(case['stage'] or '').strip() == '국내배송'
+    ):
+        db.execute(
+            "UPDATE export_cases SET stage='패킹 대기',status='진행중',updated_at=? WHERE id=?",
+            (now, case_id),
+        )
+
+
 def sync_case_stage(case_id: int, now: str | None = None) -> str:
     """Recalculate the intake/packing stage from every order item's progress."""
     case = db.row(
@@ -212,6 +228,21 @@ def list_linked(case_id: int, order_item_id: int):
     ]
 
 
+def packing_impact_for_order(case_id: int, order_item_id: int) -> dict[str, int]:
+    result = db.row(
+        '''SELECT
+               SUM(CASE WHEN box_no IS NOT NULL THEN 1 ELSE 0 END) AS packed_row_count,
+               COUNT(DISTINCT box_no) AS affected_box_count
+           FROM shipment_items
+           WHERE case_id=? AND order_item_id=?''',
+        (case_id, order_item_id),
+    )
+    return {
+        'packed_row_count': int(result['packed_row_count'] or 0) if result else 0,
+        'affected_box_count': int(result['affected_box_count'] or 0) if result else 0,
+    }
+
+
 def count_unlinked(case_id: int) -> int:
     result = db.row(
         'SELECT COUNT(*) AS count FROM shipment_items WHERE case_id=? AND order_item_id IS NULL',
@@ -285,6 +316,7 @@ def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
             values,
         )
+    _reopen_delivered_case(case_id, now)
     db.execute(
         '''DELETE FROM boxes
            WHERE case_id=?

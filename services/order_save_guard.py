@@ -153,11 +153,18 @@ def _database_snapshot(case_id: int) -> list[tuple]:
 
 def _after_order_change(case_id: int) -> None:
     case = db.row('SELECT stage, status, case_type FROM export_cases WHERE id=?', (case_id,))
-    if case and case['case_type'] != 'historical' and str(case['stage'] or '').strip() == '패킹 완료':
+    if (
+        case
+        and case['case_type'] != 'historical'
+        and str(case['stage'] or '').strip() in {'패킹 완료', '국내배송'}
+    ):
         db.execute(
-            "UPDATE export_cases SET stage='제품 준비', status='진행중', updated_at=? WHERE id=?",
+            "UPDATE export_cases SET stage='패킹 대기', status='진행중', updated_at=? WHERE id=?",
             (now_text(), case_id),
         )
+    from services import shipment_service
+    shipment_service.cleanup_invalid_links(case_id)
+    shipment_service.sync_case_stage(case_id)
 
     draft_key = f'shipment_order_draft_{case_id}'
     version_key = f'shipment_order_editor_version_{case_id}'
