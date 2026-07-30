@@ -12,6 +12,7 @@ from services.order_edit_service import (
     date_value as dval,
     historical_items,
     number_value as num,
+    optional_date_value as odval,
     save_historical,
     text_value as txt,
 )
@@ -87,10 +88,31 @@ if is_his:
             else:
                 order_service.clear_editable_cases_cache(); folder_service.sync_case_folder(case_id); history_service.add_history(case_id,'과거 수출 건 전체 수정',f'{len(edited)}행'); st.success('저장했습니다.'); st.rerun()
 else:
-    st.markdown('### 현재 진행 건 수정')
-    a=st.columns(4); country=a[0].text_input('국가 *',value=case['country']); buyer=a[1].text_input('바이어',value=case['buyer'] or ''); ti=TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in TRANSPORT_MODES else 0; transport=a[2].selectbox('운송방식',TRANSPORT_MODES,index=ti); note=a[3].text_input('비고',value=case['note'] or '')
+    st.markdown('### 주문 수정')
+    a=st.columns(4)
+    country=a[0].text_input('국가 *',value=case['country'])
+    buyer=a[1].text_input('바이어',value=case['buyer'] or '')
+    ti=TRANSPORT_MODES.index(case['transport_mode']) if case['transport_mode'] in TRANSPORT_MODES else 0
+    transport=a[2].selectbox('운송방식',TRANSPORT_MODES,index=ti)
+    note=a[3].text_input('비고',value=case['note'] or '')
+    date_row=st.columns(4)
+    actual_ship_date=date_row[0].date_input(
+        '출고일자',
+        value=odval(detail['actual_ship_date']),
+        key=f'current_ship_date_{case_id}',
+    )
     if st.button('기본 정보 저장'):
-        export_service.update_basic(case_id,country,buyer,transport,note); order_service.clear_editable_cases_cache(); folder_service.sync_case_folder(case_id); st.rerun()
+        export_service.update_basic(
+            case_id,
+            country,
+            buyer,
+            transport,
+            note,
+            actual_ship_date=str(actual_ship_date) if actual_ship_date else '',
+        )
+        order_service.clear_editable_cases_cache()
+        folder_service.sync_case_folder(case_id)
+        st.rerun()
     existing=order_service.get_order_items_dataframe(case_id)
     if existing.empty: existing=pd.DataFrame([{'_id':None,'제품명':'','수량':0.0,'단위':'EA','매입가':0.0}])
     edited=order_editor(existing,key=f'orders_{case_id}')
