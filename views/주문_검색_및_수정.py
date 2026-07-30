@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from components.delivery_method_input import delivery_method_input, is_courier_delivery
 from components.editors import historical_box_editor, historical_order_editor, order_editor
 from config import TRANSPORT_MODES
 from services import export_service, folder_service, history_service, order_service
@@ -70,11 +71,9 @@ if is_his:
     st.markdown('#### CTN 정보'); boxes=historical_box_editor(box_items(case_id),key=f'his_boxes_v2_{case_id}')
     st.markdown('#### 국내배송 정보')
     r=st.columns([1,2]); consignee=r[0].text_input('수하인명',value=detail['consignee_name'] or '',key=f'his_consignee_{case_id}'); address=r[1].text_input('수하인주소',value=detail['consignee_address'] or '',key=f'his_address_{case_id}')
-    method_options=['로젠택배','퀵배송','핸드캐리']
     saved_method=txt(detail['domestic_method'])
-    method_index=method_options.index(saved_method) if saved_method in method_options else 0
-    method=st.radio('배송 방식',method_options,index=method_index,horizontal=True,key=f'his_method_{case_id}')
-    if method=='로젠택배':
+    method=delivery_method_input(saved_method=saved_method,key_prefix=f'his_method_{case_id}')
+    if is_courier_delivery(method):
         tracking=st.text_input('송장번호',value=detail['tracking_no'] or '',key=f'his_tracking_{case_id}'); driver=phone=''
     elif method=='퀵배송':
         q=st.columns(2); driver=q[0].text_input('배송기사 이름',value=detail['driver_name'] or '',key=f'his_driver_{case_id}'); phone=q[1].text_input('배송기사 연락처',value=detail['driver_phone'] or '',key=f'his_phone_{case_id}'); tracking=''
