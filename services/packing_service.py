@@ -12,7 +12,9 @@ LAST_BOX_SETTING_KEY = 'packing_last_box_values'
 
 def list_items(case_id: int):
     return db.rows(
-        '''SELECT s.id, s.business_unit, s.product_name, s.lot_no, s.expiry_date,
+        '''SELECT s.id,
+                  COALESCE(NULLIF(TRIM(s.business_unit),''), NULLIF(TRIM(s.location),''), '') AS business_unit,
+                  s.product_name, s.lot_no, s.expiry_date,
                   s.requested_qty, s.box_no
            FROM shipment_items s
            JOIN order_items o
@@ -26,7 +28,9 @@ def list_items(case_id: int):
 
 def list_packed_rows(case_id: int):
     return db.rows(
-        '''SELECT s.id, s.box_no, s.business_unit, s.product_name, s.lot_no,
+        '''SELECT s.id, s.box_no,
+                  COALESCE(NULLIF(TRIM(s.business_unit),''), NULLIF(TRIM(s.location),''), '') AS business_unit,
+                  s.product_name, s.lot_no,
                   s.expiry_date, s.requested_qty, b.weight_kg, b.length_cm,
                   b.width_cm, b.height_cm
            FROM shipment_items s
@@ -50,7 +54,9 @@ def list_boxes(case_id: int):
 
 def list_box_items(case_id: int, box_no: int):
     return db.rows(
-        '''SELECT s.business_unit, s.product_name, s.lot_no, s.expiry_date, s.requested_qty
+        '''SELECT
+                  COALESCE(NULLIF(TRIM(s.business_unit),''), NULLIF(TRIM(s.location),''), '') AS business_unit,
+                  s.product_name, s.lot_no, s.expiry_date, s.requested_qty
            FROM shipment_items s
            JOIN order_items o
              ON o.id=s.order_item_id
