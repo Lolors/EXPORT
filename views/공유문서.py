@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import os
 import subprocess
-from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
 from services import export_service, folder_service, order_service
 from services.shared_document_view_service import (
+    default_document_period,
     filter_and_sort_cases,
     format_case_option as build_case_option_label,
-    shipment_date,
 )
 
 
@@ -58,41 +57,28 @@ st.markdown(
 
 with st.container():
     st.markdown('<span id="document-case-filter-anchor"></span>', unsafe_allow_html=True)
-    now = datetime.now()
-    years = sorted(
-        {
-            now.year,
-            *{
-                int(shipment_date(case)[:4])
-                for case in cases
-                if shipment_date(case)[:4].isdigit()
-            },
-        },
-        reverse=True,
+    default_start_date, default_end_date = default_document_period()
+    filter_cols = st.columns([3, 3, 4])
+    selected_period = filter_cols[0].date_input(
+        '출고 기간',
+        value=(default_start_date, default_end_date),
+        key='document_case_period',
     )
-    filter_cols = st.columns([1.5, 1.5, 3, 4])
-    year_options: list[str | int] = ['전체'] + years
-    selected_year = filter_cols[0].selectbox(
-        '연도',
-        year_options,
-        index=year_options.index(now.year),
-        key='document_case_year',
-    )
-    month_options: list[str | int] = ['전체'] + list(range(1, 13))
-    selected_month = filter_cols[1].selectbox(
-        '월',
-        month_options,
-        index=month_options.index(now.month),
-        key='document_case_month',
-    )
+    if isinstance(selected_period, (tuple, list)) and len(selected_period) == 2:
+        selected_start_date, selected_end_date = selected_period
+    elif isinstance(selected_period, (tuple, list)) and selected_period:
+        selected_start_date = selected_end_date = selected_period[0]
+    else:
+        selected_start_date = selected_end_date = default_end_date
+
     countries = sorted({str(case['country']).strip() for case in cases if str(case['country']).strip()})
-    selected_country = filter_cols[2].selectbox('국가', ['전체'] + countries, key='document_case_country')
-    product_query = filter_cols[3].text_input('제품명 검색', key='document_case_product_search').strip().casefold()
+    selected_country = filter_cols[1].selectbox('국가', ['전체'] + countries, key='document_case_country')
+    product_query = filter_cols[2].text_input('제품명 검색', key='document_case_product_search').strip().casefold()
 
 filtered_cases = filter_and_sort_cases(
     cases,
-    selected_year=selected_year,
-    selected_month=selected_month,
+    start_date=selected_start_date,
+    end_date=selected_end_date,
     selected_country=selected_country,
     product_query=product_query,
 )
@@ -105,8 +91,8 @@ case_options: list[int | None] = [None, *case_by_id.keys()]
 
 
 case_filter_key = (
-    f"{selected_year}_{selected_month}_{selected_country}_{product_query}_"
-    f"{len(filtered_cases)}"
+    f"{selected_start_date}_{selected_end_date}_"
+    f"{selected_country}_{product_query}_{len(filtered_cases)}"
 )
 selected_case_id = st.selectbox(
     '수출 건 선택',
