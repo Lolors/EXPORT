@@ -34,6 +34,11 @@ def date_value(value):
     return parsed.date() if parsed else date.today()
 
 
+def optional_date_value(value):
+    parsed = parse_date(value)
+    return parsed.date() if parsed else None
+
+
 def historical_items(case_id):
     rows = db.rows('''SELECT o.id _order_id,s.id _shipment_id,COALESCE(s.location,'') 출고처,
         o.product_name 제품명,COALESCE(s.lot_no,'') 제조번호,COALESCE(s.expiry_date,'') 유효기간,
