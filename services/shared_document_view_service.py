@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from calendar import monthrange
+from datetime import date
 
 from utils.formatters import fmt_number
 
@@ -61,23 +63,34 @@ def shipment_date(case) -> str:
     return str(case['actual_ship_date'] or '').strip()
 
 
+def default_document_period(reference: date | None = None) -> tuple[date, date]:
+    end_date = reference or date.today()
+    previous_month = end_date.month - 1
+    previous_year = end_date.year
+    if previous_month == 0:
+        previous_year -= 1
+        previous_month = 12
+    start_day = min(end_date.day, monthrange(previous_year, previous_month)[1])
+    return date(previous_year, previous_month, start_day), end_date
+
+
 def filter_and_sort_cases(
     cases,
     *,
-    selected_year,
-    selected_month,
+    start_date: date,
+    end_date: date,
     selected_country: str,
     product_query: str,
 ):
     filtered = []
     for case in cases:
         raw_date = shipment_date(case)
-        case_year = int(raw_date[:4]) if raw_date[:4].isdigit() else None
-        case_month = int(raw_date[5:7]) if len(raw_date) >= 7 and raw_date[5:7].isdigit() else None
         if raw_date:
-            if selected_year != '전체' and case_year != selected_year:
-                continue
-            if selected_month != '전체' and case_month != selected_month:
+            try:
+                case_date = date.fromisoformat(raw_date[:10])
+            except ValueError:
+                case_date = None
+            if case_date is not None and not start_date <= case_date <= end_date:
                 continue
         if selected_country != '전체' and str(case['country']).strip() != selected_country:
             continue
