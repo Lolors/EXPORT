@@ -289,39 +289,92 @@ def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
     if order is None:
         raise ValueError('현재 수출 건의 주문품목을 찾을 수 없습니다.')
 
-    values = []
+    existing_rows = db.rows(
+        '''SELECT id, requested_qty, box_no
+           FROM shipment_items
+           WHERE case_id=? AND order_item_id=?
+           ORDER BY id''',
+        (case_id, order_item_id),
+    )
+    existing_by_id = {int(row['id']): row for row in existing_rows}
+    retained_ids: set[int] = set()
+    new_values = []
     now = now_text()
     total = 0.0
+    packing_structure_changed = False
+
     for item in rows:
         product_name = str(item.get('product_name', '') or '').strip()
         quantity = float(item.get('requested_qty', 0) or 0)
         if not product_name:
             raise ValueError('입력된 행에는 실제 제품명이 필요합니다.')
+
+        raw_id = item.get('_id')
+        shipment_id = None
+        if raw_id not in (None, '', 0):
+            try:
+                candidate_id = int(raw_id)
+            except (TypeError, ValueError):
+                candidate_id = 0
+            if candidate_id in existing_by_id:
+                shipment_id = candidate_id
+
         total += quantity
-        values.append((
-            case_id,
-            order_item_id,
+        fields = (
             str(item.get('business_unit', '') or '').strip(),
-            '',
             product_name,
             str(item.get('lot_no', '') or '').strip(),
             str(item.get('expiry_date', '') or '').strip(),
             quantity,
-            None,
-            now,
-            now,
-        ))
+        )
 
-    db.execute('DELETE FROM shipment_items WHERE case_id=? AND order_item_id=?', (case_id, order_item_id))
-    if values:
+        if shipment_id is not None:
+            retained_ids.add(shipment_id)
+            previous = existing_by_id[shipment_id]
+            if abs(float(previous['requested_qty'] or 0) - quantity) > 0.000001:
+                packing_structure_changed = True
+            db.execute(
+                '''UPDATE shipment_items
+                   SET business_unit=?, product_name=?, lot_no=?, expiry_date=?,
+                       requested_qty=?, updated_at=?
+                   WHERE id=? AND case_id=? AND order_item_id=?''',
+                (*fields, now, shipment_id, case_id, order_item_id),
+            )
+        else:
+            packing_structure_changed = True
+            new_values.append((
+                case_id,
+                order_item_id,
+                fields[0],
+                '',
+                fields[1],
+                fields[2],
+                fields[3],
+                fields[4],
+                None,
+                now,
+                now,
+            ))
+
+    deleted_ids = [shipment_id for shipment_id in existing_by_id if shipment_id not in retained_ids]
+    if deleted_ids:
+        packing_structure_changed = True
+        db.executemany(
+            'DELETE FROM shipment_items WHERE id=? AND case_id=? AND order_item_id=?',
+            [(shipment_id, case_id, order_item_id) for shipment_id in deleted_ids],
+        )
+
+    if new_values:
         db.executemany(
             '''INSERT INTO shipment_items(
                    case_id, order_item_id, business_unit, location, product_name,
                    lot_no, expiry_date, requested_qty, box_no, created_at, updated_at
                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-            values,
+            new_values,
         )
-    _reopen_delivered_case(case_id, now)
+
+    if packing_structure_changed:
+        _reopen_delivered_case(case_id, now)
     db.execute(
         '''DELETE FROM boxes
            WHERE case_id=?
@@ -333,7 +386,6 @@ def save_for_order(case_id: int, order_item_id: int, rows: list[dict]) -> float:
     )
     sync_case_stage(case_id, now)
     return total
-
 
 def total_linked_quantity(case_id: int) -> float:
     return sum(float(row['requested_qty'] or 0) for row in list_case_items(case_id))
