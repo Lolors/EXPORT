@@ -69,15 +69,38 @@ def render_packed_details(case_id: int) -> None:
     )
 
 
+def delivery_information_complete(case) -> bool:
+    method = str(case['domestic_method'] or '').strip()
+    if not method or not str(case['actual_ship_date'] or '').strip():
+        return False
+    if not str(case['consignee_name'] or '').strip() or not str(case['consignee_address'] or '').strip():
+        return False
+    if method == '로젠택배':
+        return bool(str(case['tracking_no'] or '').strip())
+    if method == '퀵배송':
+        return bool(str(case['driver_name'] or '').strip() and str(case['driver_phone'] or '').strip())
+    return method == '핸드캐리'
+
+
+def save_delivery_information(case_id: int, payload: dict[str, str]) -> None:
+    delivery_service.save_delivery(case_id, **payload)
+    folder = folder_service.sync_case_folder(case_id)
+    history_service.add(
+        case_id,
+        '국내배송 완료',
+        f"{payload['method']} / {payload['consignee_name']} / {folder}",
+    )
+
+
 st.title('국내배송')
 st.caption('국내배송 방식, 수하인 정보와 송장 또는 배송기사 정보를 입력합니다.')
 
 cases = [
     case for case in export_service.active_cases()
-    if str(case['stage'] or '').strip() == '패킹 완료'
+    if str(case['stage'] or '').strip() in {'패킹 완료', '국내배송'}
 ]
 if not cases:
-    st.info('패킹 완료된 수출 건이 없습니다.')
+    st.info('패킹 완료 또는 국내배송 단계의 수출 건이 없습니다.')
     st.stop()
 
 case_id = select_export_case(
@@ -87,6 +110,7 @@ case_id = select_export_case(
     show_stage=False,
 )
 case = export_service.get_case(case_id)
+pending_key = f'pending_delivery_overwrite_{case_id}'
 
 render_packed_details(case_id)
 st.divider()
@@ -114,17 +138,32 @@ with st.form(f'delivery_{case_id}_{method}'):
     submitted = st.form_submit_button('배송정보 저장 및 완료 처리', type='primary')
 
 if submitted:
-    delivery_service.save_delivery(
-        case_id,
-        method=method,
-        actual_ship_date=str(actual_date),
-        tracking_no=tracking,
-        driver_name=driver,
-        driver_phone=phone,
-        consignee_name=consignee_name,
-        consignee_address=consignee_address,
-    )
-    folder = folder_service.sync_case_folder(case_id)
-    history_service.add(case_id, '국내배송 완료', f'{method} / {consignee_name} / {folder}')
-    st.success('저장했습니다.')
-    st.rerun()
+    payload = {
+        'method': method,
+        'actual_ship_date': str(actual_date),
+        'tracking_no': tracking,
+        'driver_name': driver,
+        'driver_phone': phone,
+        'consignee_name': consignee_name,
+        'consignee_address': consignee_address,
+    }
+    if delivery_information_complete(case):
+        st.session_state[pending_key] = payload
+        st.rerun()
+    else:
+        save_delivery_information(case_id, payload)
+        st.success('저장했습니다.')
+        st.rerun()
+
+pending_payload = st.session_state.get(pending_key)
+if pending_payload:
+    st.warning('이미 국내배송 정보가 모두 입력되어 있습니다. 기존 정보를 덮어쓰시겠습니까?')
+    confirm_col, cancel_col = st.columns(2)
+    if confirm_col.button('덮어쓰기', type='primary', use_container_width=True, key=f'confirm_{pending_key}'):
+        save_delivery_information(case_id, pending_payload)
+        st.session_state.pop(pending_key, None)
+        st.success('기존 국내배송 정보를 수정했습니다.')
+        st.rerun()
+    if cancel_col.button('취소', use_container_width=True, key=f'cancel_{pending_key}'):
+        st.session_state.pop(pending_key, None)
+        st.rerun()
