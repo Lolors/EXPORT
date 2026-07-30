@@ -226,7 +226,7 @@ if is_historical:
     consignee_address = receiver_cols[1].text_input('수하인주소', key='historical_consignee_address')
     delivery_method = st.radio(
         '배송 방식',
-        ['로젠택배', '퀵배송'],
+        ['로젠택배', '퀵배송', '핸드캐리'],
         horizontal=True,
         key='historical_delivery_method',
     )
@@ -234,11 +234,15 @@ if is_historical:
         tracking_no = st.text_input('송장번호', key='historical_tracking_no')
         driver_name = ''
         driver_phone = ''
-    else:
+    elif delivery_method == '퀵배송':
         delivery_cols = st.columns(2)
         driver_name = delivery_cols[0].text_input('배송기사 이름', key='historical_driver_name')
         driver_phone = delivery_cols[1].text_input('배송기사 연락처', key='historical_driver_phone')
         tracking_no = ''
+    else:
+        tracking_no = ''
+        driver_name = ''
+        driver_phone = ''
 else:
     historical_boxes = pd.DataFrame()
     delivery_method = ''
