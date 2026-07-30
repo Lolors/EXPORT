@@ -144,5 +144,5 @@ def save_historical(case_id, edited, boxes, basic, delivery):
             [(case_id, *box, now) for box in clean_boxes],
         )
         connection.execute('''UPDATE export_cases SET country=?,buyer=?,transport_mode=?,note=?,actual_ship_date=?,domestic_method=?,
-            tracking_no=?,driver_name=?,driver_phone=?,consignee_name=?,consignee_address=?,stage='완료',status='완료',updated_at=? WHERE id=?''',
+            tracking_no=?,driver_name=?,driver_phone=?,consignee_name=?,consignee_address=?,stage='국내배송',status='완료',updated_at=? WHERE id=?''',
             (*basic, *delivery, now, case_id))
