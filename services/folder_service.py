@@ -26,26 +26,80 @@ LEGACY_CATEGORY_FOLDERS = {
     '기타': '04_기타',
 }
 
+_WINDOWS_HIDDEN_ATTRIBUTE = 0x02
+_WINDOWS_READONLY_ATTRIBUTE = 0x01
+_WINDOWS_INVALID_ATTRIBUTES = 0xFFFFFFFF
 
-def set_hidden(path: Path) -> bool:
-    """Apply the Windows Hidden attribute while preserving other attributes."""
+
+def _get_windows_attributes(path: Path) -> int | None:
+    if os.name != 'nt' or not path.exists():
+        return None
+    try:
+        import ctypes
+
+        attributes = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+        if attributes == _WINDOWS_INVALID_ATTRIBUTES:
+            return None
+        return int(attributes)
+    except (AttributeError, OSError):
+        return None
+
+
+def _set_windows_attributes(path: Path, attributes: int) -> bool:
     if os.name != 'nt' or not path.exists():
         return False
     try:
         import ctypes
 
-        get_attributes = ctypes.windll.kernel32.GetFileAttributesW
-        set_attributes = ctypes.windll.kernel32.SetFileAttributesW
-        attributes = get_attributes(str(path))
-        invalid_attributes = 0xFFFFFFFF
-        hidden_attribute = 0x02
-        if attributes == invalid_attributes:
-            return False
-        if attributes & hidden_attribute:
-            return True
-        return bool(set_attributes(str(path), attributes | hidden_attribute))
+        return bool(ctypes.windll.kernel32.SetFileAttributesW(str(path), attributes))
     except (AttributeError, OSError):
         return False
+
+
+def set_hidden(path: Path) -> bool:
+    """Apply the Windows Hidden attribute while preserving other attributes."""
+    attributes = _get_windows_attributes(path)
+    if attributes is None:
+        return False
+    if attributes & _WINDOWS_HIDDEN_ATTRIBUTE:
+        return True
+    return _set_windows_attributes(path, attributes | _WINDOWS_HIDDEN_ATTRIBUTE)
+
+
+def _prepare_hidden_file_for_update(path: Path) -> int | None:
+    """Temporarily clear Hidden/Read-only so an existing marker can be replaced."""
+    attributes = _get_windows_attributes(path)
+    if attributes is None:
+        return None
+    writable_attributes = attributes & ~(_WINDOWS_HIDDEN_ATTRIBUTE | _WINDOWS_READONLY_ATTRIBUTE)
+    if writable_attributes != attributes:
+        _set_windows_attributes(path, writable_attributes)
+    return attributes
+
+
+def _write_hidden_text(path: Path, content: str, *, encoding: str = 'utf-8') -> None:
+    """Atomically replace a Windows hidden file, then reapply the Hidden attribute."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f'{path.name}.tmp')
+    previous_attributes = _prepare_hidden_file_for_update(path) if path.exists() else None
+
+    try:
+        if temporary.exists():
+            _prepare_hidden_file_for_update(temporary)
+            temporary.unlink()
+        temporary.write_text(content, encoding=encoding)
+        os.replace(temporary, path)
+        set_hidden(path)
+    except Exception:
+        if temporary.exists():
+            try:
+                _prepare_hidden_file_for_update(temporary)
+                temporary.unlink()
+            except OSError:
+                pass
+        if path.exists() and previous_attributes is not None:
+            _set_windows_attributes(path, previous_attributes)
+        raise
 
 
 def visible_items(folder: Path) -> list[Path]:
@@ -228,7 +282,8 @@ def resolve_database_path(path_text: str) -> Path | None:
 
 def write_case_marker(folder: Path, case) -> Path:
     marker = folder / CASE_MARKER_NAME
-    marker.write_text(
+    _write_hidden_text(
+        marker,
         json.dumps(
             {'case_id': int(case['id']), 'export_no': str(case['export_no'])},
             ensure_ascii=False,
@@ -236,7 +291,6 @@ def write_case_marker(folder: Path, case) -> Path:
         ),
         encoding='utf-8',
     )
-    set_hidden(marker)
     return marker
 
 
