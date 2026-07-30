@@ -12,6 +12,7 @@ from services import (
     order_save_guard,
     order_service,
     shipment_service,
+    wms_import_service,
 )
 from utils.formatters import fmt_number
 
@@ -170,6 +171,65 @@ case_id = select_export_case(
 )
 
 st.session_state['actual_packing_case_id'] = case_id
+
+with st.expander('WMS 수출대기 불러오기', expanded=False):
+    wms_path = st.text_input(
+        'NOHTUS WMS DB 경로',
+        value=wms_import_service.configured_db_path(),
+        placeholder=r'예: C:\\NOHTUS-WMS\\data\\wms.db',
+        key='wms_db_path_input',
+    )
+    if st.button('WMS 연결 경로 저장', use_container_width=True, key=f'save_wms_path_{case_id}'):
+        try:
+            wms_import_service.save_db_path(wms_path)
+            st.success('WMS DB에 연결했습니다.')
+            st.rerun()
+        except Exception as exc:
+            st.error(str(exc))
+
+    if st.button('같은 수출번호의 수출대기 조회', type='secondary', use_container_width=True, key=f'preview_wms_{case_id}'):
+        try:
+            st.session_state[f'wms_preview_{case_id}'] = wms_import_service.preview(case_id)
+        except Exception as exc:
+            st.error(str(exc))
+
+    wms_preview = st.session_state.get(f'wms_preview_{case_id}')
+    if wms_preview:
+        preview_rows = pd.DataFrame(wms_preview['rows'])
+        if preview_rows.empty:
+            st.info('WMS에 같은 수출번호로 등록된 수출대기 품목이 없습니다.')
+        else:
+            st.dataframe(
+                preview_rows.drop(columns=['_order_item_id'], errors='ignore'),
+                hide_index=True,
+                use_container_width=True,
+            )
+            unmatched_count = int((preview_rows['매칭상태'] != '일치').sum())
+            if wms_preview['differences']:
+                st.warning('주문수량과 WMS 수출대기 수량이 다른 제품이 있습니다.')
+                st.dataframe(pd.DataFrame(wms_preview['differences']), hide_index=True, use_container_width=True)
+            if unmatched_count:
+                st.error(f'주문제품과 자동 매칭되지 않은 WMS 품목이 {unmatched_count}개 있습니다. 제품명을 확인하세요.')
+            if st.button(
+                'WMS 수출대기 내용 전체 불러오기',
+                type='primary',
+                use_container_width=True,
+                disabled=bool(unmatched_count),
+                key=f'apply_wms_{case_id}',
+            ):
+                try:
+                    imported = wms_import_service.apply(case_id)
+                    folder_service.sync_case_folder(case_id)
+                    history_service.add(
+                        case_id,
+                        'WMS 수출대기 불러오기',
+                        f"{imported['row_count']}개 재고행 / {imported['order_count']}개 주문품목",
+                    )
+                    st.session_state.pop(f'wms_preview_{case_id}', None)
+                    st.session_state['shipment_intake_success_message'] = 'WMS의 제조번호·유통기한·수량을 불러왔습니다.'
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
 
 shipment_service.cleanup_invalid_links(case_id)
 orders = order_service.list_for_case(case_id)
