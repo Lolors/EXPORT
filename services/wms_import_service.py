@@ -104,7 +104,7 @@ def preview(case_id: int) -> dict:
                 "WMS 수출대기": imported,
                 "차이": imported - ordered,
             })
-    return {"rows": rows, "matched_by_order": matched_by_order, "differences": differences}
+    return {"rows": rows, "matched_by_order": matched_by_order, "differences": differences, "order_ids": [int(order["id"]) for order in orders]}
 
 
 @db.backup_batch
@@ -113,7 +113,8 @@ def apply(case_id: int) -> dict:
     unmatched = [row for row in result["rows"] if row["매칭상태"] != "일치"]
     if unmatched:
         raise ValueError("주문과 자동 매칭되지 않은 WMS 품목이 있어 불러올 수 없습니다.")
-    for order_item_id, rows in result["matched_by_order"].items():
+    for order_item_id in result["order_ids"]:
+        rows = result["matched_by_order"].get(order_item_id, [])
         shipment_service.save_for_order(int(case_id), int(order_item_id), rows)
     db.execute("UPDATE export_cases SET updated_at=? WHERE id=?", (now_text(), int(case_id)))
     return {
