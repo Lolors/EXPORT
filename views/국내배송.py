@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from components.case_selector import select_export_case
+from components.delivery_method_input import delivery_method_input, is_courier_delivery
 from services import delivery_service, export_service, folder_service, history_service, packing_service
 from utils.dates import parse_date
 from utils.formatters import fmt_number
@@ -91,13 +92,10 @@ case = export_service.get_case(case_id)
 render_packed_details(case_id)
 st.divider()
 
-method_options = ['로젠택배', '퀵배송', '핸드캐리']
 saved_method = str(case['domestic_method'] or '').strip()
-method = st.radio(
-    '배송 방식',
-    method_options,
-    index=method_options.index(saved_method) if saved_method in method_options else 0,
-    horizontal=True,
+method = delivery_method_input(
+    saved_method=saved_method,
+    key_prefix=f'delivery_method_{case_id}',
 )
 with st.form(f'delivery_{case_id}_{method}'):
     actual_date = st.date_input('국내배송 일자', value=date_value(case['actual_ship_date']))
@@ -112,7 +110,7 @@ with st.form(f'delivery_{case_id}_{method}'):
         receiver_cols = st.columns([1, 2])
         consignee_name = receiver_cols[0].text_input('수하인명', value=case['consignee_name'] or '')
         consignee_address = receiver_cols[1].text_input('수하인주소', value=case['consignee_address'] or '')
-        tracking = st.text_input('송장번호', value=case['tracking_no'] or '') if method == '로젠택배' else ''
+        tracking = st.text_input('송장번호', value=case['tracking_no'] or '') if is_courier_delivery(method) else ''
         if method == '퀵배송':
             c1, c2 = st.columns(2)
             driver = c1.text_input('배송기사 이름', value=case['driver_name'] or '')
