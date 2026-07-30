@@ -16,19 +16,45 @@ def render_document(case, packed, actual_rows=None) -> None:
         st.warning('패킹 완료된 CTN 정보가 없어 최종문서를 출력할 수 없습니다.')
         return
 
-    if case['domestic_method'] == '로젠택배':
+    domestic_method = str(case['domestic_method'] or '').strip()
+    normalized_domestic_method = domestic_method.replace(' ', '').casefold()
+    is_hand_carry = normalized_domestic_method in {'핸드캐리', 'handcarry'}
+
+    if domestic_method == '로젠택배':
         detail_label = '송장번호'
         detail_value = case['tracking_no'] or '-'
-    elif case['domestic_method'] == '퀵배송':
+    elif domestic_method == '퀵배송':
         detail_label = '배송기사'
         detail_value = ' / '.join(part for part in [case['driver_name'], case['driver_phone']] if part) or '-'
     else:
         detail_label = '배송 상세'
         detail_value = '-'
 
-    note_html = ''
-    if case['note']:
-        note_html = f'<div class="note-box"><b>특이사항</b><div>{html.escape(case["note"])}</div></div>'
+    if is_hand_carry:
+        domestic_delivery_cells = (
+            '<div class="cell"><div class="label">국내배송 방식</div>'
+            f'<div class="value">{html.escape(domestic_method or "-")}</div></div>'
+            '<div class="cell wide"><div class="label">특이사항</div>'
+            f'<div class="value">{html.escape(case["note"] or "-")}</div></div>'
+        )
+        note_html = ''
+    else:
+        domestic_delivery_cells = (
+            '<div class="cell"><div class="label">국내배송 방식</div>'
+            f'<div class="value">{html.escape(domestic_method or "-")}</div></div>'
+            f'<div class="cell"><div class="label">{html.escape(detail_label)}</div>'
+            f'<div class="value">{html.escape(detail_value)}</div></div>'
+            '<div class="cell"><div class="label">수하인명</div>'
+            f'<div class="value">{html.escape(case["consignee_name"] or "-")}</div></div>'
+            '<div class="cell"><div class="label">수하인주소</div>'
+            f'<div class="value">{html.escape(case["consignee_address"] or "-")}</div></div>'
+        )
+        note_html = ''
+        if case['note']:
+            note_html = (
+                f'<div class="note-box"><b>특이사항</b>'
+                f'<div>{html.escape(case["note"])}</div></div>'
+            )
 
     rows_html: list[str] = []
     grouped: dict[int, list] = {}
@@ -76,7 +102,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 .document{{width:198mm;max-width:100%;margin:auto;background:#fff;border:0;border-radius:0;overflow:visible;box-shadow:none}}
 .header{{padding:16px 22px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:16px}} .title{{font-size:20px;font-weight:800}} .sub{{font-size:9px;opacity:.8}} .number{{text-align:right}}
 .body{{padding:12px 8px 10px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 3px}}
-.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:7px}} .cell{{padding:5px 6px;border-right:1px solid #e5eaf0}} .label{{font-size:11px;color:#7c8797}} .value{{font-size:13px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}}
+.grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:7px}} .cell{{padding:5px 6px;border-right:1px solid #e5eaf0}} .cell.wide{{grid-column:span 3;border-right:0}} .label{{font-size:11px;color:#7c8797}} .value{{font-size:13px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}}
 .summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:20px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:5px 7px;background:#f8fafc}} .card b{{font-size:16px;color:#214f76}}
 .wrap{{width:100%;max-width:100%;margin:0 auto;overflow:hidden;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:100%;max-width:100%;min-width:0;table-layout:fixed;font-size:11.67px}} th{{background:#294f71;color:#fff;padding:6px 4px;text-align:center;white-space:nowrap;line-height:1.2}} td{{padding:6px 4px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.2;overflow-wrap:anywhere}} tr{{break-inside:avoid}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700;white-space:nowrap}} .total-row td{{background:#eef3f8;font-weight:700}}
 .note-box{{width:100%;margin:6px auto 0;padding:5px 7px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:8px}}
@@ -89,11 +115,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 <div class="cell"><div class="label">바이어 / Buyer</div><div class="value">{html.escape(case['buyer'] or '-')}</div></div>
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
 <div class="cell"><div class="label">출고일 / Ship Date</div><div class="value">{html.escape(shipment_date(case) or '-')}</div></div></div>
-<div class="section">DOMESTIC DELIVERY</div><div class="grid">
-<div class="cell"><div class="label">국내배송 방식</div><div class="value">{html.escape(case['domestic_method'] or '-')}</div></div>
-<div class="cell"><div class="label">{html.escape(detail_label)}</div><div class="value">{html.escape(detail_value)}</div></div>
-<div class="cell"><div class="label">수하인명</div><div class="value">{html.escape(case['consignee_name'] or '-')}</div></div>
-<div class="cell"><div class="label">수하인주소</div><div class="value">{html.escape(case['consignee_address'] or '-')}</div></div></div>
+<div class="section">DOMESTIC DELIVERY</div><div class="grid">{domestic_delivery_cells}</div>
 <div class="section">PACKING SUMMARY</div><div class="summary"><div class="card"><small>총 CTN 수</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
 <div class="section">PACKING LIST</div><div class="wrap"><table>{table_columns}<thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div>{note_html}</div></div></body></html>'''
     st.markdown(
