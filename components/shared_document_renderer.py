@@ -66,8 +66,8 @@ def render_document(case, packed, actual_rows=None) -> None:
                 float(row['height_cm'] or 0),
             )
     total_weight = sum(metrics[0] for metrics in box_metrics.values())
-    total_volume_cbm = sum(
-        length * width * height / 1_000_000
+    total_volumetric_weight = sum(
+        length * width * height / 5_000
         for _, length, width, height in box_metrics.values()
         if length and width and height
     )
@@ -104,7 +104,7 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
 <div class="cell"><div class="label">출고일 / Ship Date</div><div class="value">{html.escape(shipment_date(case) or '-')}</div></div></div>
 <div class="section"><span class="section-icon"><svg viewBox="0 0 24 24"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>DOMESTIC DELIVERY</div><div class="grid domestic-grid">{domestic_delivery_cells}</div>
-<div class="section"><span class="section-icon"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/></svg></span>PACKING SUMMARY</div><div class="summary"><div class="card"><small>총 CTN 수</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div><div class="card"><small>총 중량</small><br><b>{fmt_number(total_weight)} kg</b></div><div class="card"><small>총 부피</small><br><b>{fmt_number(total_volume_cbm)} CBM</b></div></div>
+<div class="section"><span class="section-icon"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/></svg></span>PACKING SUMMARY</div><div class="summary"><div class="card"><small>총 CTN 수</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div><div class="card"><small>총 중량</small><br><b>{fmt_number(total_weight)} kg</b></div><div class="card"><small>부피중량</small><br><b>{fmt_number(total_volumetric_weight)} kg</b></div></div>
 <div class="section">PACKING LIST</div><div class="wrap"><table>{table_columns}<thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div></div></div></body></html>'''
     st.markdown(
         '''
