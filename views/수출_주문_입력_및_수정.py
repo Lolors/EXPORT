@@ -5,6 +5,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from components.delivery_method_input import delivery_method_input, is_courier_delivery
 from components.editors import historical_box_editor, historical_order_editor, order_editor
 from config import TRANSPORT_MODES
 from services import export_service, folder_service, history_service, order_service
@@ -252,13 +253,10 @@ if is_historical:
     receiver_cols = st.columns([1, 2])
     consignee_name = receiver_cols[0].text_input('수하인명', key=form_widget_key('historical_consignee_name'))
     consignee_address = receiver_cols[1].text_input('수하인주소', key=form_widget_key('historical_consignee_address'))
-    delivery_method = st.radio(
-        '배송 방식',
-        ['로젠택배', '퀵배송', '핸드캐리'],
-        horizontal=True,
-        key=form_widget_key('historical_delivery_method'),
+    delivery_method = delivery_method_input(
+        key_prefix=form_widget_key('historical_delivery_method'),
     )
-    if delivery_method == '로젠택배':
+    if is_courier_delivery(delivery_method):
         tracking_no = st.text_input('송장번호', key=form_widget_key('historical_tracking_no'))
         driver_name = ''
         driver_phone = ''
