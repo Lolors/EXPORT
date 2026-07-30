@@ -40,7 +40,8 @@ def optional_date_value(value):
 
 
 def historical_items(case_id):
-    rows = db.rows('''SELECT o.id _order_id,s.id _shipment_id,COALESCE(s.location,'') 출고처,
+    rows = db.rows('''SELECT o.id _order_id,s.id _shipment_id,
+        COALESCE(NULLIF(TRIM(s.business_unit),''),NULLIF(TRIM(s.location),''),'') 출고처,
         o.product_name 제품명,COALESCE(s.lot_no,'') 제조번호,COALESCE(s.expiry_date,'') 유효기간,
         o.quantity 수량,o.unit 단위,o.purchase_price 매입가,COALESCE(s.box_no,1) "CTN 번호"
         FROM order_items o LEFT JOIN shipment_items s ON s.order_item_id=o.id AND s.case_id=o.case_id
@@ -118,15 +119,20 @@ def save_historical(case_id, edited, boxes, basic, delivery):
                      item['price'], item['qty'], item['unit'], now))
             shipment_id = item['sid']
             if shipment_id in old_shipments:
-                connection.execute('''UPDATE shipment_items SET order_item_id=?,location=?,product_name=?,lot_no=?,expiry_date=?,
-                    requested_qty=?,box_no=?,updated_at=? WHERE id=? AND case_id=?''',
-                    (order_id, item['loc'], item['name'], item['lot'], item['exp'], item['qty'], item['box'], now,
-                     shipment_id, case_id))
+                connection.execute('''UPDATE shipment_items SET order_item_id=?,business_unit=?,location=?,
+                    product_name=?,lot_no=?,expiry_date=?,requested_qty=?,box_no=?,updated_at=?
+                    WHERE id=? AND case_id=?''',
+                    (
+                        order_id, item['loc'], item['loc'], item['name'], item['lot'],
+                        item['exp'], item['qty'], item['box'], now, shipment_id, case_id,
+                    ))
             else:
                 shipment_id = connection.execute('''INSERT INTO shipment_items(case_id,order_item_id,business_unit,location,product_name,
                     lot_no,expiry_date,requested_qty,box_no,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
-                    (case_id, order_id, '', item['loc'], item['name'], item['lot'], item['exp'], item['qty'],
-                     item['box'], now, now)).lastrowid
+                    (
+                        case_id, order_id, item['loc'], item['loc'], item['name'],
+                        item['lot'], item['exp'], item['qty'], item['box'], now, now,
+                    )).lastrowid
             kept_shipments.add(int(shipment_id))
         for shipment_id in set(old_shipments) - kept_shipments:
             connection.execute('DELETE FROM shipment_items WHERE id=?', (shipment_id,))
