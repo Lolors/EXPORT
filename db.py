@@ -187,7 +187,7 @@ def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_completed_cases_to_domestic(conn: sqlite3.Connection) -> int:
-    migration_key = 'migration_completed_to_domestic_20260730'
+    migration_key = 'migration_completed_to_domestic_20260730_v2'
     completed = conn.execute(
         'SELECT 1 FROM settings WHERE key=?',
         (migration_key,),
@@ -212,7 +212,7 @@ def _migrate_completed_cases_to_domestic(conn: sqlite3.Connection) -> int:
         )
         conn.execute(
             """UPDATE export_cases
-               SET stage='국내배송', status='진행중', updated_at=?
+               SET stage='국내배송', status='완료', updated_at=?
                WHERE stage='완료'""",
             (timestamp,),
         )
