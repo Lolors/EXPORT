@@ -61,12 +61,37 @@ def get_order_items_with_actual(case_id: int):
     )
 
 
-def update_basic(case_id: int, country: str, buyer: str, transport: str, note: str) -> None:
+def update_basic(
+    case_id: int,
+    country: str,
+    buyer: str,
+    transport: str,
+    note: str,
+    *,
+    actual_ship_date: str | None = None,
+) -> None:
+    if actual_ship_date is None:
+        db.execute(
+            '''UPDATE export_cases
+               SET country=?,buyer=?,transport_mode=?,note=?,updated_at=?
+               WHERE id=?''',
+            (country.strip(), buyer.strip(), transport, note.strip(), now_text(), case_id),
+        )
+        return
+
     db.execute(
         '''UPDATE export_cases
-           SET country=?,buyer=?,transport_mode=?,note=?,updated_at=?
+           SET country=?,buyer=?,transport_mode=?,note=?,actual_ship_date=?,updated_at=?
            WHERE id=?''',
-        (country.strip(), buyer.strip(), transport, note.strip(), now_text(), case_id),
+        (
+            country.strip(),
+            buyer.strip(),
+            transport,
+            note.strip(),
+            actual_ship_date.strip(),
+            now_text(),
+            case_id,
+        ),
     )
 
 
