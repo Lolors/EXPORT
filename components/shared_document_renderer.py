@@ -55,8 +55,22 @@ def render_document(case, packed, actual_rows=None) -> None:
             rows_html.append('</tr>')
 
     total_qty = sum(float(row['requested_qty'] or 0) for row in packed)
-    box_weights = {int(row['box_no']): float(row['weight_kg'] or 0) for row in packed}
-    total_weight = sum(box_weights.values())
+    box_metrics: dict[int, tuple[float, float, float, float]] = {}
+    for row in packed:
+        box_no = int(row['box_no'])
+        if box_no not in box_metrics:
+            box_metrics[box_no] = (
+                float(row['weight_kg'] or 0),
+                float(row['length_cm'] or 0),
+                float(row['width_cm'] or 0),
+                float(row['height_cm'] or 0),
+            )
+    total_weight = sum(metrics[0] for metrics in box_metrics.values())
+    total_volume_cbm = sum(
+        length * width * height / 1_000_000
+        for _, length, width, height in box_metrics.values()
+        if length and width and height
+    )
     rows_html.append(
         '<tr class="total-row"><td colspan="5" class="right"><b>합계</b></td>'
         f'<td class="right"><b>{fmt_number(total_qty)}</b></td>'
@@ -75,22 +89,22 @@ html,body{{margin:0;padding:0;background:#f4f7fa;color:#172033;font-family:-appl
 .toolbar{{width:198mm;max-width:100%;margin:0 auto 10px;text-align:right}} .print{{border:0;border-radius:8px;background:#173b5f;color:#fff;font-weight:700;padding:10px 18px;cursor:pointer}}
 .document{{width:198mm;max-width:100%;margin:auto;background:#fff;border:0;border-radius:0;overflow:visible;box-shadow:none}}
 .header{{padding:16px 22px;background:linear-gradient(135deg,#173b5f,#245d88);color:#fff;display:flex;justify-content:space-between;gap:16px}} .title{{font-size:20px;font-weight:800}} .sub{{font-size:9px;opacity:.8}} .number{{text-align:right}}
-.body{{padding:12px 8px 10px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 3px}}
+.body{{padding:12px 8px 10px}} .section{{font-size:13px;font-weight:800;color:#294f71;margin:0 0 4px;display:flex;align-items:center;gap:5px}} .section-icon{{width:18px;height:18px;border-radius:5px;background:#e8f1f8;color:#245d88;display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px}} .section-icon svg{{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}}
 .grid{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dce3eb;border-radius:7px;overflow:hidden;margin-bottom:7px}} .domestic-grid{{grid-template-columns:repeat(5,1fr)}} .cell{{padding:5px 6px;border-right:1px solid #e5eaf0}} .grid .cell:last-child{{border-right:0}} .label{{font-size:11px;color:#7c8797}} .value{{font-size:13px;font-weight:700;margin-top:2px;white-space:pre-wrap;word-break:break-word}} .address-value{{font-size:11px}}
-.summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:20px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:5px 7px;background:#f8fafc}} .card b{{font-size:16px;color:#214f76}}
+.summary{{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:20px}} .card{{border:1px solid #dce3eb;border-radius:7px;padding:6px 7px;background:#f8fafc}} .card small{{font-size:9px;color:#7c8797}} .card b{{font-size:15px;color:#214f76;white-space:nowrap}}
 .wrap{{width:100%;max-width:100%;margin:0 auto;overflow:hidden;border:1px solid #d8e0e8;border-radius:7px}} table{{border-collapse:collapse;width:100%;max-width:100%;min-width:0;table-layout:fixed;font-size:11.67px}} th{{background:#294f71;color:#fff;padding:6px 4px;text-align:center;white-space:nowrap;line-height:1.2}} td{{padding:6px 4px;border-right:1px solid #e0e6ed;border-bottom:1px solid #e0e6ed;vertical-align:middle;line-height:1.2;overflow-wrap:anywhere}} tr{{break-inside:avoid}} .center{{text-align:center}} .right{{text-align:right}} .merged{{background:#f5f8fb;font-weight:700;white-space:nowrap}} .total-row td{{background:#eef3f8;font-weight:700}}
 .note-box{{width:100%;margin:6px auto 0;padding:5px 7px;border:1px solid #dce3eb;border-left:4px solid #294f71;border-radius:7px;font-size:8px}}
 @media print{{html,body{{width:210mm;height:297mm;background:#fff;padding:0}} .toolbar{{display:none!important}} .document{{width:198mm;max-width:none;margin:0 auto}} .header,th,.merged,.total-row td{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>
 <div class="toolbar"><button class="print" onclick="window.print()">🖨 출력하기</button></div>
 <div class="document"><div class="header"><div><div class="title">주문 정보 및 패킹 리스트</div><div class="sub">ORDER INFORMATION &amp; PACKING LIST</div></div><div class="number"><small>EXPORT NO.</small><br><b>{html.escape(case['export_no'])}</b></div></div>
-<div class="body"><div class="section">EXPORT INFORMATION</div><div class="grid">
+<div class="body"><div class="section"><span class="section-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></span>EXPORT INFORMATION</div><div class="grid">
 <div class="cell"><div class="label">국가 / Country</div><div class="value">{html.escape(case['country'] or '-')}</div></div>
 <div class="cell"><div class="label">바이어 / Buyer</div><div class="value">{html.escape(case['buyer'] or '-')}</div></div>
 <div class="cell"><div class="label">운송방식 / Transport</div><div class="value">{html.escape(case['transport_mode'] or '-')}</div></div>
 <div class="cell"><div class="label">출고일 / Ship Date</div><div class="value">{html.escape(shipment_date(case) or '-')}</div></div></div>
-<div class="section">DOMESTIC DELIVERY</div><div class="grid domestic-grid">{domestic_delivery_cells}</div>
-<div class="section">PACKING SUMMARY</div><div class="summary"><div class="card"><small>총 CTN 수</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div></div>
+<div class="section"><span class="section-icon"><svg viewBox="0 0 24 24"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>DOMESTIC DELIVERY</div><div class="grid domestic-grid">{domestic_delivery_cells}</div>
+<div class="section"><span class="section-icon"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/></svg></span>PACKING SUMMARY</div><div class="summary"><div class="card"><small>총 CTN 수</small><br><b>{first_summary}</b></div><div class="card"><small>품목 수</small><br><b>{item_count} 품목</b></div><div class="card"><small>출고 수량</small><br><b>{fmt_number(total_qty)}</b></div><div class="card"><small>총 중량</small><br><b>{fmt_number(total_weight)} kg</b></div><div class="card"><small>총 부피</small><br><b>{fmt_number(total_volume_cbm)} CBM</b></div></div>
 <div class="section">PACKING LIST</div><div class="wrap"><table>{table_columns}<thead>{table_header}</thead><tbody>{''.join(rows_html)}</tbody></table></div></div></div></body></html>'''
     st.markdown(
         '''
