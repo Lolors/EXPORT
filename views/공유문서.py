@@ -117,26 +117,36 @@ if previous_case_id != case_id:
     st.session_state.pop('shared_document_view', None)
 case = export_service.get_case(case_id)
 
-action_cols = st.columns(5)
-open_folder = action_cols[0].button('📂 폴더 열기', use_container_width=True)
-open_workbook = action_cols[1].button('📄 수출진행내역', use_container_width=True)
-open_photos = action_cols[2].button('🖼 출고제품사진', use_container_width=True)
-open_ci = action_cols[3].button('📑 CI', use_container_width=True)
-open_shipping_mark = action_cols[4].button('🚢 Shipping Mark', use_container_width=True)
+is_final_document_available = str(case['stage'] or '').strip() in {
+    '패킹 대기',
+    '패킹 완료',
+    '국내배송',
+}
+action_cols = st.columns(3)
+open_folder = action_cols[0].button(
+    '📂 폴더 열기',
+    use_container_width=True,
+)
+open_final_document = action_cols[1].button(
+    '최종문서 출력하기',
+    type='primary',
+    use_container_width=True,
+    disabled=not is_final_document_available,
+    help=(
+        None
+        if is_final_document_available
+        else '패킹 대기, 패킹 완료 또는 국내배송 단계에서 최종문서를 출력할 수 있습니다.'
+    ),
+)
+open_shipment_products = action_cols[2].button(
+    '출고 예정 제품 리스트',
+    use_container_width=True,
+)
 
-if any([open_folder, open_workbook, open_photos, open_ci, open_shipping_mark]):
+if open_folder:
     try:
         case_folder = folder_service.ensure_case_folder(case_id)
-        if open_folder:
-            open_selected_path(case_folder, '수출 폴더')
-        elif open_workbook:
-            open_selected_path(case_folder / '수출진행내역.xlsx', '수출진행내역')
-        elif open_photos:
-            open_selected_path(folder_service.category_folder(case_id, '출고사진'), '출고제품사진 폴더')
-        elif open_ci:
-            open_selected_path(folder_service.category_folder(case_id, 'CI'), 'CI 폴더')
-        elif open_shipping_mark:
-            open_selected_path(folder_service.category_folder(case_id, 'Shipping Mark'), 'Shipping Mark 폴더')
+        open_selected_path(case_folder, '수출 폴더')
     except Exception as exc:
         st.warning(f'수출 폴더를 준비하지 못했습니다: {exc}')
 else:
@@ -144,17 +154,9 @@ else:
     if stored_folder_path:
         st.caption(stored_folder_path)
 
-is_final_document_available = str(case['stage'] or '').strip() in {'패킹 대기', '패킹 완료', '국내배송'}
-output_cols = st.columns(2)
-if output_cols[0].button(
-    '최종문서 출력하기',
-    type='primary',
-    use_container_width=True,
-    disabled=not is_final_document_available,
-    help=None if is_final_document_available else '패킹 대기, 패킹 완료 또는 국내배송 단계에서 최종문서를 출력할 수 있습니다.',
-):
+if open_final_document:
     st.session_state['shared_document_view'] = 'final'
-if output_cols[1].button('출고 예정 제품 리스트', use_container_width=True):
+if open_shipment_products:
     st.session_state['shared_document_view'] = 'shipment_products'
 
 if not is_final_document_available and st.session_state.get('shared_document_view') == 'final':
