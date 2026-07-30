@@ -14,7 +14,6 @@ from utils.numbering import next_export_no
 HISTORICAL_ORDER_EDITOR_KEY = 'historical_order_items_table_v2'
 
 FORM_KEYS = {
-    'new_case_type',
     'historical_export_date',
     'new_export_no',
     'new_country',
