@@ -153,7 +153,12 @@ def cleanup_invalid_links(case_id: int) -> int:
 def list_case_items(case_id: int):
     """Canonical read-only shipment rows used by intake, packing, and documents."""
     return db.rows(
-        '''SELECT s.id, s.case_id, s.order_item_id, s.business_unit,
+        '''SELECT s.id, s.case_id, s.order_item_id,
+                  COALESCE(
+                      NULLIF(TRIM(s.business_unit), ''),
+                      NULLIF(TRIM(s.location), ''),
+                      ''
+                  ) AS business_unit,
                   s.product_name, s.lot_no, s.expiry_date,
                   s.requested_qty, s.box_no, o.unit
            FROM shipment_items s
