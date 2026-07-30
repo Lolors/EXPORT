@@ -85,6 +85,10 @@ def reset_new_case_form() -> None:
             st.session_state.pop(key, None)
 
 
+if st.session_state.pop('reset_new_case_form_pending', False):
+    reset_new_case_form()
+
+
 def render_similar_price_lookup(*, key: str) -> None:
     st.markdown('#### 유사 제품 매입가 조회')
     query = st.text_input(
@@ -356,5 +360,5 @@ if create_case:
         history_service.add_history(case_id, '수출 건 생성', history_detail)
         st.session_state['order_case_id'] = case_id
         st.session_state['new_case_success_message'] = f'{export_no} 생성 완료'
-        reset_new_case_form()
+        st.session_state['reset_new_case_form_pending'] = True
         st.rerun()
