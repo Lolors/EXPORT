@@ -335,7 +335,7 @@ if create_case:
         export_no = next_export_no(prefix, number_year)
         case_type = 'historical' if is_historical else 'current'
         actual_ship_date = str(historical_date) if historical_date else ''
-        stage = '완료' if is_historical else '주문 접수'
+        stage = '국내배송' if is_historical else '주문 접수'
         status = '완료' if is_historical else '진행중'
         case_id = export_service.create_case(
             export_no=export_no,
