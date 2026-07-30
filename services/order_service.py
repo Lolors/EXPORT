@@ -151,7 +151,10 @@ def create_historical_case_details(
                    case_id,order_item_id,business_unit,location,product_name,
                    lot_no,expiry_date,requested_qty,box_no,created_at,updated_at
                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-            (case_id, order_id, '', ship_from, product_name, lot_no, expiry_date, quantity, box_no, now, now),
+            (
+                case_id, order_id, ship_from, ship_from, product_name,
+                lot_no, expiry_date, quantity, box_no, now, now,
+            ),
         )
 
     for box_no, length, width, height, weight in boxes:
