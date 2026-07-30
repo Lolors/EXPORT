@@ -328,6 +328,7 @@ with right:
         if current:
             source = pd.DataFrame([
                 {
+                    '_id': int(row['id']),
                     '사업장': row['business_unit'] or '',
                     '실제 제품명': row['product_name'] or '',
                     '제조번호': row['lot_no'] or '',
@@ -338,6 +339,7 @@ with right:
             ])
         else:
             source = pd.DataFrame([{
+                '_id': None,
                 '사업장': '',
                 '실제 제품명': '',
                 '제조번호': '',
@@ -345,7 +347,7 @@ with right:
                 '출고수량': 0.0,
             }])
 
-        edited = shipment_editor(source, key=f'linked_order_editor_{case_id}_{selected_order_id}')
+        edited = shipment_editor(source, key=f'linked_order_editor_v2_{case_id}_{selected_order_id}')
         preview_qty = sum(safe_number(value) for value in edited.get('출고수량', []))
         preview_icon, preview_state = order_state(order_qty, preview_qty)
         st.info(
@@ -354,10 +356,10 @@ with right:
         )
         packing_impact = shipment_service.packing_impact_for_order(case_id, selected_order_id)
         if packing_impact['packed_row_count']:
-            st.warning(
-                f"저장하면 이 주문품목의 패킹된 {packing_impact['packed_row_count']}개 행이 "
-                f"{packing_impact['affected_box_count']}개 CTN에서 빠져 미패킹 상태로 돌아갑니다. "
-                '다른 주문품목의 CTN 배치는 유지되고, 빈 CTN만 삭제됩니다.'
+            st.caption(
+                f"패킹된 {packing_impact['packed_row_count']}개 행의 기존 CTN 번호는 "
+                '제품명·사업장·제조번호·유통기한을 수정해도 그대로 유지됩니다. '
+                '새로 추가한 행만 미패킹 상태로 생성됩니다.'
             )
 
         if st.button(
@@ -377,6 +379,7 @@ with right:
                 if not has_any_value:
                     continue
                 values.append({
+                    '_id': row.get('_id'),
                     'business_unit': row.get('사업장', ''),
                     'product_name': actual_name,
                     'lot_no': row.get('제조번호', ''),
