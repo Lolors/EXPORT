@@ -186,9 +186,48 @@ def _remove_expected_ship_date_column(conn: sqlite3.Connection) -> None:
     ''')
 
 
+def _migrate_completed_cases_to_domestic(conn: sqlite3.Connection) -> int:
+    migration_key = 'migration_completed_to_domestic_20260730'
+    completed = conn.execute(
+        'SELECT 1 FROM settings WHERE key=?',
+        (migration_key,),
+    ).fetchone()
+    if completed:
+        return 0
+
+    timestamp = now_text()
+    target_ids = [
+        int(row['id'])
+        for row in conn.execute(
+            "SELECT id FROM export_cases WHERE stage='완료'"
+        ).fetchall()
+    ]
+    if target_ids:
+        conn.execute(
+            """INSERT INTO history(case_id,action,detail,created_at)
+               SELECT id, '단계 일괄 변경', '완료 → 국내배송', ?
+               FROM export_cases
+               WHERE stage='완료'""",
+            (timestamp,),
+        )
+        conn.execute(
+            """UPDATE export_cases
+               SET stage='국내배송', status='진행중', updated_at=?
+               WHERE stage='완료'""",
+            (timestamp,),
+        )
+
+    conn.execute(
+        '''INSERT INTO settings(key,value,updated_at) VALUES (?,?,?)''',
+        (migration_key, str(len(target_ids)), timestamp),
+    )
+    return len(target_ids)
+
+
 @lru_cache(maxsize=1)
 def init_db() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    migrated_completed_case_count = 0
 
     with connect() as conn:
         conn.executescript('''
@@ -319,6 +358,10 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_history_case_id
             ON history(case_id);
         ''')
+        migrated_completed_case_count = _migrate_completed_cases_to_domestic(conn)
+
+    if migrated_completed_case_count:
+        backup_to_usb()
 
 
 def rows(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
