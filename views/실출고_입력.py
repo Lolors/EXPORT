@@ -172,12 +172,6 @@ case_id = select_export_case(
 st.session_state['actual_packing_case_id'] = case_id
 
 shipment_service.cleanup_invalid_links(case_id)
-selected_case = next(case for case in cases if int(case['id']) == case_id)
-if str(selected_case['stage'] or '').strip() == '국내배송':
-    st.warning(
-        '국내배송 완료 건입니다. 주문 또는 입고제품을 변경하면 완료 상태가 해제되고, '
-        '변경된 제품은 CTN에서 빠져 다시 패킹해야 합니다. 국내배송 입력값은 보존됩니다.'
-    )
 orders = order_service.list_for_case(case_id)
 all_linked_rows = shipment_service.list_case_items(case_id)
 linked_rows_by_order: dict[int, list] = {}
