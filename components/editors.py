@@ -94,4 +94,7 @@ def shipment_editor(dataframe, *, key: str):
         hide_index=True,
         use_container_width=True,
         key=key,
+        column_config={
+            '_id': None,
+        },
     )
