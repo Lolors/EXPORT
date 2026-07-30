@@ -12,6 +12,7 @@ from utils.numbering import next_export_no
 
 
 HISTORICAL_ORDER_EDITOR_KEY = 'historical_order_items_table_v2'
+FORM_VERSION_KEY = 'new_case_form_version'
 
 FORM_KEYS = {
     'historical_export_date',
@@ -78,15 +79,26 @@ def reset_new_case_form() -> None:
     for key in list(st.session_state):
         if (
             key in FORM_KEYS
+            or any(key.startswith(f'{base_key}_') for base_key in FORM_KEYS)
             or key.startswith('new_order_items')
             or key.startswith('historical_box_items')
             or key.startswith('historical_order_')
         ):
             st.session_state.pop(key, None)
+    st.session_state[FORM_VERSION_KEY] = (
+        int(st.session_state.get(FORM_VERSION_KEY, 0)) + 1
+    )
 
 
 if st.session_state.pop('reset_new_case_form_pending', False):
     reset_new_case_form()
+
+
+form_version = int(st.session_state.get(FORM_VERSION_KEY, 0))
+
+
+def form_widget_key(base_key: str) -> str:
+    return f'{base_key}_{form_version}'
 
 
 def render_similar_price_lookup(*, key: str) -> None:
@@ -188,7 +200,7 @@ if is_historical:
         '과거 수출일',
         value=date.today(),
         help='수출번호의 연도와 폴더 연도를 결정하며, 국내배송 완료일로 저장됩니다.',
-        key='historical_export_date',
+        key=form_widget_key('historical_export_date'),
     )
     export_no_preview = next_export_no('HIS', historical_date.year)
 else:
@@ -198,13 +210,13 @@ with st.container():
     st.markdown('<span id="new-case-basic-info-anchor"></span>', unsafe_allow_html=True)
 
     first_row = st.columns(3)
-    first_row[0].text_input('수출번호', value=export_no_preview, disabled=True, key='new_export_no')
-    country = first_row[1].text_input('국가 *', key='new_country')
-    buyer = first_row[2].text_input('바이어 (선택)', key='new_buyer')
+    first_row[0].text_input('수출번호', value=export_no_preview, disabled=True, key=form_widget_key('new_export_no'))
+    country = first_row[1].text_input('국가 *', key=form_widget_key('new_country'))
+    buyer = first_row[2].text_input('바이어 (선택)', key=form_widget_key('new_buyer'))
 
     second_row = st.columns(3)
-    transport = second_row[0].selectbox('운송방식', TRANSPORT_MODES, key='new_transport')
-    note = second_row[1].text_input('비고', key='new_note')
+    transport = second_row[0].selectbox('운송방식', TRANSPORT_MODES, key=form_widget_key('new_transport'))
+    note = second_row[1].text_input('비고', key=form_widget_key('new_note'))
 
 order_layout_anchor = (
     'historical-order-layout-anchor'
@@ -221,39 +233,39 @@ with st.container():
         st.caption('엑셀에서 출고처·제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호 순서로 복사해 표의 첫 셀에 붙여넣을 수 있습니다.')
         new_orders = historical_order_editor(
             historical_order_source(),
-            key=HISTORICAL_ORDER_EDITOR_KEY,
+            key=form_widget_key(HISTORICAL_ORDER_EDITOR_KEY),
         )
     else:
         new_order_source = pd.DataFrame([{'제품명': '', '수량': 0.0, '단위': 'EA', '매입가': 0.0}])
-        new_orders = order_editor(new_order_source, key='new_order_items')
+        new_orders = order_editor(new_order_source, key=form_widget_key('new_order_items'))
 
-    render_similar_price_lookup(key='price_lookup_query')
+    render_similar_price_lookup(key=form_widget_key('price_lookup_query'))
 
 if is_historical:
     st.markdown('#### CTN 정보')
     box_source = pd.DataFrame([
         {'CTN 번호': 1, '가로 (cm)': 0.0, '세로 (cm)': 0.0, '높이 (cm)': 0.0, 'GW (kg)': 0.0}
     ])
-    historical_boxes = historical_box_editor(box_source, key='historical_box_items')
+    historical_boxes = historical_box_editor(box_source, key=form_widget_key('historical_box_items'))
 
     st.markdown('#### 국내배송 정보')
     receiver_cols = st.columns([1, 2])
-    consignee_name = receiver_cols[0].text_input('수하인명', key='historical_consignee_name')
-    consignee_address = receiver_cols[1].text_input('수하인주소', key='historical_consignee_address')
+    consignee_name = receiver_cols[0].text_input('수하인명', key=form_widget_key('historical_consignee_name'))
+    consignee_address = receiver_cols[1].text_input('수하인주소', key=form_widget_key('historical_consignee_address'))
     delivery_method = st.radio(
         '배송 방식',
         ['로젠택배', '퀵배송', '핸드캐리'],
         horizontal=True,
-        key='historical_delivery_method',
+        key=form_widget_key('historical_delivery_method'),
     )
     if delivery_method == '로젠택배':
-        tracking_no = st.text_input('송장번호', key='historical_tracking_no')
+        tracking_no = st.text_input('송장번호', key=form_widget_key('historical_tracking_no'))
         driver_name = ''
         driver_phone = ''
     elif delivery_method == '퀵배송':
         delivery_cols = st.columns(2)
-        driver_name = delivery_cols[0].text_input('배송기사 이름', key='historical_driver_name')
-        driver_phone = delivery_cols[1].text_input('배송기사 연락처', key='historical_driver_phone')
+        driver_name = delivery_cols[0].text_input('배송기사 이름', key=form_widget_key('historical_driver_name'))
+        driver_phone = delivery_cols[1].text_input('배송기사 연락처', key=form_widget_key('historical_driver_phone'))
         tracking_no = ''
     else:
         tracking_no = ''
@@ -273,7 +285,7 @@ button_center.markdown('<span id="create-case-button-anchor"></span>', unsafe_al
 create_case = button_center.button(
     '수출 건 생성',
     type='primary',
-    key='create_case',
+    key=form_widget_key('create_case'),
     use_container_width=True,
 )
 
