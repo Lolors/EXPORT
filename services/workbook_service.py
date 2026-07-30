@@ -5,6 +5,7 @@ import shutil
 from zipfile import BadZipFile, ZipFile
 
 import db
+from services import folder_service
 
 
 SECTION_TITLES = {'기본 정보', '주문 목록', '출고 진행 상황', '미패킹 제품', '국내배송 정보'}
@@ -240,13 +241,14 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
     _style_sheet(ws3, {'A': 24, 'B': 64}, {2})
 
     temporary_path = workbook_path.with_name(f'{workbook_path.stem}.tmp.xlsx')
-    backup_folder = folder / '.backup'
+    backup_folder = folder / folder_service.BACKUP_FOLDER_NAME
     previous_path = backup_folder / f'{workbook_path.stem}.previous.xlsx'
     previous_temporary_path = backup_folder / f'{workbook_path.stem}.previous.tmp.xlsx'
     legacy_previous_path = workbook_path.with_name(f'{workbook_path.stem}.previous.xlsx')
 
     if legacy_previous_path.exists():
         backup_folder.mkdir(parents=True, exist_ok=True)
+        folder_service.set_hidden(backup_folder)
         legacy_destination = previous_path
         if legacy_destination.exists():
             legacy_destination = backup_folder / f'{workbook_path.stem}.legacy.previous.xlsx'
@@ -260,6 +262,7 @@ def write_case_workbook(case_id: int, folder: Path) -> Path:
 
     if workbook_path.exists() and is_valid_xlsx(workbook_path):
         backup_folder.mkdir(parents=True, exist_ok=True)
+        folder_service.set_hidden(backup_folder)
         if previous_temporary_path.exists():
             previous_temporary_path.unlink()
         shutil.copy2(workbook_path, previous_temporary_path)

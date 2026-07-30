@@ -12,6 +12,7 @@ from utils.dates import now_text, parse_date
 from utils.formatters import sanitize_folder_part
 
 CASE_MARKER_NAME = '.export_case.json'
+BACKUP_FOLDER_NAME = '.backup'
 CATEGORY_FOLDERS = {
     '출고사진': '01 출고제품사진',
     'CI': '02 CI',
@@ -24,6 +25,54 @@ LEGACY_CATEGORY_FOLDERS = {
     'Shipping Mark': '03_Shipping Mark',
     '기타': '04_기타',
 }
+
+
+def set_hidden(path: Path) -> bool:
+    """Apply the Windows Hidden attribute while preserving other attributes."""
+    if os.name != 'nt' or not path.exists():
+        return False
+    try:
+        import ctypes
+
+        get_attributes = ctypes.windll.kernel32.GetFileAttributesW
+        set_attributes = ctypes.windll.kernel32.SetFileAttributesW
+        attributes = get_attributes(str(path))
+        invalid_attributes = 0xFFFFFFFF
+        hidden_attribute = 0x02
+        if attributes == invalid_attributes:
+            return False
+        if attributes & hidden_attribute:
+            return True
+        return bool(set_attributes(str(path), attributes | hidden_attribute))
+    except (AttributeError, OSError):
+        return False
+
+
+def visible_items(folder: Path) -> list[Path]:
+    """Return user-facing directory entries, excluding dot-prefixed internals."""
+    try:
+        return sorted(
+            (item for item in folder.iterdir() if not item.name.startswith('.')),
+            key=lambda item: (not item.is_dir(), item.name.casefold()),
+        )
+    except OSError:
+        return []
+
+
+def hide_existing_internal_items(root: Path | None = None) -> int:
+    """Hide existing dot-prefixed files and folders below the storage root."""
+    target_root = root or storage_root()
+    if os.name != 'nt' or not target_root.exists():
+        return 0
+    hidden_count = 0
+    try:
+        candidates = (item for item in target_root.rglob('*') if item.name.startswith('.'))
+        for item in candidates:
+            if set_hidden(item):
+                hidden_count += 1
+    except OSError:
+        pass
+    return hidden_count
 
 
 def _configured_storage_path() -> Path | None:
@@ -187,6 +236,7 @@ def write_case_marker(folder: Path, case) -> Path:
         ),
         encoding='utf-8',
     )
+    set_hidden(marker)
     return marker
 
 
@@ -295,6 +345,7 @@ def _write_case_workbook(case_id: int, folder: Path) -> None:
 def _prepare_folder(case, folder: Path, *, force_workbook: bool = False) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     write_case_marker(folder, case)
+    set_hidden(folder / BACKUP_FOLDER_NAME)
     ensure_category_folders(folder)
     if _workbook_needs_update(int(case['id']), folder, force=force_workbook):
         _write_case_workbook(int(case['id']), folder)
@@ -398,7 +449,11 @@ def delete_attachment(attachment_id: int) -> None:
 
 
 def list_attachments(case_id: int):
-    return db.rows(
-        'SELECT id,category,original_name,stored_path,created_at FROM attachments WHERE case_id=? ORDER BY id',
-        (case_id,),
-    )
+    return [
+        attachment
+        for attachment in db.rows(
+            'SELECT id,category,original_name,stored_path,created_at FROM attachments WHERE case_id=? ORDER BY id',
+            (case_id,),
+        )
+        if not Path(str(attachment['original_name'] or '')).name.startswith('.')
+    ]

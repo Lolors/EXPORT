@@ -103,6 +103,9 @@ def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
     check_usb_restore_before_start()
     db.init_db()
+    if not st.session_state.get('internal_storage_items_hidden'):
+        folder_service.hide_existing_internal_items()
+        st.session_state['internal_storage_items_hidden'] = True
     show_usb_backup_status()
     initialize_document_filter_defaults()
 
