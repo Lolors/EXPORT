@@ -144,6 +144,10 @@ st.markdown(
         width: 70vw;
         max-width: 70vw;
     }
+    div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#historical-order-layout-anchor) {
+        width: 80vw;
+        max-width: 80vw;
+    }
     div[data-testid="stHorizontalBlock"]:has(#create-case-button-anchor) {
         align-items: center;
         justify-content: center;
@@ -155,7 +159,8 @@ st.markdown(
     }
     @media (max-width: 900px) {
         div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#new-case-basic-info-anchor),
-        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-price-layout-anchor) {
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#order-price-layout-anchor),
+        div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(#historical-order-layout-anchor) {
             width: 100%;
             max-width: 100%;
         }
@@ -198,8 +203,16 @@ with st.container():
     transport = second_row[0].selectbox('운송방식', TRANSPORT_MODES, key='new_transport')
     note = second_row[1].text_input('비고', key='new_note')
 
+order_layout_anchor = (
+    'historical-order-layout-anchor'
+    if is_historical
+    else 'order-price-layout-anchor'
+)
 with st.container():
-    st.markdown('<span id="order-price-layout-anchor"></span>', unsafe_allow_html=True)
+    st.markdown(
+        f'<span id="{order_layout_anchor}"></span>',
+        unsafe_allow_html=True,
+    )
     st.markdown('#### 주문 목록' if not is_historical else '#### 실출고 제품 및 CTN 연결')
     if is_historical:
         st.caption('엑셀에서 출고처·제품명·제조번호·유효기간·수량·단위·매입가·CTN 번호 순서로 복사해 표의 첫 셀에 붙여넣을 수 있습니다.')
