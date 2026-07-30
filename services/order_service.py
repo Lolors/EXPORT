@@ -171,7 +171,7 @@ def create_historical_case_details(
         '''UPDATE export_cases
            SET domestic_method=?,tracking_no=?,driver_name=?,driver_phone=?,
                consignee_name=?,consignee_address=?,actual_ship_date=?,
-               stage='완료',status='완료',updated_at=?
+               stage='국내배송',status='완료',updated_at=?
            WHERE id=?''',
         (
             method,
