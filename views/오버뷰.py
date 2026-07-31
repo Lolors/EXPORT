@@ -5,6 +5,7 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
+from components.dashboard_timeline import render_order_timeline
 from services import export_service, overview_service
 from services.dashboard_view_service import (
     order_products_summary as _order_products_summary,
@@ -13,7 +14,6 @@ from services.dashboard_view_service import (
     stage_label,
     stage_style as _stage_style,
     timeline_date,
-    timeline_date_label,
 )
 
 
@@ -39,74 +39,6 @@ st.markdown(
         padding: 0;
         overflow: hidden;
     }
-    .order-timeline {
-        position: relative;
-        margin: 0.35rem 0 1.4rem 0.35rem;
-        padding-left: 1.55rem;
-    }
-    .order-timeline::before {
-        content: "";
-        position: absolute;
-        top: 0.55rem;
-        bottom: 0.45rem;
-        left: 0.35rem;
-        width: 3px;
-        border-radius: 3px;
-        background: linear-gradient(#5b8def, #c6d5f4);
-    }
-    .timeline-day {
-        position: relative;
-        margin: 0 0 1.1rem;
-    }
-    .timeline-day::before {
-        content: "";
-        position: absolute;
-        top: 0.42rem;
-        left: -1.55rem;
-        width: 0.78rem;
-        height: 0.78rem;
-        border: 3px solid #5b8def;
-        border-radius: 50%;
-        background: white;
-        box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.13);
-    }
-    .timeline-date {
-        margin-bottom: 0.48rem;
-        color: #315d9b;
-        font-size: 0.94rem;
-        font-weight: 800;
-    }
-    .timeline-cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 0.55rem;
-    }
-    .timeline-card {
-        padding: 0.78rem 0.9rem;
-        border: 1px solid rgba(91, 141, 239, 0.22);
-        border-radius: 10px;
-        background: #fff;
-        box-shadow: 0 3px 10px rgba(36, 58, 95, 0.06);
-    }
-    .timeline-card-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        margin-bottom: 0.3rem;
-    }
-    .timeline-export-no { font-weight: 800; color: #243b62; }
-    .timeline-stage {
-        padding: 0.13rem 0.5rem;
-        border-radius: 999px;
-        background: #eef3fb;
-        color: #46658f;
-        font-size: 0.77rem;
-        font-weight: 700;
-        white-space: nowrap;
-    }
-    .timeline-party { font-size: 0.88rem; color: #3f4855; }
-    .timeline-products { margin-top: 0.22rem; font-size: 0.82rem; color: #77808d; }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.sticky-note-anchor) {
         min-height: 160px;
         padding: 1rem 1rem 0.7rem;
@@ -151,34 +83,20 @@ st.markdown(f'### 최근 2개월 주문 건 ({recent_order_period_label(month_co
 if not cases:
     st.info('타임라인 기준 최근 2개월 주문 건이 없습니다.')
 else:
-    timeline_groups: dict[str, list] = {}
+    timeline_rows = []
     for case in cases:
-        timeline_groups.setdefault(timeline_date(case), []).append(case)
-
-    timeline_html = ['<div class="order-timeline">']
-    for date_value, date_cases in timeline_groups.items():
-        timeline_html.append(
-            '<section class="timeline-day">'
-            f'<div class="timeline-date">{escape(timeline_date_label(date_value))} · '
-            f'{len(date_cases)}건</div><div class="timeline-cards">'
-        )
-        for case in date_cases:
-            raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
-            country = str(case['country'] or '').strip() or '국가 미입력'
-            buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
-            timeline_html.append(
-                '<article class="timeline-card">'
-                '<div class="timeline-card-head">'
-                f'<span class="timeline-export-no">{escape(str(case["export_no"] or "수출번호 미입력"))}</span>'
-                f'<span class="timeline-stage">{escape(stage_label(raw_stage))}</span>'
-                '</div>'
-                f'<div class="timeline-party">{escape(country)} · {escape(buyer)}</div>'
-                f'<div class="timeline-products">{escape(_order_products_summary(int(case["id"])))}</div>'
-                '</article>'
-            )
-        timeline_html.append('</div></section>')
-    timeline_html.append('</div>')
-    st.markdown(''.join(timeline_html), unsafe_allow_html=True)
+        raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
+        country = str(case['country'] or '').strip() or '국가 미입력'
+        buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
+        timeline_rows.append({
+            'date': timeline_date(case),
+            'date_label': timeline_date(case),
+            'export_no': str(case['export_no'] or '').strip() or '수출번호 미입력',
+            'party': f'{country} · {buyer}',
+            'stage': stage_label(raw_stage),
+            'products': _order_products_summary(int(case['id'])),
+        })
+    render_order_timeline(timeline_rows)
 
     with st.expander('주문 표로 보기', expanded=True):
         st.caption('아래 표에서는 컬럼별 정렬과 검색을 사용할 수 있습니다.')
