@@ -316,7 +316,7 @@ if repeat_item_id:
         st.session_state.pop('repeat_pack_item_id', None)
         st.session_state.pop(f'repeat_pack_preview_{case_id}', None)
     else:
-        @st.dialog('동일 CTN 반복 담기', width='large')
+        @dialog('동일 CTN 반복 담기', width='large')
         def repeated_assign_dialog() -> None:
             total_quantity = int(float(repeat_item['requested_qty'] or 0))
             start_box_no = packing_service.next_box_no(case_id)
