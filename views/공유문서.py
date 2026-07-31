@@ -171,11 +171,10 @@ if selected_view == 'final':
     render_document(case, packed)
 elif selected_view == 'shipment_products':
     from components.shared_document_renderer import render_shipment_product_list
-    from services import document_service, shipment_service
+    from services import document_service
 
-    fresh_actual_rows = shipment_service.list_actual(case_id)
-    actual_rows = document_service._aggregate_actual(fresh_actual_rows)
-    render_shipment_product_list(case, actual_rows)
+    shipment_product_rows = document_service.get_shipment_product_list_data(case_id)
+    render_shipment_product_list(case, shipment_product_rows)
 else:
     if not is_final_document_available:
         st.caption('최종문서는 패킹 대기, 패킹 완료 또는 국내배송 단계에서 출력할 수 있습니다.')
