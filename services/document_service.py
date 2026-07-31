@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import db
 from services import packing_service, shipment_service
 
 
@@ -50,6 +51,53 @@ def _aggregate_actual(rows) -> list[dict]:
             _text(row['unit']).casefold(),
         ),
     )
+
+
+def _build_shipment_product_rows(order_rows, actual_rows) -> list[dict]:
+    """Use received details and fill each order's outstanding quantity from the order."""
+    actual_by_order: dict[int, list] = {}
+    for row in actual_rows:
+        order_item_id = row['order_item_id']
+        if order_item_id is None:
+            continue
+        actual_by_order.setdefault(int(order_item_id), []).append(row)
+
+    combined: list[dict] = []
+    for order in order_rows:
+        linked_actual = actual_by_order.get(int(order['id']), [])
+        received_quantity = 0.0
+        for row in linked_actual:
+            quantity = float(row['requested_qty'] or 0)
+            if quantity <= 0:
+                continue
+            combined.append(dict(row))
+            received_quantity += quantity
+
+        outstanding_quantity = max(float(order['quantity'] or 0) - received_quantity, 0.0)
+        if outstanding_quantity > 0.000001:
+            combined.append({
+                'business_unit': '',
+                'product_name': _text(order['product_name']),
+                'lot_no': '',
+                'expiry_date': '',
+                'unit': _text(order['unit']),
+                'requested_qty': outstanding_quantity,
+            })
+
+    return _aggregate_actual(combined)
+
+
+def get_shipment_product_list_data(case_id: int) -> list[dict]:
+    """Return a complete planned-shipment list using the freshest available data."""
+    order_rows = db.rows(
+        '''SELECT id, product_name, quantity, unit
+           FROM order_items
+           WHERE case_id=?
+           ORDER BY id''',
+        (case_id,),
+    )
+    actual_rows = shipment_service.list_case_items(case_id)
+    return _build_shipment_product_rows(order_rows, actual_rows)
 
 
 def _aggregate_packed(rows, boxes_by_no: dict[int, object]) -> list[dict]:
