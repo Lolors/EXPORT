@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import unittest
 
-from services.dashboard_view_service import recent_order_cases, timeline_date, timeline_date_label
+from services.dashboard_view_service import (
+    recent_order_cases,
+    timeline_bounds,
+    timeline_date,
+    timeline_date_label,
+)
 
 
 class DashboardTimelineTests(unittest.TestCase):
@@ -49,6 +54,13 @@ class DashboardTimelineTests(unittest.TestCase):
 
     def test_timeline_date_label(self) -> None:
         self.assertEqual('7월 31일', timeline_date_label('2026-07-31'))
+
+    def test_timeline_bounds_include_today_and_padding(self) -> None:
+        rows = [{'date': '2026-06-08'}, {'date': '2026-07-20'}]
+        self.assertEqual(
+            (date(2026, 5, 25), date(2026, 8, 14)),
+            timeline_bounds(rows, today=date(2026, 7, 31)),
+        )
 
 
 if __name__ == '__main__':
