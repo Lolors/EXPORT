@@ -5,6 +5,7 @@ import streamlit as st
 
 from components.case_selector import select_export_case
 from components.editors import order_editor, shipment_editor
+from components.streamlit_compat import dialog
 from services import (
     export_service,
     folder_service,
@@ -46,7 +47,7 @@ def save_linked_order(
     st.session_state['shipment_intake_success_message'] = '저장했습니다. 박스 패킹에 바로 반영됩니다.'
 
 
-@st.dialog('입력한 제품명을 확인해 주세요')
+@dialog('입력한 제품명을 확인해 주세요')
 def product_name_warning_dialog(
     *,
     case_id: int,
