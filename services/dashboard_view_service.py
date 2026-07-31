@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from services import export_service
 
@@ -46,8 +46,27 @@ def recent_order_cases(
     return [
         case
         for case in cases
-        if str(case['created_at'] or '')[:7] in prefixes
+        if timeline_date(case)[:7] in prefixes
     ]
+
+
+def timeline_date(case) -> str:
+    """Return the date used to place an order on the dashboard timeline."""
+    export_no = str(case['export_no'] or '').strip().upper()
+    actual_ship_date = str(case['actual_ship_date'] or '').strip()[:10]
+    created_at = str(case['created_at'] or '').strip()[:10]
+    if export_no.startswith('HIS') and actual_ship_date:
+        return actual_ship_date
+    return created_at
+
+
+def timeline_date_label(value: object) -> str:
+    raw = str(value or '').strip()[:10]
+    try:
+        parsed = date.fromisoformat(raw)
+    except ValueError:
+        return raw or '날짜 미입력'
+    return f'{parsed.month}월 {parsed.day}일'
 
 
 def recent_order_period_label(
