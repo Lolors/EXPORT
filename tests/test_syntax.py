@@ -33,6 +33,14 @@ class PythonSyntaxTests(unittest.TestCase):
         self.assertNotIn("st.Page('pages/", app_source)
         self.assertIn("st.Page('views/", app_source)
 
+    def test_views_use_compatible_dialog_decorator(self) -> None:
+        direct_dialogs = [
+            str(path.relative_to(ROOT))
+            for path in sorted((ROOT / 'views').glob('*.py'))
+            if '@st.dialog(' in path.read_text(encoding='utf-8')
+        ]
+        self.assertEqual([], direct_dialogs)
+
     def test_calculation_logic_stays_out_of_views(self) -> None:
         forbidden_functions = {
             'find_product_name_mismatches',
