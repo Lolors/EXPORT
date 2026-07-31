@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from services import export_service
 
@@ -67,6 +67,21 @@ def timeline_date_label(value: object) -> str:
     except ValueError:
         return raw or '날짜 미입력'
     return f'{parsed.month}월 {parsed.day}일'
+
+
+def timeline_bounds(rows: list[dict], *, today: date | None = None) -> tuple[date, date]:
+    """Return an axis that includes every order, today, and two weeks of breathing room."""
+    reference = today or date.today()
+    parsed_dates: list[date] = []
+    for row in rows:
+        raw = str(row.get('date') or '').strip()[:10]
+        try:
+            parsed_dates.append(date.fromisoformat(raw))
+        except ValueError:
+            continue
+    earliest = min(parsed_dates, default=reference)
+    latest = max(parsed_dates, default=reference)
+    return min(earliest, reference) - timedelta(days=14), max(latest, reference) + timedelta(days=14)
 
 
 def recent_order_period_label(
