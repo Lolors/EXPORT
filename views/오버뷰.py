@@ -12,11 +12,13 @@ from services.dashboard_view_service import (
     recent_order_period_label,
     stage_label,
     stage_style as _stage_style,
+    timeline_date,
+    timeline_date_label,
 )
 
 
 st.title('대시보드')
-st.caption('최근 2개월에 등록된 주문과 직접 기록한 확인사항을 한 화면에서 관리합니다.')
+st.caption('타임라인 기준 최근 2개월 주문과 직접 기록한 확인사항을 한 화면에서 관리합니다.')
 
 st.markdown(
     '''
@@ -37,6 +39,74 @@ st.markdown(
         padding: 0;
         overflow: hidden;
     }
+    .order-timeline {
+        position: relative;
+        margin: 0.35rem 0 1.4rem 0.35rem;
+        padding-left: 1.55rem;
+    }
+    .order-timeline::before {
+        content: "";
+        position: absolute;
+        top: 0.55rem;
+        bottom: 0.45rem;
+        left: 0.35rem;
+        width: 3px;
+        border-radius: 3px;
+        background: linear-gradient(#5b8def, #c6d5f4);
+    }
+    .timeline-day {
+        position: relative;
+        margin: 0 0 1.1rem;
+    }
+    .timeline-day::before {
+        content: "";
+        position: absolute;
+        top: 0.42rem;
+        left: -1.55rem;
+        width: 0.78rem;
+        height: 0.78rem;
+        border: 3px solid #5b8def;
+        border-radius: 50%;
+        background: white;
+        box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.13);
+    }
+    .timeline-date {
+        margin-bottom: 0.48rem;
+        color: #315d9b;
+        font-size: 0.94rem;
+        font-weight: 800;
+    }
+    .timeline-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 0.55rem;
+    }
+    .timeline-card {
+        padding: 0.78rem 0.9rem;
+        border: 1px solid rgba(91, 141, 239, 0.22);
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 3px 10px rgba(36, 58, 95, 0.06);
+    }
+    .timeline-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.3rem;
+    }
+    .timeline-export-no { font-weight: 800; color: #243b62; }
+    .timeline-stage {
+        padding: 0.13rem 0.5rem;
+        border-radius: 999px;
+        background: #eef3fb;
+        color: #46658f;
+        font-size: 0.77rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .timeline-party { font-size: 0.88rem; color: #3f4855; }
+    .timeline-products { margin-top: 0.22rem; font-size: 0.82rem; color: #77808d; }
     div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"]:has(.sticky-note-anchor) {
         min-height: 160px;
         padding: 1rem 1rem 0.7rem;
@@ -69,51 +139,82 @@ cases = recent_order_cases(
 cases = sorted(
     cases,
     key=lambda case: (
+        timeline_date(case),
         str(case['country'] or '').casefold(),
         str(case['buyer'] or '').casefold(),
-        str(case['transport_mode'] or '').casefold(),
         str(case['export_no'] or '').casefold(),
     ),
+    reverse=True,
 )
 
 st.markdown(f'### 최근 2개월 주문 건 ({recent_order_period_label(month_count=2)})')
 if not cases:
-    st.info('최근 2개월에 등록된 주문 건이 없습니다.')
+    st.info('타임라인 기준 최근 2개월 주문 건이 없습니다.')
 else:
-    table_rows = []
-    for index, case in enumerate(cases, start=1):
-        raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
-        table_rows.append(
-            {
-                '구분': index,
-                '국가': str(case['country'] or '').strip() or '국가 미입력',
-                '바이어': str(case['buyer'] or '').strip() or '바이어 미입력',
-                '운송방식': str(case['transport_mode'] or '').strip() or '운송방식 미입력',
-                '수출번호': str(case['export_no'] or '').strip() or '수출번호 미입력',
-                '현재 단계': stage_label(raw_stage),
-                '주문제품': _order_products_summary(int(case['id'])),
-            }
-        )
+    timeline_groups: dict[str, list] = {}
+    for case in cases:
+        timeline_groups.setdefault(timeline_date(case), []).append(case)
 
-    table_df = pd.DataFrame(table_rows)
-    styled_table = table_df.style.map(_stage_style, subset=['현재 단계'])
-
-    with st.container():
-        st.markdown('<div class="export-table-anchor"></div>', unsafe_allow_html=True)
-        st.dataframe(
-            styled_table,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                '구분': st.column_config.NumberColumn(width='small'),
-                '국가': st.column_config.TextColumn(width='small'),
-                '바이어': st.column_config.TextColumn(width='medium'),
-                '운송방식': st.column_config.TextColumn(width='small'),
-                '수출번호': st.column_config.TextColumn(width='medium'),
-                '현재 단계': st.column_config.TextColumn(width='small'),
-                '주문제품': st.column_config.TextColumn(width='large'),
-            },
+    timeline_html = ['<div class="order-timeline">']
+    for date_value, date_cases in timeline_groups.items():
+        timeline_html.append(
+            '<section class="timeline-day">'
+            f'<div class="timeline-date">{escape(timeline_date_label(date_value))} · '
+            f'{len(date_cases)}건</div><div class="timeline-cards">'
         )
+        for case in date_cases:
+            raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
+            country = str(case['country'] or '').strip() or '국가 미입력'
+            buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
+            timeline_html.append(
+                '<article class="timeline-card">'
+                '<div class="timeline-card-head">'
+                f'<span class="timeline-export-no">{escape(str(case["export_no"] or "수출번호 미입력"))}</span>'
+                f'<span class="timeline-stage">{escape(stage_label(raw_stage))}</span>'
+                '</div>'
+                f'<div class="timeline-party">{escape(country)} · {escape(buyer)}</div>'
+                f'<div class="timeline-products">{escape(_order_products_summary(int(case["id"])))}</div>'
+                '</article>'
+            )
+        timeline_html.append('</div></section>')
+    timeline_html.append('</div>')
+    st.markdown(''.join(timeline_html), unsafe_allow_html=True)
+
+    with st.expander('주문 표로 보기', expanded=True):
+        st.caption('아래 표에서는 컬럼별 정렬과 검색을 사용할 수 있습니다.')
+        table_rows = []
+        for index, case in enumerate(cases, start=1):
+            raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
+            table_rows.append(
+                {
+                    '구분': index,
+                    '국가': str(case['country'] or '').strip() or '국가 미입력',
+                    '바이어': str(case['buyer'] or '').strip() or '바이어 미입력',
+                    '운송방식': str(case['transport_mode'] or '').strip() or '운송방식 미입력',
+                    '수출번호': str(case['export_no'] or '').strip() or '수출번호 미입력',
+                    '현재 단계': stage_label(raw_stage),
+                    '주문제품': _order_products_summary(int(case['id'])),
+                }
+            )
+
+        table_df = pd.DataFrame(table_rows)
+        styled_table = table_df.style.map(_stage_style, subset=['현재 단계'])
+        with st.container():
+            st.markdown('<div class="export-table-anchor"></div>', unsafe_allow_html=True)
+            st.dataframe(
+                styled_table,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    '구분': st.column_config.NumberColumn(width='small'),
+                    '국가': st.column_config.TextColumn(width='small'),
+                    '바이어': st.column_config.TextColumn(width='medium'),
+                    '운송방식': st.column_config.TextColumn(width='small'),
+                    '수출번호': st.column_config.TextColumn(width='medium'),
+                    '현재 단계': st.column_config.TextColumn(width='small'),
+                    '주문제품': st.column_config.TextColumn(width='large'),
+                },
+            )
 
 st.divider()
 with st.container():
