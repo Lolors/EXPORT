@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from components.case_selector import select_export_case
+from components.streamlit_compat import dialog
 from services import export_service, history_service, packing_service
 from services.packing_view_service import (
     expand_same_product_selection,
@@ -422,7 +423,7 @@ if partial_item_id:
         st.session_state.pop('partial_pack_item_id', None)
         st.session_state.pop('partial_pack_box_no', None)
     else:
-        @st.dialog('선택 제품 일부 수량 담기')
+        @dialog('선택 제품 일부 수량 담기')
         def partial_assign_dialog() -> None:
             total_quantity = int(float(partial_item['requested_qty'] or 0))
             target_box_no = int(st.session_state.get('partial_pack_box_no', next_box_no))
