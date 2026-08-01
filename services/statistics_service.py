@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
+import streamlit as st
 
 import db
 
@@ -22,7 +23,12 @@ STATISTICS_COLUMNS = [
 ]
 
 
-def shipment_rows(start_date: date, end_date: date) -> pd.DataFrame:
+@st.cache_data(show_spinner=False, persist='disk', max_entries=64)
+def _cached_shipment_rows(
+    start_date: date,
+    end_date: date,
+    cache_token: tuple[int, int, int, int],
+) -> pd.DataFrame:
     """Return actual shipment rows for completed and historical export cases."""
     rows = db.rows(
         '''
@@ -75,6 +81,10 @@ def shipment_rows(start_date: date, end_date: date) -> pd.DataFrame:
         ]
     )
     return frame[STATISTICS_COLUMNS]
+
+
+def shipment_rows(start_date: date, end_date: date) -> pd.DataFrame:
+    return _cached_shipment_rows(start_date, end_date, db.read_cache_token()).copy()
 
 
 def normalize_text(value: object) -> str:
