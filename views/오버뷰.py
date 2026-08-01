@@ -90,6 +90,7 @@ else:
         country = str(case['country'] or '').strip() or '국가 미입력'
         buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
         transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
+        product_summary = _order_products_summary(int(case['id']))
         timeline_rows.append({
             'start_date': str(case['created_at'] or '').strip()[:10],
             'end_date': str(case['actual_ship_date'] or '').strip()[:10],
@@ -97,6 +98,7 @@ else:
             'party': f'{country} · {buyer}',
             'bar_label': f'{country} - {buyer} - {transport}',
             'stage': stage_label(raw_stage),
+            'product_summary': product_summary,
             'products': _order_products_detail(int(case['id'])),
         })
     render_order_timeline(timeline_rows)
