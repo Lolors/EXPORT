@@ -109,18 +109,16 @@ else:
             'bar_text': bar_text,
             'bar_accent': bar_accent,
         })
-    selected_case_id = render_order_timeline(timeline_rows)
-    if selected_case_id is not None:
-        st.session_state['actual_packing_case_id'] = selected_case_id
-        st.switch_page('views/실출고_입력.py')
+    render_order_timeline(timeline_rows)
 
     with st.expander('주문 표로 보기', expanded=True):
-        st.caption('아래 표에서는 컬럼별 정렬과 검색을 사용할 수 있습니다.')
+        st.caption('아래 표에서 주문을 클릭하면 해당 수출 건의 수출대기 입고 화면으로 이동합니다.')
         table_rows = []
         for index, case in enumerate(cases, start=1):
             raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
             table_rows.append(
                 {
+                    '_case_id': int(case['id']),
                     '구분': index,
                     '국가': str(case['country'] or '').strip() or '국가 미입력',
                     '바이어': str(case['buyer'] or '').strip() or '바이어 미입력',
@@ -135,11 +133,12 @@ else:
         styled_table = table_df.style.map(_stage_style, subset=['현재 단계'])
         with st.container():
             st.markdown('<div class="export-table-anchor"></div>', unsafe_allow_html=True)
-            st.dataframe(
+            table_event = st.dataframe(
                 styled_table,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
+                    '_case_id': None,
                     '구분': st.column_config.NumberColumn(width='small'),
                     '국가': st.column_config.TextColumn(width='small'),
                     '바이어': st.column_config.TextColumn(width='medium'),
@@ -148,7 +147,15 @@ else:
                     '현재 단계': st.column_config.TextColumn(width='small'),
                     '주문제품': st.column_config.TextColumn(width='large'),
                 },
+                on_select='rerun',
+                selection_mode='single-row',
+                key='dashboard_order_table',
             )
+        selected_rows = table_event.selection.rows
+        if selected_rows:
+            selected_case_id = int(table_df.iloc[selected_rows[0]]['_case_id'])
+            st.session_state['actual_packing_case_id'] = selected_case_id
+            st.switch_page('views/실출고_입력.py')
 
 st.divider()
 with st.container():

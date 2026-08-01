@@ -4,7 +4,6 @@ from datetime import date, datetime
 import unittest
 
 from services.dashboard_view_service import (
-    plotly_selected_case_id,
     recent_order_cases,
     stage_bar_colors,
     timeline_bounds,
@@ -15,13 +14,6 @@ from services.dashboard_view_service import (
 
 
 class DashboardTimelineTests(unittest.TestCase):
-    def test_plotly_selection_returns_clicked_case_id(self) -> None:
-        event = {'selection': {'points': [{'customdata': [37]}]}}
-        self.assertEqual(37, plotly_selected_case_id(event))
-
-    def test_empty_plotly_selection_does_not_navigate(self) -> None:
-        self.assertIsNone(plotly_selected_case_id({'selection': {'points': []}}))
-
     def test_historical_case_uses_ship_date(self) -> None:
         case = {
             'export_no': 'HIS-2025-001',
