@@ -34,6 +34,19 @@ def _initialize_database_runtime() -> None:
         conn.close()
 
 
+def read_cache_token() -> tuple[int, int, int, int]:
+    """Return a cheap fingerprint that changes whenever SQLite data changes."""
+    db_stat = DB_PATH.stat() if DB_PATH.exists() else None
+    wal_path = DB_PATH.with_name(DB_PATH.name + '-wal')
+    wal_stat = wal_path.stat() if wal_path.exists() else None
+    return (
+        int(db_stat.st_mtime_ns) if db_stat else 0,
+        int(db_stat.st_size) if db_stat else 0,
+        int(wal_stat.st_mtime_ns) if wal_stat else 0,
+        int(wal_stat.st_size) if wal_stat else 0,
+    )
+
+
 def _configure_connection(conn: sqlite3.Connection) -> None:
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
