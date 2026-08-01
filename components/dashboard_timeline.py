@@ -1,182 +1,105 @@
 from __future__ import annotations
 
-from calendar import month_abbr
-from datetime import date, timedelta
-from html import escape
-import json
+from datetime import date
 
-import streamlit.components.v1 as components
+import plotly.graph_objects as go
+import streamlit as st
 
-from services.dashboard_view_service import timeline_bounds
+from services.dashboard_view_service import plotly_selected_case_id, timeline_bounds
 
 
-DAY_WIDTH = 44
-LABEL_WIDTH = 0
-
-
-def _parse_date(value: object) -> date | None:
-    try:
-        return date.fromisoformat(str(value or '').strip()[:10])
-    except ValueError:
+def render_order_timeline(rows: list[dict]) -> int | None:
+    """Render a clickable Gantt chart and return the selected export case id."""
+    if not rows:
         return None
 
-
-def _month_segments(start: date, end: date) -> list[tuple[str, int]]:
-    segments: list[tuple[str, int]] = []
-    cursor = start
-    while cursor <= end:
-        month_start = cursor
-        while cursor <= end and cursor.month == month_start.month:
-            cursor += timedelta(days=1)
-        label = f'{month_abbr[month_start.month]} {month_start.year}'
-        segments.append((label, (cursor - month_start).days))
-    return segments
-
-
-def render_order_timeline(rows: list[dict]) -> None:
-    if not rows:
-        return
-
     today = date.today()
-    start, end = timeline_bounds(rows, today=today)
-    dates: list[date] = []
-    cursor = start
-    while cursor <= end:
-        dates.append(cursor)
-        cursor += timedelta(days=1)
+    axis_start, axis_end = timeline_bounds(rows, today=today)
+    figure = go.Figure()
 
-    day_headers = ''.join(
-        f'<div class="day {"weekend" if value.weekday() >= 5 else ""} '
-        f'{"today-day" if value == today else ""}" data-date="{value.isoformat()}">'
-        f'<span>{value.day}</span></div>'
-        for value in dates
-    )
-    month_headers = ''.join(
-        f'<div class="month" style="width:{count * DAY_WIDTH}px">{escape(label)}</div>'
-        for label, count in _month_segments(start, end)
-    )
-    grid_columns = ''.join(
-        f'<div class="grid-day {"weekend" if value.weekday() >= 5 else ""} '
-        f'{"today-grid" if value == today else ""}"></div>'
-        for value in dates
-    )
-
-    body_rows: list[str] = []
-    for row in rows:
-        start_date = _parse_date(row.get('start_date')) or start
-        requested_end = _parse_date(row.get('end_date'))
-        end_date = max(start_date, requested_end or today)
-        offset = (start_date - start).days * DAY_WIDTH + 4
-        width = max(DAY_WIDTH - 8, ((end_date - start_date).days + 1) * DAY_WIDTH - 8)
-        export_no = escape(str(row.get('export_no') or '수출번호 미입력'))
-        party = escape(str(row.get('party') or '국가·바이어 미입력'))
-        stage = escape(str(row.get('stage') or '단계 미입력'))
-        bar_label = escape(str(row.get('bar_label') or party))
-        product_summary = escape(str(row.get('product_summary') or '주문목록 없음'))
-        products = escape(str(row.get('products') or '-'), quote=True).replace('\n', '&#10;')
-        period = f'{start_date.isoformat()} ~ {end_date.isoformat()}'
-        tooltip = escape(f'{export_no}\n{period}\n{stage}\n주문목록:\n', quote=True) + products
+    # One trace per row keeps every order independently clickable, including
+    # orders with identical party, products, dates, and stage.
+    for index, row in enumerate(rows):
+        start_date = date.fromisoformat(str(row['start_date'])[:10])
+        end_date = date.fromisoformat(str(row.get('end_date') or today)[:10])
+        end_date = max(start_date, end_date)
+        duration_ms = max(1, (end_date - start_date).days + 1) * 86_400_000
         case_id = int(row.get('case_id') or 0)
-        bar_background = escape(str(row.get('bar_background') or '#94a3b8'), quote=True)
-        bar_text = escape(str(row.get('bar_text') or '#1f2937'), quote=True)
-        bar_accent = escape(str(row.get('bar_accent') or '#64748b'), quote=True)
-        body_rows.append(
-            '<div class="order-row">'
-            f'<div class="row-track">{grid_columns}'
-            f'<a class="order-bar" data-start="{start_date.isoformat()}" '
-            f'data-case-id="{case_id}" tabindex="0" role="link" '
-            f'data-end="{end_date.isoformat()}" '
-            f'title="{tooltip}" aria-label="{tooltip}" '
-            f'style="left:{offset}px;width:{width}px;--bar-bg:{bar_background};'
-            f'--bar-text:{bar_text};--bar-accent:{bar_accent}">'
-            f'<span class="bar-party">{bar_label}</span>'
-            f'<span class="bar-products">{product_summary}</span></a></div></div>'
+        export_no = str(row.get('export_no') or '수출번호 미입력')
+        stage = str(row.get('stage') or '단계 미입력')
+        label = str(row.get('bar_label') or '')
+        products = str(row.get('products') or '-')
+        product_summary = str(row.get('product_summary') or '주문목록 없음')
+        hover = (
+            f'<b>{export_no}</b><br>'
+            f'{start_date.isoformat()} ~ {end_date.isoformat()}<br>'
+            f'{stage}<br><br><b>주문목록</b><br>{products.replace(chr(10), "<br>")}'
+            '<extra></extra>'
         )
+        figure.add_trace(go.Bar(
+            x=[duration_ms],
+            y=[str(index)],
+            base=[start_date.isoformat()],
+            orientation='h',
+            width=0.62,
+            marker={
+                'color': str(row.get('bar_background') or '#94a3b8'),
+                'line': {'color': str(row.get('bar_accent') or '#64748b'), 'width': 2},
+            },
+            text=[f'<b>{label}</b><br>{product_summary}'],
+            textposition='outside',
+            textfont={'color': str(row.get('bar_text') or '#1f2937'), 'size': 11},
+            cliponaxis=False,
+            customdata=[[case_id]],
+            hovertemplate=hover,
+            showlegend=False,
+            name=export_no,
+        ))
 
-    payload = json.dumps({
-        'todayOffset': max(0, (today - start).days * DAY_WIDTH),
-        'dayWidth': DAY_WIDTH,
-    })
-    height = min(820, max(350, 150 + len(rows) * 76))
-    document = f'''<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><style>
-* {{ box-sizing: border-box; }}
-body {{ margin: 0; color: #2d333b; font-family: Arial, "Noto Sans KR", sans-serif; }}
-.toolbar {{ display:flex; justify-content:flex-end; gap:5px; margin:0 2px 9px; }}
-.toolbar button {{ border:1px solid #d7dce3; border-radius:7px; background:#fff; color:#505864; padding:6px 11px; cursor:pointer; }}
-.toolbar button:hover,.toolbar button.active {{ border-color:#3b82f6; background:#eef5ff; color:#1769d2; }}
-.shell {{ border:1px solid #d9dde3; border-radius:10px; overflow:hidden; background:#fff; }}
-.timeline {{ overflow:auto; max-height:{height - 50}px; position:relative; }}
-.canvas {{ min-width:{LABEL_WIDTH + len(dates) * DAY_WIDTH}px; }}
-.month-row,.day-row,.order-row {{ display:flex; min-width:max-content; }}
-.month-row {{ position:sticky; top:0; z-index:7; height:34px; border-bottom:1px solid #d5d9df; }}
-.month {{ flex:0 0 auto; padding:8px 12px; border-right:1px solid #d5d9df; background:#f1f2f4; font-weight:700; color:#5d6570; }}
-.day-row {{ position:sticky; top:34px; z-index:7; height:35px; border-bottom:1px solid #cfd4da; background:#fff; }}
-.day {{ width:{DAY_WIDTH}px; flex:0 0 {DAY_WIDTH}px; text-align:center; padding-top:8px; border-right:1px solid #edf0f3; color:#656d78; }}
-.day.weekend,.grid-day.weekend {{ background:#f7f8fa; }}
-.day.today-day span {{ padding:3px 7px; border-radius:8px; background:#3b82f6; color:#fff; font-weight:800; }}
-.order-row {{ height:76px; border-bottom:1px solid #edf0f3; }}
-.order-row:last-child {{ border-bottom:0; }}
-.row-track {{ position:relative; width:{len(dates) * DAY_WIDTH}px; flex:0 0 {len(dates) * DAY_WIDTH}px; }}
-.grid-day {{ display:inline-block; width:{DAY_WIDTH}px; height:100%; border-right:1px solid #edf0f3; }}
-.grid-day.today-grid {{ border-left:2px solid #3b82f6; }}
-.order-bar {{ position:absolute; top:14px; height:48px; padding:6px 10px 5px 12px; border-radius:7px; background:var(--bar-bg); color:var(--bar-text); font-size:11px; font-weight:800; box-shadow:0 2px 6px rgba(31,41,55,.18); overflow:visible; cursor:pointer; display:flex; flex-direction:column; justify-content:center; gap:2px; z-index:2; text-decoration:none; }}
-.order-bar:hover,.order-bar:focus {{ z-index:4; outline:2px solid color-mix(in srgb, var(--bar-accent) 70%, white); outline-offset:2px; filter:brightness(.98); }}
-.order-bar::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:7px 0 0 7px; background:var(--bar-accent); }}
-.order-bar span {{ display:block; margin-left:3px; width:max-content; max-width:none; overflow:visible; white-space:nowrap; text-overflow:clip; text-shadow:0 1px 1px rgba(255,255,255,.28); }}
-.order-bar .bar-products {{ color:inherit; font-size:10px; font-weight:700; opacity:.9; }}
-</style></head><body>
-<div class="toolbar"><button data-view="today">오늘</button><button data-view="week">주</button><button data-view="month" class="active">개월</button><button data-view="quarter">분기</button></div>
-<div class="shell"><div class="timeline" id="timeline"><div class="canvas">
-<div class="month-row">{month_headers}</div>
-<div class="day-row">{day_headers}</div>
-{''.join(body_rows)}
-</div></div></div>
-<script>
-const config={payload}; const timeline=document.getElementById('timeline');
-const labelWidth={LABEL_WIDTH};
-function openIntake(caseId) {{
-  if (!caseId) return;
-  const parentOrigin=(window.location.ancestorOrigins&&window.location.ancestorOrigins[0])||'';
-  let url;
-  try {{
-    url=document.referrer ? new URL(document.referrer) : new URL('/',parentOrigin);
-  }} catch (_error) {{
-    if (!parentOrigin) return;
-    url=new URL('/',parentOrigin);
-  }}
-  url.searchParams.set('open_intake_case',caseId);
-  // Cross-origin iframes may not read the parent URL, but a user click is
-  // allowed to navigate the top-level window to an explicit absolute URL.
-  window.top.location.href=url.toString();
-}}
-function centerToday() {{ timeline.scrollLeft=Math.max(0,labelWidth+config.todayOffset-timeline.clientWidth/2); }}
-function setZoom(days) {{
-  const available=Math.max(360,timeline.clientWidth-labelWidth); const width=Math.max(24,Math.min(88,available/days));
-  document.documentElement.style.setProperty('--unused',width+'px');
-  document.querySelectorAll('.day,.grid-day').forEach(el=>{{el.style.width=width+'px';el.style.flexBasis=width+'px';}});
-  document.querySelectorAll('.month').forEach(el=>{{const count=Math.round(parseFloat(el.style.width)/config.dayWidth);el.style.width=(count*width)+'px';}});
-  document.querySelectorAll('.row-track').forEach(el=>{{el.style.width=({len(dates)}*width)+'px';el.style.flexBasis=({len(dates)}*width)+'px';}});
-  document.querySelectorAll('.order-bar').forEach(el=>{{
-    const axisStart=new Date('{start.isoformat()}');
-    const barStart=new Date(el.dataset.start); const barEnd=new Date(el.dataset.end);
-    const offset=Math.round((barStart-axisStart)/86400000);
-    const duration=Math.max(1,Math.round((barEnd-barStart)/86400000)+1);
-    el.style.left=(offset*width+4)+'px'; el.style.width=Math.max(width-8,duration*width-8)+'px';
-  }});
-  config.dayWidth=width; config.todayOffset={(today-start).days}*width; centerToday();
-}}
-document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('click',()=>{{
-  document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
-  const views={{today:3,week:7,month:31,quarter:92}};setZoom(views[btn.dataset.view]);
-}}));
-document.querySelectorAll('.order-bar').forEach(bar=>{{
-  bar.addEventListener('click',event=>{{
-    event.preventDefault();
-    openIntake(bar.dataset.caseId);
-  }});
-  bar.addEventListener('keydown',event=>{{if(event.key==='Enter'||event.key===' '){{event.preventDefault();openIntake(bar.dataset.caseId);}}}});
-}});
-requestAnimationFrame(()=>{{setZoom(31);}});
-</script></body></html>'''
-    components.html(document, height=height, scrolling=False)
+    figure.add_vline(x=today.isoformat(), line_width=2, line_color='#3b82f6')
+    figure.update_layout(
+        barmode='overlay',
+        height=min(820, max(350, 145 + len(rows) * 62)),
+        margin={'l': 12, 'r': 240, 't': 42, 'b': 35},
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        hoverlabel={'align': 'left'},
+        dragmode='select',
+        clickmode='event+select',
+        xaxis={
+            'type': 'date',
+            'range': [axis_start.isoformat(), axis_end.isoformat()],
+            'side': 'top',
+            'dtick': 86_400_000,
+            'tickformat': '%m/%d',
+            'showgrid': True,
+            'gridcolor': '#edf0f3',
+            'fixedrange': False,
+            'rangeslider': {'visible': False},
+            'rangeselector': {
+                'buttons': [
+                    {'count': 7, 'label': '주', 'step': 'day', 'stepmode': 'backward'},
+                    {'count': 1, 'label': '개월', 'step': 'month', 'stepmode': 'backward'},
+                    {'count': 3, 'label': '분기', 'step': 'month', 'stepmode': 'backward'},
+                    {'label': '전체', 'step': 'all'},
+                ]
+            },
+        },
+        yaxis={
+            'showticklabels': False,
+            'showgrid': True,
+            'gridcolor': '#edf0f3',
+            'autorange': 'reversed',
+            'fixedrange': True,
+        },
+        selections=[],
+    )
+    event = st.plotly_chart(
+        figure,
+        use_container_width=True,
+        key='dashboard_order_timeline',
+        on_select='rerun',
+        selection_mode='points',
+        config={'displayModeBar': False, 'scrollZoom': True},
+    )
+    return plotly_selected_case_id(event)
