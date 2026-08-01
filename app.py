@@ -99,8 +99,24 @@ def initialize_document_filter_defaults() -> None:
     st.session_state.setdefault('document_case_country', '전체')
 
 
+def handle_dashboard_intake_link() -> None:
+    """Open the intake page for a timeline bar selected inside its iframe."""
+    raw_case_id = st.query_params.get('open_intake_case')
+    if not raw_case_id:
+        return
+    try:
+        case_id = int(raw_case_id)
+    except (TypeError, ValueError):
+        del st.query_params['open_intake_case']
+        return
+    st.session_state['actual_packing_case_id'] = case_id
+    del st.query_params['open_intake_case']
+    st.switch_page('views/실출고_입력.py')
+
+
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
+    navigation = st.navigation(PAGES, position='sidebar')
     check_usb_restore_before_start()
     db.init_db()
     if not st.session_state.get('internal_storage_items_hidden'):
@@ -108,6 +124,7 @@ def main() -> None:
         st.session_state['internal_storage_items_hidden'] = True
     show_usb_backup_status()
     initialize_document_filter_defaults()
+    handle_dashboard_intake_link()
 
     st.markdown(
         '''
@@ -142,7 +159,7 @@ def main() -> None:
 
     with db.connection_session():
         with measure('streamlit.page.run', slow_ms=0):
-            st.navigation(PAGES, position='sidebar').run()
+            navigation.run()
 
 
 if __name__ == '__main__':
