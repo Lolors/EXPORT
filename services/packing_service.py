@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import streamlit as st
+
 import db
 from utils.dates import now_text
 
@@ -26,8 +28,12 @@ def list_items(case_id: int):
     )
 
 
-def list_packed_rows(case_id: int):
-    return db.rows(
+@st.cache_data(show_spinner=False, persist='disk', max_entries=256)
+def _cached_packed_rows(
+    case_id: int,
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
+    rows = db.rows(
         '''SELECT s.id, s.box_no,
                   COALESCE(NULLIF(TRIM(s.business_unit),''), NULLIF(TRIM(s.location),''), '') AS business_unit,
                   s.product_name, s.lot_no,
@@ -42,14 +48,28 @@ def list_packed_rows(case_id: int):
            ORDER BY s.box_no, s.id''',
         (case_id,),
     )
+    return [dict(row) for row in rows]
 
 
-def list_boxes(case_id: int):
-    return db.rows(
+def list_packed_rows(case_id: int):
+    return _cached_packed_rows(int(case_id), db.read_cache_token())
+
+
+@st.cache_data(show_spinner=False, persist='disk', max_entries=256)
+def _cached_boxes(
+    case_id: int,
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
+    rows = db.rows(
         '''SELECT id, box_no, length_cm, width_cm, height_cm, weight_kg, updated_at
            FROM boxes WHERE case_id=? ORDER BY box_no''',
         (case_id,),
     )
+    return [dict(row) for row in rows]
+
+
+def list_boxes(case_id: int):
+    return _cached_boxes(int(case_id), db.read_cache_token())
 
 
 def list_box_items(case_id: int, box_no: int):
