@@ -8,8 +8,6 @@ import streamlit as st
 from components.dashboard_timeline import render_order_timeline
 from services import export_service, overview_service
 from services.dashboard_view_service import (
-    order_products_detail as _order_products_detail,
-    order_products_summary as _order_products_summary,
     recent_order_cases,
     recent_order_period_label,
     stage_bar_colors,
@@ -82,6 +80,34 @@ cases = sorted(
     reverse=True,
 )
 
+order_items_by_case: dict[int, list[dict]] = {}
+for item in export_service.get_order_items_for_cases(case['id'] for case in cases):
+    order_items_by_case.setdefault(int(item['case_id']), []).append(item)
+
+product_summary_by_case: dict[int, str] = {}
+product_detail_by_case: dict[int, str] = {}
+for case in cases:
+    case_id = int(case['id'])
+    items = order_items_by_case.get(case_id, [])
+    names = [
+        str(item['product_name'] or '').strip()
+        for item in items
+        if str(item['product_name'] or '').strip()
+    ]
+    visible_names = names[:2]
+    summary = ', '.join(visible_names) or '-'
+    if len(names) > 2:
+        summary += f' + 그 외 {len(names) - 2}품목'
+    product_summary_by_case[case_id] = summary
+    product_detail_by_case[case_id] = '\n'.join(
+        (
+            f"{str(item['product_name'] or '').strip()} · "
+            f"{float(item['quantity'] or 0):g}{str(item['unit'] or '').strip()}"
+        )
+        for item in items
+        if str(item['product_name'] or '').strip()
+    ) or '주문목록 없음'
+
 st.markdown(f'### 최근 1개월 주문 건 ({recent_order_period_label(month_count=1)})')
 if not cases:
     st.info('최근 1개월 동안 등록된 주문 건이 없습니다.')
@@ -92,7 +118,7 @@ else:
         country = str(case['country'] or '').strip() or '국가 미입력'
         buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
         transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
-        product_summary = _order_products_summary(int(case['id']))
+        product_summary = product_summary_by_case.get(int(case['id']), '-')
         bar_background, bar_text, bar_accent = stage_bar_colors(raw_stage)
         start_date, end_date = timeline_period(case)
         timeline_rows.append({
@@ -104,7 +130,7 @@ else:
             'bar_label': f'{country} - {buyer} - {transport}',
             'stage': stage_label(raw_stage),
             'product_summary': product_summary,
-            'products': _order_products_detail(int(case['id'])),
+            'products': product_detail_by_case.get(int(case['id']), '주문목록 없음'),
             'bar_background': bar_background,
             'bar_text': bar_text,
             'bar_accent': bar_accent,
@@ -128,7 +154,7 @@ else:
                     '운송방식': str(case['transport_mode'] or '').strip() or '운송방식 미입력',
                     '수출번호': str(case['export_no'] or '').strip() or '수출번호 미입력',
                     '현재 단계': stage_label(raw_stage),
-                    '주문제품': _order_products_summary(int(case['id'])),
+                    '주문제품': product_summary_by_case.get(int(case['id']), '-'),
                 }
             )
 
