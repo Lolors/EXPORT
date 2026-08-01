@@ -22,6 +22,18 @@ STAGE_COLORS = {
     '완료': 'background-color: #dff5e7; color: #17683a; font-weight: 700;',
 }
 
+STAGE_BAR_COLORS = {
+    '주문 접수': ('#6b7280', '#ffffff', '#4b5563'),
+    '제품 준비': ('#eab308', '#3f3200', '#ca8a04'),
+    '패킹 대기': ('#38bdf8', '#063d55', '#0284c7'),
+    '패킹 진행': ('#60a5fa', '#102f62', '#2563eb'),
+    '패킹 완료': ('#8b5cf6', '#ffffff', '#6d28d9'),
+    '국내배송': ('#fb923c', '#4f2605', '#ea580c'),
+    '선적 준비': ('#2dd4bf', '#073f39', '#0d9488'),
+    '선적 완료': ('#3b82f6', '#ffffff', '#1d4ed8'),
+    '완료': ('#22c55e', '#073b1b', '#16a34a'),
+}
+
 
 
 def _recent_month_prefixes(reference: datetime, month_count: int) -> list[str]:
@@ -126,6 +138,12 @@ def stage_style(value: object) -> str:
         str(value or '').strip(),
         'background-color: #f3f4f6; color: #555; font-weight: 700;',
     )
+
+
+def stage_bar_colors(value: object) -> tuple[str, str, str]:
+    """Return background, text, and accent colors for a timeline stage."""
+    stage = stage_label(value)
+    return STAGE_BAR_COLORS.get(stage, ('#94a3b8', '#1f2937', '#64748b'))
 
 
 def order_products_summary(case_id: int) -> str:
