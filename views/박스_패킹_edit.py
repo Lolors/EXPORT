@@ -1,29 +1,48 @@
 from __future__ import annotations
 
-import re
-from pathlib import Path
+import pandas as pd
+import streamlit as st
 
-
-SOURCE_PATH = Path(__file__).with_name('박스_패킹.py')
-source = SOURCE_PATH.read_text(encoding='utf-8')
-
-import_marker = 'from services import export_service, history_service, packing_service\n'
-import_replacement = '''import db
+from components.case_selector import select_export_case
+from components.streamlit_compat import dialog
+import db
 from services import export_service, history_service, packing_edit_service, packing_service
 from utils.dates import now_text
-'''
-if source.count(import_marker) != 1:
-    raise RuntimeError('박스 패킹 서비스 import 구간을 찾지 못했습니다.')
-source = source.replace(import_marker, import_replacement, 1)
+from services.packing_view_service import (
+    expand_same_product_selection,
+    filter_packing_items,
+    items_by_box,
+    packing_summary,
+    product_summary,
+)
+from utils.formatters import fmt_number
 
-layout_marker = "left_column, right_column = st.columns([7, 3], gap='large')"
-layout_replacement = "left_column, right_column = st.columns([6, 4], gap='large')"
-if source.count(layout_marker) != 1:
-    raise RuntimeError('박스 패킹 좌우 영역 비율 구간을 찾지 못했습니다.')
-source = source.replace(layout_marker, layout_replacement, 1)
 
-style_marker = "st.title('CTN 패킹')\n"
-style_replacement = '''st.title('CTN 패킹')
+def sync_grid_checkbox_selection(
+    widget_key: str,
+    selection_key: str,
+    version_key: str,
+    row_ids: list[int],
+) -> None:
+    editor_state = st.session_state.get(widget_key, {})
+    edited_rows = editor_state.get('edited_rows', {}) if isinstance(editor_state, dict) else {}
+    selected_ids = {int(item_id) for item_id in st.session_state.get(selection_key, [])}
+
+    for row_index, changes in edited_rows.items():
+        index = int(row_index)
+        if index < 0 or index >= len(row_ids) or '선택' not in changes:
+            continue
+        item_id = int(row_ids[index])
+        if bool(changes['선택']):
+            selected_ids.add(item_id)
+        else:
+            selected_ids.discard(item_id)
+
+    st.session_state[selection_key] = sorted(selected_ids)
+    st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+
+
+st.title('CTN 패킹')
 st.markdown(
     """
     <style>
@@ -135,41 +154,66 @@ def assign_repeated_ctns(
 
     packing_service._sync_packing_stage(case_id, now)
     return preview_rows
-'''
-if source.count(style_marker) != 1:
-    raise RuntimeError('박스 패킹 제목 구간을 찾지 못했습니다.')
-source = source.replace(style_marker, style_replacement, 1)
+st.caption('미패킹 제품을 빠르게 선택해 현재 CTN에 담고, 오른쪽에서 CTN 정보와 관리 작업을 처리합니다.')
 
-grid_config_marker = '''            '선택': st.column_config.CheckboxColumn('선택', width='small'),
-            '_id': None,
-            '사업장': st.column_config.TextColumn('사업장', width='small'),
-            '실제 제품명': st.column_config.TextColumn('실제 제품명', width='large'),
-            '제조번호': st.column_config.TextColumn('제조번호', width='medium'),
-            '유통기한': st.column_config.TextColumn('유통기한', width='medium'),
-            '출고수량': st.column_config.NumberColumn('출고수량', format='%.0f'),
-            '현재 CTN': st.column_config.TextColumn('현재 CTN', width='small'),
-'''
-grid_config_replacement = '''            '선택': st.column_config.CheckboxColumn('선택', width=46),
-            '_id': None,
-            '사업장': st.column_config.TextColumn('사업장', width=62),
-            '실제 제품명': st.column_config.TextColumn('실제 제품명', width=190),
-            '제조번호': st.column_config.TextColumn('제조번호', width=88),
-            '유통기한': st.column_config.TextColumn('유통기한', width=88),
-            '출고수량': st.column_config.NumberColumn('출고수량', format='%.0f', width=72),
-            '현재 CTN': st.column_config.TextColumn('현재 CTN', width=68),
-'''
-if source.count(grid_config_marker) != 1:
-    raise RuntimeError('미패킹 제품 표 컬럼 설정 구간을 찾지 못했습니다.')
-source = source.replace(grid_config_marker, grid_config_replacement, 1)
+cases = [
+    case for case in export_service.active_cases()
+    if str(case['stage'] or '').strip() in {'패킹 대기', '패킹 완료'}
+]
+if not cases:
+    st.info('패킹 대기 또는 패킹 완료 단계인 수출 건이 없습니다.')
+    st.stop()
 
-active_items_pattern = re.compile(
-    r"    if active_items:\n"
-    r"        st\.dataframe\(.*?"
-    r"    else:\n"
-    r"        st\.info\('왼쪽에서 제품을 선택해 이 CTN에 담으세요\.'\)\n",
-    re.S,
+case_id = select_export_case(
+    cases,
+    key_prefix='packing_export_selector',
+    saved_case_id=st.session_state.get('actual_packing_case_id'),
+    show_stage=True,
 )
-active_items_replacement = '''    if active_items:
+st.session_state['actual_packing_case_id'] = case_id
+
+items = packing_service.list_items(case_id)
+if not items:
+    st.warning('연결된 입고 제품이 없습니다. 먼저 수출대기 입고에서 제품을 입력하세요.')
+    st.stop()
+
+summary = packing_summary(items)
+boxes = packing_service.list_boxes(case_id)
+items_grouped_by_box = items_by_box(items)
+next_box_no = packing_service.next_box_no(case_id)
+
+m1, m2, m3, m4 = st.columns(4)
+m1.metric('실제 출고 행', f"{summary['row_count']}개")
+m2.metric('총 출고수량', fmt_number(summary['total_quantity']))
+m3.metric('미패킹 행', f"{summary['unpacked_count']}개")
+m4.metric('사용 CTN', f"{summary['box_count']}개")
+
+active_label_key = f'packing_active_ctn_{case_id}'
+pending_active_key = f'pending_{active_label_key}'
+box_labels = [f"CTN {int(box['box_no'])}" for box in boxes]
+new_box_label = f'새 CTN {next_box_no}'
+active_options = [*box_labels, new_box_label]
+pending_active = st.session_state.pop(pending_active_key, None)
+if pending_active in active_options:
+    st.session_state[active_label_key] = pending_active
+elif st.session_state.get(active_label_key) not in active_options:
+    st.session_state[active_label_key] = new_box_label
+
+left_column, right_column = st.columns([6, 4], gap='large')
+
+# 오른쪽을 먼저 실행해 왼쪽 배정 버튼이 현재 CTN 번호를 바로 사용하게 합니다.
+with right_column:
+    st.markdown('### 현재 CTN')
+    active_label = st.selectbox('작업할 CTN', active_options, key=active_label_key)
+    active_box_no = int(active_label.split()[-1])
+    active_box = next((box for box in boxes if int(box['box_no']) == active_box_no), None)
+    active_items = items_grouped_by_box.get(active_box_no, [])
+
+    st.caption(
+        f'CTN {active_box_no} · {len(active_items)}개 행 · '
+        f'수량 {fmt_number(sum(float(item["requested_qty"] or 0) for item in active_items))}'
+    )
+    if active_items:
         active_item_rows = [
             {
                 '빼기': False,
@@ -218,15 +262,8 @@ active_items_replacement = '''    if active_items:
             st.rerun()
     else:
         st.info('왼쪽에서 제품을 선택해 이 CTN에 담으세요.')
-'''
-source, active_items_count = active_items_pattern.subn(active_items_replacement, source, count=1)
-if active_items_count != 1:
-    raise RuntimeError('현재 CTN 제품 목록 구간을 교체하지 못했습니다.')
 
-active_box_marker = '''    if active_box is not None:
-        dimension_keys = {
-'''
-active_box_replacement = '''    if active_box is not None:
+    if active_box is not None:
         with st.expander('CTN No. 변경'):
             with st.form(f'rename_ctn_{case_id}_{active_box_no}'):
                 new_box_no = st.number_input(
@@ -257,23 +294,261 @@ active_box_replacement = '''    if active_box is not None:
                     st.rerun()
 
         dimension_keys = {
-'''
-if source.count(active_box_marker) != 1:
-    raise RuntimeError('CTN 정보 입력 시작 구간을 찾지 못했습니다.')
-source = source.replace(active_box_marker, active_box_replacement, 1)
+            'length_cm': f'ctn_length_{case_id}_{active_box_no}',
+            'width_cm': f'ctn_width_{case_id}_{active_box_no}',
+            'height_cm': f'ctn_height_{case_id}_{active_box_no}',
+            'weight_kg': f'ctn_weight_{case_id}_{active_box_no}',
+        }
+        pending_values_key = f'pending_ctn_values_{case_id}_{active_box_no}'
+        continuous_key = f'continuous_box_preset_{case_id}'
+        active_values_key = f'active_box_values_{case_id}'
 
-action_marker = '''    action_cols = st.columns([2, 2, 1.5])
-    assign_clicked = action_cols[0].button(
-        '선택 제품 전량 담기', type='primary', use_container_width=True, disabled=not selected_ids
+        if pending_values_key in st.session_state:
+            pending_values = st.session_state.pop(pending_values_key)
+            for field, key in dimension_keys.items():
+                st.session_state[key] = float(pending_values[field])
+        elif st.session_state.get(continuous_key) and st.session_state.get(active_values_key):
+            box_is_blank = not any(float(active_box[field] or 0) > 0 for field in dimension_keys)
+            if box_is_blank:
+                for field, key in dimension_keys.items():
+                    st.session_state.setdefault(key, float(st.session_state[active_values_key][field]))
+
+        with st.form(f'current_ctn_form_{case_id}_{active_box_no}'):
+            dimension_columns = st.columns(2)
+            length = dimension_columns[0].number_input(
+                '가로(cm)', min_value=0.0, value=float(active_box['length_cm'] or 0), key=dimension_keys['length_cm']
+            )
+            width = dimension_columns[1].number_input(
+                '세로(cm)', min_value=0.0, value=float(active_box['width_cm'] or 0), key=dimension_keys['width_cm']
+            )
+            height = dimension_columns[0].number_input(
+                '높이(cm)', min_value=0.0, value=float(active_box['height_cm'] or 0), key=dimension_keys['height_cm']
+            )
+            weight = dimension_columns[1].number_input(
+                'GW(kg)', min_value=0.0, value=float(active_box['weight_kg'] or 0), key=dimension_keys['weight_kg']
+            )
+            save_box = st.form_submit_button('CTN 저장 후 다음 CTN', type='primary', use_container_width=True)
+
+        if save_box:
+            packing_service.update_box(int(active_box['id']), length, width, height, weight)
+            packing_service.save_last_box_values(length, width, height, weight)
+            current_values = {
+                'length_cm': float(length), 'width_cm': float(width),
+                'height_cm': float(height), 'weight_kg': float(weight),
+            }
+            st.session_state[active_values_key] = current_values
+            history_service.add(case_id, 'CTN 정보 수정', f'CTN {active_box_no}')
+            current_index = box_labels.index(f'CTN {active_box_no}')
+            if current_index + 1 < len(box_labels):
+                next_label = box_labels[current_index + 1]
+            else:
+                next_label = new_box_label
+            st.session_state[pending_active_key] = next_label
+            st.success(f'CTN {active_box_no}을 저장했습니다.')
+            st.rerun()
+
+    else:
+        st.caption('제품을 담으면 규격·GW 입력과 복제 기능이 활성화됩니다.')
+
+    st.divider()
+    st.markdown('#### 박스 프리셋')
+    presets = packing_service.list_box_presets()
+    last_values = packing_service.get_last_box_values()
+    preset_options = ['선택 안 함'] + (['마지막 사용값'] if last_values else []) + sorted(presets)
+    selected_preset = st.selectbox('프리셋', preset_options, key=f'box_preset_select_{case_id}')
+    preset_cols = st.columns(2)
+    apply_preset = preset_cols[0].button('현재 CTN에 적용', use_container_width=True, disabled=active_box is None)
+    delete_preset = preset_cols[1].button('프리셋 삭제', use_container_width=True, disabled=selected_preset not in presets)
+    continuous_apply = st.toggle('다음 CTN에도 연속 적용', key=f'continuous_box_preset_{case_id}')
+
+    if apply_preset and active_box is not None:
+        values = last_values if selected_preset == '마지막 사용값' else presets.get(selected_preset)
+        if values is None:
+            st.warning('적용할 프리셋을 선택하세요.')
+        else:
+            st.session_state[f'pending_ctn_values_{case_id}_{active_box_no}'] = values
+            st.session_state[f'active_box_values_{case_id}'] = values
+            st.rerun()
+
+    if delete_preset and selected_preset in presets:
+        packing_service.delete_box_preset(selected_preset)
+        st.session_state.pop(f'box_preset_select_{case_id}', None)
+        st.rerun()
+
+    with st.expander('현재 규격을 새 프리셋으로 저장'):
+        preset_name = st.text_input('프리셋 이름', key=f'new_preset_name_{case_id}')
+        if st.button('프리셋 저장', use_container_width=True, disabled=active_box is None):
+            try:
+                packing_service.save_box_preset(
+                    preset_name,
+                    float(st.session_state.get(f'ctn_length_{case_id}_{active_box_no}', 0)),
+                    float(st.session_state.get(f'ctn_width_{case_id}_{active_box_no}', 0)),
+                    float(st.session_state.get(f'ctn_height_{case_id}_{active_box_no}', 0)),
+                    float(st.session_state.get(f'ctn_weight_{case_id}_{active_box_no}', 0)),
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.success(f'{preset_name.strip()} 프리셋을 저장했습니다.')
+                st.rerun()
+
+    if active_box is not None:
+        st.markdown('#### CTN 구성 복제')
+        clone_count = st.number_input(
+            '복제할 CTN 개수', min_value=1, value=1, step=1,
+            key=f'clone_count_{case_id}_{active_box_no}',
+        )
+        if st.button(
+            '현재 CTN 복제',
+            use_container_width=True,
+            key=f'clone_ctn_{case_id}_{active_box_no}',
+        ):
+            try:
+                created_boxes = packing_service.clone_box(
+                    case_id,
+                    active_box_no,
+                    int(clone_count),
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                created_text = ', '.join(f'CTN {number}' for number in created_boxes)
+                history_service.add(
+                    case_id,
+                    'CTN 구성 복제',
+                    f'CTN {active_box_no} → {created_text}',
+                )
+                st.session_state[pending_active_key] = f'CTN {created_boxes[0]}'
+                st.success(f'{created_text}을 생성했습니다.')
+                st.rerun()
+
+    st.divider()
+    with st.expander('CTN 삭제'):
+        delete_label_map = {}
+        for delete_box in boxes:
+            delete_box_no = int(delete_box['box_no'])
+            delete_box_items = items_grouped_by_box.get(delete_box_no, [])
+            delete_label = (
+                f"CTN {delete_box_no} · {len(delete_box_items)}행 · "
+                f"{product_summary(delete_box_items)}"
+            )
+            delete_label_map[delete_label] = delete_box_no
+        selected_delete_labels = st.multiselect('삭제할 CTN', list(delete_label_map))
+        selected_delete_boxes = [delete_label_map[label] for label in selected_delete_labels]
+        st.caption('삭제한 CTN의 제품은 다시 미패킹 상태로 돌아갑니다.')
+        if st.button(
+            f'선택한 CTN 삭제 ({len(selected_delete_boxes)}개)',
+            disabled=not selected_delete_boxes,
+            use_container_width=True,
+            key=f'delete_ctns_{case_id}',
+        ):
+            for delete_box_no in selected_delete_boxes:
+                packing_service.clear_box(case_id, delete_box_no)
+            history_service.add(
+                case_id,
+                'CTN 삭제',
+                ', '.join(f'CTN {number}' for number in selected_delete_boxes),
+            )
+            st.session_state.pop(active_label_key, None)
+            st.success('선택한 CTN을 삭제하고 포함 제품을 미패킹 상태로 돌렸습니다.')
+            st.rerun()
+
+with left_column:
+    st.markdown('### 미패킹 제품 선택')
+    filter_cols = st.columns([2.3, 1.4, 1.6])
+    product_query = filter_cols[0].text_input('제품명 검색', key=f'packing_product_query_{case_id}')
+    business_units = sorted({str(item['business_unit'] or '').strip() for item in items if str(item['business_unit'] or '').strip()})
+    selected_business = filter_cols[1].selectbox('사업장', ['전체', *business_units], key=f'packing_business_{case_id}')
+    lot_query = filter_cols[2].text_input('제조번호 검색', key=f'packing_lot_query_{case_id}')
+    unpacked_only = st.toggle('미패킹만 표시', value=True, key=f'packing_unpacked_only_{case_id}')
+
+    visible_items = filter_packing_items(
+        items,
+        query=product_query,
+        business_unit=selected_business,
+        lot_query=lot_query,
+        unpacked_only=unpacked_only,
     )
-    partial_clicked = action_cols[1].button(
-        '선택 제품 일부 담기', use_container_width=True, disabled=len(selected_ids) != 1
+    selection_key = f'packing_selected_ids_{case_id}'
+    version_key = f'packing_grid_version_{case_id}'
+    grid_version = int(st.session_state.get(version_key, 0))
+    selected_state = {int(item_id) for item_id in st.session_state.get(selection_key, [])}
+    grid_rows = [
+        {
+            '선택': int(item['id']) in selected_state,
+            '_id': int(item['id']),
+            '사업장': item['business_unit'] or '-',
+            '실제 제품명': item['product_name'] or '-',
+            '제조번호': item['lot_no'] or '-',
+            '유통기한': item['expiry_date'] or '-',
+            '출고수량': float(item['requested_qty'] or 0),
+            '현재 CTN': f"CTN {item['box_no']}" if item['box_no'] is not None else '미패킹',
+        }
+        for item in visible_items
+    ]
+    grid_columns = [
+        '선택', '_id', '사업장', '실제 제품명',
+        '제조번호', '유통기한', '출고수량', '현재 CTN',
+    ]
+    grid_df = pd.DataFrame(grid_rows, columns=grid_columns)
+    filter_signature = abs(hash((
+        product_query,
+        selected_business,
+        lot_query,
+        bool(unpacked_only),
+    )))
+    row_ids = [int(item['id']) for item in visible_items]
+    grid_widget_key = (
+        f"packing_item_grid_{case_id}_{grid_version}_{filter_signature}"
     )
-    unassign_clicked = action_cols[2].button(
-        'CTN에서 빼기', use_container_width=True, disabled=not selected_ids
+    edited_grid = st.data_editor(
+        grid_df,
+        hide_index=True,
+        use_container_width=True,
+        height=min(680, max(250, 70 + len(grid_rows) * 35)),
+        disabled=['_id', '사업장', '실제 제품명', '제조번호', '유통기한', '출고수량', '현재 CTN'],
+        column_config={
+            '선택': st.column_config.CheckboxColumn('선택', width=46),
+            '_id': None,
+            '사업장': st.column_config.TextColumn('사업장', width=62),
+            '실제 제품명': st.column_config.TextColumn('실제 제품명', width=190),
+            '제조번호': st.column_config.TextColumn('제조번호', width=88),
+            '유통기한': st.column_config.TextColumn('유통기한', width=88),
+            '출고수량': st.column_config.NumberColumn('출고수량', format='%.0f', width=72),
+            '현재 CTN': st.column_config.TextColumn('현재 CTN', width=68),
+        },
+        key=grid_widget_key,
+        on_change=sync_grid_checkbox_selection,
+        args=(grid_widget_key, selection_key, version_key, row_ids),
     )
-'''
-action_replacement = '''    action_cols = st.columns([2, 2, 2, 1.5])
+    selected_ids = sorted({
+        int(item_id)
+        for item_id in st.session_state.get(selection_key, [])
+    })
+
+    quick_cols = st.columns(3)
+    same_product = quick_cols[0].button('동일제품 전체선택', use_container_width=True)
+    select_visible = quick_cols[1].button('검색 결과 전체선택', use_container_width=True)
+    clear_selection = quick_cols[2].button('선택 해제', use_container_width=True)
+
+    if same_product:
+        if not selected_ids:
+            st.warning('기준이 될 제품을 먼저 한 행 이상 선택하세요.')
+        else:
+            st.session_state[selection_key] = expand_same_product_selection(visible_items, selected_ids)
+            st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+            st.rerun()
+    if select_visible:
+        st.session_state[selection_key] = [int(item['id']) for item in visible_items]
+        st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+        st.rerun()
+    if clear_selection:
+        st.session_state[selection_key] = []
+        st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+        st.rerun()
+
+    st.caption(f'{len(visible_items)}개 행 표시 · {len(selected_ids)}개 선택 · 배정 대상 CTN {active_box_no}')
+    action_cols = st.columns([2, 2, 2, 1.5])
     assign_clicked = action_cols[0].button(
         '선택 제품 전량 담기', type='primary', use_container_width=True, disabled=not selected_ids
     )
@@ -286,14 +561,26 @@ action_replacement = '''    action_cols = st.columns([2, 2, 2, 1.5])
     unassign_clicked = action_cols[3].button(
         'CTN에서 빼기', use_container_width=True, disabled=not selected_ids
     )
-'''
-if source.count(action_marker) != 1:
-    raise RuntimeError('CTN 담기 버튼 구간을 찾지 못했습니다.')
-source = source.replace(action_marker, action_replacement, 1)
 
-partial_click_marker = '''    if unassign_clicked:
-'''
-repeated_click_replacement = '''    if repeated_clicked:
+    if assign_clicked:
+        packing_service.assign_items(case_id, selected_ids, active_box_no)
+        history_service.add(case_id, 'CTN 패킹', f'{len(selected_ids)}개 실제 출고 행 → CTN {active_box_no}')
+        st.session_state[selection_key] = []
+        st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+        st.session_state[pending_active_key] = f'CTN {active_box_no}'
+        st.success(f'{len(selected_ids)}개 행을 CTN {active_box_no}에 담았습니다.')
+        st.rerun()
+
+    if partial_clicked:
+        selected_item = next(item for item in items if int(item['id']) == selected_ids[0])
+        if selected_item['box_no'] is not None:
+            st.error('일부 수량 담기는 미패킹 제품만 사용할 수 있습니다.')
+        else:
+            st.session_state['partial_pack_item_id'] = selected_ids[0]
+            st.session_state['partial_pack_box_no'] = active_box_no
+            st.rerun()
+
+    if repeated_clicked:
         selected_item = next(item for item in items if int(item['id']) == selected_ids[0])
         if selected_item['box_no'] is not None:
             st.error('동일 CTN 반복 담기는 미패킹 제품만 사용할 수 있습니다.')
@@ -303,13 +590,20 @@ repeated_click_replacement = '''    if repeated_clicked:
             st.rerun()
 
     if unassign_clicked:
-'''
-if source.count(partial_click_marker) != 1:
-    raise RuntimeError('CTN 배정 해제 구간을 찾지 못했습니다.')
-source = source.replace(partial_click_marker, repeated_click_replacement, 1)
+        packed_selected_ids = [
+            int(item['id']) for item in items
+            if int(item['id']) in selected_ids and item['box_no'] is not None
+        ]
+        if not packed_selected_ids:
+            st.warning('CTN에서 뺄 패킹 완료 제품을 선택하세요. 미패킹만 표시를 끄면 확인할 수 있습니다.')
+        else:
+            packing_service.unassign_items(case_id, packed_selected_ids)
+            history_service.add(case_id, 'CTN 배정 해제', f'{len(packed_selected_ids)}개 실제 출고 행')
+            st.session_state[selection_key] = []
+            st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+            st.rerun()
 
-partial_dialog_marker = "partial_item_id = st.session_state.get('partial_pack_item_id')\n"
-repeated_dialog = '''repeat_item_id = st.session_state.get('repeat_pack_item_id')
+repeat_item_id = st.session_state.get('repeat_pack_item_id')
 if repeat_item_id:
     repeat_item = next((item for item in items if int(item['id']) == int(repeat_item_id)), None)
     if repeat_item is None or repeat_item['box_no'] is not None:
@@ -426,9 +720,48 @@ if repeat_item_id:
 
 
 partial_item_id = st.session_state.get('partial_pack_item_id')
-'''
-if source.count(partial_dialog_marker) != 1:
-    raise RuntimeError('일부 수량 담기 모달 구간을 찾지 못했습니다.')
-source = source.replace(partial_dialog_marker, repeated_dialog, 1)
+if partial_item_id:
+    partial_item = next((item for item in items if int(item['id']) == int(partial_item_id)), None)
+    if partial_item is None:
+        st.session_state.pop('partial_pack_item_id', None)
+        st.session_state.pop('partial_pack_box_no', None)
+    else:
+        @dialog('선택 제품 일부 수량 담기')
+        def partial_assign_dialog() -> None:
+            total_quantity = int(float(partial_item['requested_qty'] or 0))
+            target_box_no = int(st.session_state.get('partial_pack_box_no', next_box_no))
+            unit = partial_item['unit'] if 'unit' in partial_item.keys() else ''
+            st.write(f"**{partial_item['product_name']}**")
+            st.caption(f'남은 수량 {fmt_number(total_quantity)} {unit} · CTN {target_box_no}')
+            quantity = st.number_input(
+                '담을 수량', min_value=1, max_value=total_quantity,
+                value=total_quantity, step=1,
+                key=f'partial_pack_qty_{case_id}_{partial_item_id}',
+            )
+            confirm_col, cancel_col = st.columns(2)
+            if confirm_col.button('일부 수량 담기', type='primary', use_container_width=True):
+                try:
+                    packing_service.assign_partial_item(
+                        case_id, int(partial_item_id), target_box_no, int(quantity)
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    history_service.add(
+                        case_id, 'CTN 일부 수량 배정',
+                        f"{partial_item['product_name']} {fmt_number(quantity)} → CTN {target_box_no}",
+                    )
+                    st.session_state.pop('partial_pack_item_id', None)
+                    st.session_state.pop('partial_pack_box_no', None)
+                    st.session_state[pending_active_key] = f'CTN {target_box_no}'
+                    st.session_state[selection_key] = []
+                    st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+                    st.rerun()
+            if cancel_col.button('취소', use_container_width=True):
+                st.session_state.pop('partial_pack_item_id', None)
+                st.session_state.pop('partial_pack_box_no', None)
+                st.rerun()
 
-exec(compile(source, str(SOURCE_PATH), 'exec'), globals(), globals())
+        partial_assign_dialog()
+
+
