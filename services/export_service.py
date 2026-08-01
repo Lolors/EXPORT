@@ -2,33 +2,60 @@ from __future__ import annotations
 
 from typing import Any
 
+import streamlit as st
+
 import db
 from utils.dates import now_text
 
 
+@st.cache_data(show_spinner=False, persist='disk', max_entries=128)
+def _cached_case(case_id: int, cache_token: tuple[int, int, int, int]):
+    result = db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
+    return dict(result) if result else None
+
+
 def get_case(case_id: int):
-    return db.row('SELECT * FROM export_cases WHERE id=?', (case_id,))
+    return _cached_case(int(case_id), db.read_cache_token())
 
 
-def list_cases(include_cancelled: bool = False):
+@st.cache_data(show_spinner=False, persist='disk', max_entries=64)
+def _cached_case_list(
+    include_cancelled: bool,
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
     sql = 'SELECT * FROM export_cases'
     if not include_cancelled:
         sql += " WHERE status<>'취소' AND stage<>'취소'"
-    return db.rows(sql + ' ORDER BY COALESCE(NULLIF(actual_ship_date,\'\'),created_at) DESC')
+    rows = db.rows(sql + " ORDER BY COALESCE(NULLIF(actual_ship_date,''),created_at) DESC")
+    return [dict(row) for row in rows]
 
 
-def active_cases(country: str | None = None):
+def list_cases(include_cancelled: bool = False):
+    return _cached_case_list(bool(include_cancelled), db.read_cache_token())
+
+
+@st.cache_data(show_spinner=False, persist='disk', max_entries=64)
+def _cached_active_cases(
+    country: str,
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
     sql = "SELECT * FROM export_cases WHERE status='진행중' AND stage NOT IN ('완료','취소')"
     params: tuple[Any, ...] = ()
     if country:
         sql += ' AND country=?'
         params = (country,)
-    return db.rows(sql + ' ORDER BY created_at', params)
+    return [dict(row) for row in db.rows(sql + ' ORDER BY created_at', params)]
 
 
-def intake_editable_cases():
-    """Current export cases whose intake may still need correction."""
-    return db.rows(
+def active_cases(country: str | None = None):
+    return _cached_active_cases(str(country or ''), db.read_cache_token())
+
+
+@st.cache_data(show_spinner=False, persist='disk', max_entries=32)
+def _cached_intake_editable_cases(
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
+    rows = db.rows(
         '''SELECT *
            FROM export_cases
            WHERE case_type<>'historical'
@@ -39,13 +66,51 @@ def intake_editable_cases():
              )
            ORDER BY COALESCE(NULLIF(actual_ship_date,''),created_at) DESC'''
     )
+    return [dict(row) for row in rows]
 
 
-def get_order_items(case_id: int):
-    return db.rows(
+def intake_editable_cases():
+    """Current export cases whose intake may still need correction."""
+    return _cached_intake_editable_cases(db.read_cache_token())
+
+
+@st.cache_data(show_spinner=False, persist='disk', max_entries=128)
+def _cached_order_items(
+    case_id: int,
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
+    rows = db.rows(
         'SELECT id, product_name, quantity, unit, created_at FROM order_items WHERE case_id=? ORDER BY id',
         (case_id,),
     )
+    return [dict(row) for row in rows]
+
+
+def get_order_items(case_id: int):
+    return _cached_order_items(int(case_id), db.read_cache_token())
+
+
+@st.cache_data(show_spinner=False, persist='disk', max_entries=64)
+def _cached_order_items_for_cases(
+    case_ids: tuple[int, ...],
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
+    if not case_ids:
+        return []
+    placeholders = ','.join('?' for _ in case_ids)
+    rows = db.rows(
+        f'''SELECT case_id, id, product_name, quantity, unit
+            FROM order_items
+            WHERE case_id IN ({placeholders})
+            ORDER BY case_id, id''',
+        case_ids,
+    )
+    return [dict(row) for row in rows]
+
+
+def get_order_items_for_cases(case_ids) -> list[dict]:
+    normalized = tuple(sorted({int(case_id) for case_id in case_ids}))
+    return _cached_order_items_for_cases(normalized, db.read_cache_token())
 
 
 def get_order_items_with_actual(case_id: int):
