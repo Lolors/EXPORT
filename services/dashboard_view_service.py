@@ -94,6 +94,21 @@ def timeline_date(case) -> str:
     return created_at
 
 
+def timeline_period(case) -> tuple[str, str]:
+    """Return the start/end dates used by the dashboard Gantt bar.
+
+    Historical imports represent an already-finished shipment, so their
+    registration date is not part of the visual duration.  They are shown as
+    a one-day bar on the actual shipment date instead.
+    """
+    export_no = str(case['export_no'] or '').strip().upper()
+    actual_ship_date = str(case['actual_ship_date'] or '').strip()[:10]
+    created_at = str(case['created_at'] or '').strip()[:10]
+    if export_no.startswith('HIS') and actual_ship_date:
+        return actual_ship_date, actual_ship_date
+    return created_at, actual_ship_date
+
+
 def timeline_date_label(value: object) -> str:
     raw = str(value or '').strip()[:10]
     try:
