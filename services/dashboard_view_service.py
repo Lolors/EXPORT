@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import date, datetime, timedelta
 
 from services import export_service
@@ -42,12 +43,33 @@ def recent_order_cases(
     reference: datetime | None = None,
     month_count: int = 2,
 ) -> list:
-    prefixes = set(_recent_month_prefixes(reference or datetime.now(), month_count))
+    reference_date = (reference or datetime.now()).date()
+    cutoff = _months_before(reference_date, month_count)
     return [
         case
         for case in cases
-        if timeline_date(case)[:7] in prefixes
+        if cutoff <= _parse_case_date(case['created_at']) <= reference_date
     ]
+
+
+def _months_before(reference_date: date, month_count: int) -> date:
+    target_month = reference_date.month - max(1, month_count)
+    target_year = reference_date.year
+    while target_month <= 0:
+        target_year -= 1
+        target_month += 12
+    return date(
+        target_year,
+        target_month,
+        min(reference_date.day, monthrange(target_year, target_month)[1]),
+    )
+
+
+def _parse_case_date(value: object) -> date:
+    try:
+        return date.fromisoformat(str(value or '').strip()[:10])
+    except ValueError:
+        return date.min
 
 
 def timeline_date(case) -> str:
@@ -74,11 +96,12 @@ def timeline_bounds(rows: list[dict], *, today: date | None = None) -> tuple[dat
     reference = today or date.today()
     parsed_dates: list[date] = []
     for row in rows:
-        raw = str(row.get('date') or '').strip()[:10]
-        try:
-            parsed_dates.append(date.fromisoformat(raw))
-        except ValueError:
-            continue
+        for field in ('start_date', 'end_date'):
+            raw = str(row.get(field) or '').strip()[:10]
+            try:
+                parsed_dates.append(date.fromisoformat(raw))
+            except ValueError:
+                continue
     earliest = min(parsed_dates, default=reference)
     latest = max(parsed_dates, default=reference)
     return min(earliest, reference) - timedelta(days=14), max(latest, reference) + timedelta(days=14)
@@ -89,15 +112,9 @@ def recent_order_period_label(
     reference: datetime | None = None,
     month_count: int = 2,
 ) -> str:
-    prefixes = list(reversed(_recent_month_prefixes(reference or datetime.now(), month_count)))
-    start_year, start_month = prefixes[0].split('-')
-    end_year, end_month = prefixes[-1].split('-')
-    if start_year == end_year:
-        return f'{start_year}년 {int(start_month)}월~{int(end_month)}월'
-    return (
-        f'{start_year}년 {int(start_month)}월~'
-        f'{end_year}년 {int(end_month)}월'
-    )
+    reference_date = (reference or datetime.now()).date()
+    cutoff = _months_before(reference_date, month_count)
+    return f'{cutoff.isoformat()}~{reference_date.isoformat()}'
 
 def stage_label(value: object) -> str:
     stage = str(value or '').strip()
@@ -126,3 +143,16 @@ def order_products_summary(case_id: int) -> str:
     if remaining_count > 0:
         summary += f' + 그 외 {remaining_count}품목'
     return summary
+
+
+def order_products_detail(case_id: int) -> str:
+    lines = []
+    for item in export_service.get_order_items(case_id):
+        name = str(item['product_name'] or '').strip()
+        if not name:
+            continue
+        quantity = float(item['quantity'] or 0)
+        quantity_text = f'{quantity:g}'
+        unit = str(item['unit'] or '').strip()
+        lines.append(f'{name} · {quantity_text}{unit}')
+    return '\n'.join(lines) or '주문목록 없음'
