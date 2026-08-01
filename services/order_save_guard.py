@@ -151,6 +151,14 @@ def _database_snapshot(case_id: int) -> list[tuple]:
     ]
 
 
+def reset_intake_order_editor_state(case_id: int) -> None:
+    """Discard a stale intake-order draft so the editor reloads from the database."""
+    draft_key = f'shipment_order_draft_{case_id}'
+    version_key = f'shipment_order_editor_version_{case_id}'
+    st.session_state.pop(draft_key, None)
+    st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+
+
 def _after_order_change(case_id: int) -> None:
     case = db.row('SELECT stage, status, case_type FROM export_cases WHERE id=?', (case_id,))
     if (
@@ -166,10 +174,7 @@ def _after_order_change(case_id: int) -> None:
     shipment_service.cleanup_invalid_links(case_id)
     shipment_service.sync_case_stage(case_id)
 
-    draft_key = f'shipment_order_draft_{case_id}'
-    version_key = f'shipment_order_editor_version_{case_id}'
-    st.session_state.pop(draft_key, None)
-    st.session_state[version_key] = int(st.session_state.get(version_key, 0)) + 1
+    reset_intake_order_editor_state(case_id)
 
 
 def save_order_items(case_id: int, edited) -> None:
