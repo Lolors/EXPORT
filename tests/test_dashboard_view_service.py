@@ -9,6 +9,7 @@ from services.dashboard_view_service import (
     timeline_bounds,
     timeline_date,
     timeline_date_label,
+    timeline_period,
 )
 
 
@@ -36,6 +37,28 @@ class DashboardTimelineTests(unittest.TestCase):
             'created_at': '2026-07-05 09:30:00',
         }
         self.assertEqual('2026-07-05', timeline_date(case))
+
+    def test_historical_case_is_a_one_day_bar_on_ship_date(self) -> None:
+        case = {
+            'export_no': 'HIS-2025-001',
+            'actual_ship_date': '2025-03-14',
+            'created_at': '2026-07-31 12:00:00',
+        }
+        self.assertEqual(
+            ('2025-03-14', '2025-03-14'),
+            timeline_period(case),
+        )
+
+    def test_current_case_keeps_registration_to_shipping_period(self) -> None:
+        case = {
+            'export_no': 'EXP-2026-001',
+            'actual_ship_date': '2026-07-30',
+            'created_at': '2026-06-08 09:30:00',
+        }
+        self.assertEqual(
+            ('2026-06-08', '2026-07-30'),
+            timeline_period(case),
+        )
 
     def test_recent_filter_uses_registration_date(self) -> None:
         cases = [
