@@ -23,7 +23,8 @@ def normalize_product_name(value: str) -> str:
     return re.sub(r'[^0-9a-z가-힣%]+', '', text)
 
 
-def _editable_cases_query() -> list[dict]:
+@st.cache_data(show_spinner=False, persist='disk', max_entries=64)
+def _editable_cases_query(cache_token: tuple[int, int, int, int]) -> list[dict]:
     rows = db.rows(
         '''WITH product_summary AS (
                SELECT case_id, GROUP_CONCAT(product_name, ', ') AS product_names
@@ -42,36 +43,47 @@ def _editable_cases_query() -> list[dict]:
 
 
 def clear_editable_cases_cache() -> None:
-    # 목록은 항상 DB에서 직접 읽으므로 별도 캐시를 비울 필요가 없다.
-    return None
+    _editable_cases_query.clear()
+    _cached_orders_for_case.clear()
 
 
 def list_editable_cases() -> list[dict]:
-    return _editable_cases_query()
+    return _editable_cases_query(db.read_cache_token())
 
 
-def list_for_case(case_id: int):
-    return db.rows(
+@st.cache_data(show_spinner=False, persist='disk', max_entries=256)
+def _cached_orders_for_case(
+    case_id: int,
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
+    rows = db.rows(
         '''SELECT id, product_name, quantity, unit, purchase_price, created_at
            FROM order_items
            WHERE case_id=?
            ORDER BY id''',
         (case_id,),
     )
+    return [dict(row) for row in rows]
+
+
+def list_for_case(case_id: int):
+    return _cached_orders_for_case(int(case_id), db.read_cache_token())
 
 
 def get_order_items_dataframe(case_id: int):
     import pandas as pd
 
-    rows = db.rows(
-        '''SELECT o.id AS _id, o.product_name AS 제품명, o.quantity AS 수량,
-                  o.unit AS 단위, o.purchase_price AS 매입가
-           FROM order_items o
-           WHERE o.case_id=?
-           ORDER BY o.id''',
-        (case_id,),
-    )
-    return pd.DataFrame([dict(row) for row in rows])
+    rows = list_for_case(case_id)
+    return pd.DataFrame([
+        {
+            '_id': row['id'],
+            '제품명': row['product_name'],
+            '수량': row['quantity'],
+            '단위': row['unit'],
+            '매입가': row['purchase_price'],
+        }
+        for row in rows
+    ])
 
 
 def _append_price_history(
