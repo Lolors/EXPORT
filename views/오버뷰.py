@@ -8,6 +8,7 @@ import streamlit as st
 from components.dashboard_timeline import render_order_timeline
 from services import export_service, overview_service
 from services.dashboard_view_service import (
+    order_products_detail as _order_products_detail,
     order_products_summary as _order_products_summary,
     recent_order_cases,
     recent_order_period_label,
@@ -18,7 +19,7 @@ from services.dashboard_view_service import (
 
 
 st.title('대시보드')
-st.caption('타임라인 기준 최근 2개월 주문과 직접 기록한 확인사항을 한 화면에서 관리합니다.')
+st.caption('최근 1개월 주문의 등록일부터 출고일까지 걸린 기간과 확인사항을 한 화면에서 관리합니다.')
 
 st.markdown(
     '''
@@ -66,7 +67,7 @@ st.markdown(
 
 cases = recent_order_cases(
     export_service.list_cases(),
-    month_count=2,
+    month_count=1,
 )
 cases = sorted(
     cases,
@@ -79,22 +80,24 @@ cases = sorted(
     reverse=True,
 )
 
-st.markdown(f'### 최근 2개월 주문 건 ({recent_order_period_label(month_count=2)})')
+st.markdown(f'### 최근 1개월 주문 건 ({recent_order_period_label(month_count=1)})')
 if not cases:
-    st.info('타임라인 기준 최근 2개월 주문 건이 없습니다.')
+    st.info('최근 1개월 동안 등록된 주문 건이 없습니다.')
 else:
     timeline_rows = []
     for case in cases:
         raw_stage = str(case['stage'] or '').strip() or '단계 미입력'
         country = str(case['country'] or '').strip() or '국가 미입력'
         buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
+        transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
         timeline_rows.append({
-            'date': timeline_date(case),
-            'date_label': timeline_date(case),
+            'start_date': str(case['created_at'] or '').strip()[:10],
+            'end_date': str(case['actual_ship_date'] or '').strip()[:10],
             'export_no': str(case['export_no'] or '').strip() or '수출번호 미입력',
             'party': f'{country} · {buyer}',
+            'bar_label': f'{country} - {buyer} - {transport}',
             'stage': stage_label(raw_stage),
-            'products': _order_products_summary(int(case['id'])),
+            'products': _order_products_detail(int(case['id'])),
         })
     render_order_timeline(timeline_rows)
 
