@@ -4,6 +4,7 @@ from calendar import month_abbr
 from datetime import date, timedelta
 from html import escape
 import json
+from pathlib import Path
 
 import streamlit.components.v1 as components
 
@@ -12,6 +13,11 @@ from services.dashboard_view_service import timeline_bounds
 
 DAY_WIDTH = 44
 LABEL_WIDTH = 0
+
+_timeline_component = components.declare_component(
+    'dashboard_order_timeline',
+    path=str(Path(__file__).with_name('dashboard_timeline_component')),
+)
 
 
 def _parse_date(value: object) -> date | None:
@@ -33,9 +39,9 @@ def _month_segments(start: date, end: date) -> list[tuple[str, int]]:
     return segments
 
 
-def render_order_timeline(rows: list[dict]) -> None:
+def render_order_timeline(rows: list[dict]) -> int | None:
     if not rows:
-        return
+        return None
 
     today = date.today()
     start, end = timeline_bounds(rows, today=today)
@@ -79,16 +85,18 @@ def render_order_timeline(rows: list[dict]) -> None:
         bar_background = escape(str(row.get('bar_background') or '#94a3b8'), quote=True)
         bar_text = escape(str(row.get('bar_text') or '#1f2937'), quote=True)
         bar_accent = escape(str(row.get('bar_accent') or '#64748b'), quote=True)
+        case_id = int(row.get('case_id') or 0)
         body_rows.append(
             '<div class="order-row">'
             f'<div class="row-track">{grid_columns}'
-            f'<div class="order-bar" data-start="{start_date.isoformat()}" '
+            f'<button class="order-bar" type="button" data-case-id="{case_id}" '
+            f'data-start="{start_date.isoformat()}" '
             f'data-end="{end_date.isoformat()}" '
             f'title="{tooltip}" aria-label="{tooltip}" '
             f'style="left:{offset}px;width:{width}px;--bar-bg:{bar_background};'
             f'--bar-text:{bar_text};--bar-accent:{bar_accent}">'
             f'<span class="bar-party">{bar_label}</span>'
-            f'<span class="bar-products">{product_summary}</span></div></div></div>'
+            f'<span class="bar-products">{product_summary}</span></button></div></div>'
         )
 
     payload = json.dumps({
@@ -118,7 +126,7 @@ body {{ margin: 0; color: #2d333b; font-family: Arial, "Noto Sans KR", sans-seri
 .row-track {{ position:relative; width:{len(dates) * DAY_WIDTH}px; flex:0 0 {len(dates) * DAY_WIDTH}px; }}
 .grid-day {{ display:inline-block; width:{DAY_WIDTH}px; height:100%; border-right:1px solid #edf0f3; }}
 .grid-day.today-grid {{ border-left:2px solid #3b82f6; }}
-.order-bar {{ position:absolute; top:14px; height:48px; padding:6px 10px 5px 12px; border-radius:7px; background:var(--bar-bg); color:var(--bar-text); font-size:13px; font-weight:800; box-shadow:0 2px 6px rgba(31,41,55,.18); overflow:visible; display:flex; flex-direction:column; justify-content:center; gap:2px; z-index:2; }}
+.order-bar {{ position:absolute; top:14px; height:48px; padding:6px 10px 5px 12px; border:0; border-radius:7px; background:var(--bar-bg); color:var(--bar-text); font:inherit; font-size:13px; font-weight:800; text-align:left; box-shadow:0 2px 6px rgba(31,41,55,.18); overflow:visible; display:flex; flex-direction:column; justify-content:center; gap:2px; z-index:2; cursor:pointer; }}
 .order-bar:hover,.order-bar:focus {{ z-index:4; outline:2px solid color-mix(in srgb, var(--bar-accent) 70%, white); outline-offset:2px; filter:brightness(.98); }}
 .order-bar::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:7px 0 0 7px; background:var(--bar-accent); }}
 .order-bar span {{ display:block; margin-left:3px; width:max-content; max-width:none; overflow:visible; white-space:nowrap; text-overflow:clip; text-shadow:0 1px 1px rgba(255,255,255,.28); }}
@@ -153,6 +161,27 @@ document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('clic
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
   const views={{today:3,week:7,month:31,quarter:92}};setZoom(views[btn.dataset.view]);
 }}));
+document.querySelectorAll('.order-bar').forEach(bar=>bar.addEventListener('click',()=>{{
+  window.parent.postMessage({{
+    isStreamlitMessage:true,
+    type:'streamlit:setComponentValue',
+    value:Number(bar.dataset.caseId),
+  }}, '*');
+}}));
 requestAnimationFrame(()=>{{setZoom(31);}});
+window.parent.postMessage({{
+  isStreamlitMessage:true,
+  type:'streamlit:setFrameHeight',
+  height:{height},
+}}, '*');
 </script></body></html>'''
-    components.html(document, height=height, scrolling=False)
+    selected_case_id = _timeline_component(
+        document=document,
+        height=height,
+        key='dashboard_order_timeline',
+        default=None,
+    )
+    try:
+        return int(selected_case_id) if selected_case_id is not None else None
+    except (TypeError, ValueError):
+        return None
