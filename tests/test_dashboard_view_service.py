@@ -5,6 +5,7 @@ import unittest
 
 from services.dashboard_view_service import (
     recent_order_cases,
+    stage_bar_colors,
     timeline_bounds,
     timeline_date,
     timeline_date_label,
@@ -64,6 +65,10 @@ class DashboardTimelineTests(unittest.TestCase):
             (date(2026, 5, 25), date(2026, 8, 16)),
             timeline_bounds(rows, today=date(2026, 7, 31)),
         )
+
+    def test_timeline_bar_colors_follow_display_stage(self) -> None:
+        self.assertEqual(stage_bar_colors('출고 대기'), stage_bar_colors('패킹 대기'))
+        self.assertNotEqual(stage_bar_colors('패킹 대기'), stage_bar_colors('패킹 완료'))
 
 
 if __name__ == '__main__':
