@@ -16,6 +16,7 @@ from services.dashboard_view_service import (
     stage_label,
     stage_style as _stage_style,
     timeline_date,
+    timeline_period,
 )
 
 
@@ -93,10 +94,11 @@ else:
         transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
         product_summary = _order_products_summary(int(case['id']))
         bar_background, bar_text, bar_accent = stage_bar_colors(raw_stage)
+        start_date, end_date = timeline_period(case)
         timeline_rows.append({
             'case_id': int(case['id']),
-            'start_date': str(case['created_at'] or '').strip()[:10],
-            'end_date': str(case['actual_ship_date'] or '').strip()[:10],
+            'start_date': start_date,
+            'end_date': end_date,
             'export_no': str(case['export_no'] or '').strip() or '수출번호 미입력',
             'party': f'{country} · {buyer}',
             'bar_label': f'{country} - {buyer} - {transport}',
