@@ -63,21 +63,26 @@ def render_order_timeline(rows: list[dict]) -> None:
 
     body_rows: list[str] = []
     for row in rows:
-        row_date = _parse_date(row.get('date')) or start
-        offset = (row_date - start).days * DAY_WIDTH + 7
+        start_date = _parse_date(row.get('start_date')) or start
+        requested_end = _parse_date(row.get('end_date'))
+        end_date = max(start_date, requested_end or today)
+        offset = (start_date - start).days * DAY_WIDTH + 4
+        width = max(DAY_WIDTH - 8, ((end_date - start_date).days + 1) * DAY_WIDTH - 8)
         export_no = escape(str(row.get('export_no') or '수출번호 미입력'))
         party = escape(str(row.get('party') or '국가·바이어 미입력'))
         stage = escape(str(row.get('stage') or '단계 미입력'))
-        products = escape(str(row.get('products') or '-'))
-        date_label = escape(str(row.get('date_label') or row_date.isoformat()))
+        bar_label = escape(str(row.get('bar_label') or party))
+        products = escape(str(row.get('products') or '-'), quote=True).replace('\n', '&#10;')
+        period = f'{start_date.isoformat()} ~ {end_date.isoformat()}'
+        tooltip = escape(f'{export_no}\n{period}\n{stage}\n주문목록:\n', quote=True) + products
         body_rows.append(
             '<div class="order-row">'
             f'<div class="order-label"><strong>{export_no}</strong>'
             f'<span>{party}</span></div>'
             f'<div class="row-track">{grid_columns}'
-            f'<div class="order-bar" style="left:{offset}px" '
-            f'title="{export_no} | {date_label} | {stage} | {products}">'
-            f'<span>{stage}</span></div></div></div>'
+            f'<div class="order-bar" data-start="{start_date.isoformat()}" '
+            f'data-end="{end_date.isoformat()}" style="left:{offset}px;width:{width}px" '
+            f'title="{tooltip}"><span>{bar_label}</span></div></div></div>'
         )
 
     payload = json.dumps({
@@ -111,7 +116,7 @@ body {{ margin: 0; color: #2d333b; font-family: Arial, "Noto Sans KR", sans-seri
 .row-track {{ position:relative; width:{len(dates) * DAY_WIDTH}px; flex:0 0 {len(dates) * DAY_WIDTH}px; }}
 .grid-day {{ display:inline-block; width:{DAY_WIDTH}px; height:100%; border-right:1px solid #edf0f3; }}
 .grid-day.today-grid {{ border-left:2px solid #3b82f6; }}
-.order-bar {{ position:absolute; top:17px; width:92px; height:28px; padding:6px 9px; border-radius:6px; background:#92c943; color:#29420a; font-size:11px; font-weight:800; box-shadow:0 2px 5px rgba(71,111,17,.16); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:help; }}
+.order-bar {{ position:absolute; top:17px; height:28px; padding:6px 9px; border-radius:6px; background:#92c943; color:#29420a; font-size:11px; font-weight:800; box-shadow:0 2px 5px rgba(71,111,17,.16); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:help; }}
 .order-bar::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:#6da727; }}
 .order-bar span {{ margin-left:3px; }}
 @media(max-width:700px) {{ .corner,.order-label {{ width:190px; flex-basis:190px; }} .canvas {{ min-width:{190 + len(dates) * DAY_WIDTH}px; }} }}
@@ -132,7 +137,13 @@ function setZoom(days) {{
   document.querySelectorAll('.day,.grid-day').forEach(el=>{{el.style.width=width+'px';el.style.flexBasis=width+'px';}});
   document.querySelectorAll('.month').forEach(el=>{{const count=Math.round(parseFloat(el.style.width)/config.dayWidth);el.style.width=(count*width)+'px';}});
   document.querySelectorAll('.row-track').forEach(el=>{{el.style.width=({len(dates)}*width)+'px';el.style.flexBasis=({len(dates)}*width)+'px';}});
-  document.querySelectorAll('.order-bar').forEach((el,i)=>{{const date='{start.isoformat()}'; const target={json.dumps([str(row.get('date') or '')[:10] for row in rows])}[i]; const diff=Math.round((new Date(target)-new Date(date))/86400000);el.style.left=(diff*width+7)+'px';}});
+  document.querySelectorAll('.order-bar').forEach(el=>{{
+    const axisStart=new Date('{start.isoformat()}');
+    const barStart=new Date(el.dataset.start); const barEnd=new Date(el.dataset.end);
+    const offset=Math.round((barStart-axisStart)/86400000);
+    const duration=Math.max(1,Math.round((barEnd-barStart)/86400000)+1);
+    el.style.left=(offset*width+4)+'px'; el.style.width=Math.max(width-8,duration*width-8)+'px';
+  }});
   config.dayWidth=width; config.todayOffset={(today-start).days}*width; centerToday();
 }}
 document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('click',()=>{{
