@@ -169,6 +169,11 @@ with action_left:
             except ValueError as exc:
                 st.error(str(exc))
             else:
+                # The target case may already have an intake-order editor draft in
+                # session state.  Its shipment rows are read directly from the DB,
+                # while that stale draft would hide the newly moved order rows.
+                order_save_guard.reset_intake_order_editor_state(target_case_id)
+                order_save_guard.reset_intake_order_editor_state(case_id)
                 for key in list(st.session_state):
                     if key in {'editable_case_table_v2', 'order_case_id'} or key.endswith(f'_{case_id}'):
                         st.session_state.pop(key, None)
