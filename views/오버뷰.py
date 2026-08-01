@@ -12,6 +12,7 @@ from services.dashboard_view_service import (
     order_products_summary as _order_products_summary,
     recent_order_cases,
     recent_order_period_label,
+    stage_bar_colors,
     stage_label,
     stage_style as _stage_style,
     timeline_date,
@@ -91,7 +92,9 @@ else:
         buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
         transport = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
         product_summary = _order_products_summary(int(case['id']))
+        bar_background, bar_text, bar_accent = stage_bar_colors(raw_stage)
         timeline_rows.append({
+            'case_id': int(case['id']),
             'start_date': str(case['created_at'] or '').strip()[:10],
             'end_date': str(case['actual_ship_date'] or '').strip()[:10],
             'export_no': str(case['export_no'] or '').strip() or '수출번호 미입력',
@@ -100,6 +103,9 @@ else:
             'stage': stage_label(raw_stage),
             'product_summary': product_summary,
             'products': _order_products_detail(int(case['id'])),
+            'bar_background': bar_background,
+            'bar_text': bar_text,
+            'bar_accent': bar_accent,
         })
     render_order_timeline(timeline_rows)
 
