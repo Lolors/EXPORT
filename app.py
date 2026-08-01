@@ -104,9 +104,6 @@ def main() -> None:
     navigation = st.navigation(PAGES, position='sidebar')
     check_usb_restore_before_start()
     db.init_db()
-    if not st.session_state.get('internal_storage_items_hidden'):
-        folder_service.hide_existing_internal_items()
-        st.session_state['internal_storage_items_hidden'] = True
     show_usb_backup_status()
     initialize_document_filter_defaults()
     st.markdown(
