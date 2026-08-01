@@ -75,6 +75,7 @@ with management_col:
         disabled=not folder_confirm,
         use_container_width=True,
     ):
+        folder_service.hide_existing_internal_items()
         all_cases = export_service.list_cases(include_cancelled=False)
         successes: list[str] = []
         failures: list[str] = []
