@@ -9,6 +9,7 @@ import string
 import time
 from contextlib import closing
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 USB_MARKER_NAME = '.export_usb.json'
@@ -126,16 +127,9 @@ def usb_database_path(root: Path | None = None) -> Path | None:
     return usb_root / USB_DB_DIR / USB_DB_NAME
 
 
-def database_info(path: Path) -> dict:
-    if not path.exists():
-        return {
-            'exists': False,
-            'version': 0,
-            'modified_at': None,
-            'size': 0,
-            'logical_digest': '',
-        }
-
+@lru_cache(maxsize=32)
+def _cached_database_info(path_text: str, modified_ns: int, size: int) -> dict:
+    path = Path(path_text)
     version = DB_VERSION
     logical_digest = ''
     try:
@@ -152,14 +146,27 @@ def database_info(path: Path) -> dict:
         version = 0
         logical_digest = ''
 
-    stat = path.stat()
     return {
         'exists': True,
         'version': version,
-        'modified_at': datetime.fromtimestamp(stat.st_mtime),
-        'size': stat.st_size,
+        'modified_at': datetime.fromtimestamp(modified_ns / 1_000_000_000),
+        'size': size,
         'logical_digest': logical_digest,
     }
+
+
+def database_info(path: Path) -> dict:
+    if not path.exists():
+        return {
+            'exists': False,
+            'version': 0,
+            'modified_at': None,
+            'size': 0,
+            'logical_digest': '',
+        }
+
+    stat = path.stat()
+    return dict(_cached_database_info(str(path.resolve()), stat.st_mtime_ns, stat.st_size))
 
 
 def compare_databases(local_path: Path, usb_path: Path | None) -> dict:
