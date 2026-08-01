@@ -109,7 +109,10 @@ else:
             'bar_text': bar_text,
             'bar_accent': bar_accent,
         })
-    render_order_timeline(timeline_rows)
+    selected_case_id = render_order_timeline(timeline_rows)
+    if selected_case_id is not None:
+        st.session_state['actual_packing_case_id'] = selected_case_id
+        st.switch_page('views/실출고_입력.py')
 
     with st.expander('주문 표로 보기', expanded=True):
         st.caption('아래 표에서는 컬럼별 정렬과 검색을 사용할 수 있습니다.')
