@@ -134,6 +134,30 @@ def timeline_bounds(rows: list[dict], *, today: date | None = None) -> tuple[dat
     return min(earliest, reference) - timedelta(days=14), max(latest, reference) + timedelta(days=14)
 
 
+def plotly_selected_case_id(event: object) -> int | None:
+    """Extract the clicked case id from Streamlit's Plotly selection result."""
+    try:
+        points = event.selection.points
+    except (AttributeError, KeyError):
+        try:
+            points = event['selection']['points']
+        except (KeyError, TypeError):
+            return None
+    if not points:
+        return None
+    point = points[0]
+    try:
+        customdata = point['customdata']
+    except (KeyError, TypeError):
+        customdata = getattr(point, 'customdata', None)
+    if isinstance(customdata, (list, tuple)):
+        customdata = customdata[0] if customdata else None
+    try:
+        return int(customdata)
+    except (TypeError, ValueError):
+        return None
+
+
 def recent_order_period_label(
     *,
     reference: datetime | None = None,
