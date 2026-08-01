@@ -36,12 +36,12 @@ class DashboardTimelineTests(unittest.TestCase):
         }
         self.assertEqual('2026-07-05', timeline_date(case))
 
-    def test_recent_filter_uses_timeline_date(self) -> None:
+    def test_recent_filter_uses_registration_date(self) -> None:
         cases = [
             {
                 'export_no': 'HIS-2024-001',
                 'actual_ship_date': '2024-02-01',
-                'created_at': '2026-07-31 12:00:00',
+                'created_at': '2026-06-29 12:00:00',
             },
             {
                 'export_no': 'EXP-2026-001',
@@ -49,16 +49,19 @@ class DashboardTimelineTests(unittest.TestCase):
                 'created_at': '2026-07-01 12:00:00',
             },
         ]
-        result = recent_order_cases(cases, reference=datetime(2026, 7, 31), month_count=2)
+        result = recent_order_cases(cases, reference=datetime(2026, 7, 31), month_count=1)
         self.assertEqual(['EXP-2026-001'], [case['export_no'] for case in result])
 
     def test_timeline_date_label(self) -> None:
         self.assertEqual('7월 31일', timeline_date_label('2026-07-31'))
 
     def test_timeline_bounds_include_today_and_padding(self) -> None:
-        rows = [{'date': '2026-06-08'}, {'date': '2026-07-20'}]
+        rows = [
+            {'start_date': '2026-06-08', 'end_date': '2026-06-28'},
+            {'start_date': '2026-07-20', 'end_date': '2026-08-02'},
+        ]
         self.assertEqual(
-            (date(2026, 5, 25), date(2026, 8, 14)),
+            (date(2026, 5, 25), date(2026, 8, 16)),
             timeline_bounds(rows, today=date(2026, 7, 31)),
         )
 
