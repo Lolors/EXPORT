@@ -11,7 +11,7 @@ from services.dashboard_view_service import timeline_bounds
 
 
 DAY_WIDTH = 44
-LABEL_WIDTH = 300
+LABEL_WIDTH = 0
 
 
 def _parse_date(value: object) -> date | None:
@@ -76,14 +76,20 @@ def render_order_timeline(rows: list[dict]) -> None:
         products = escape(str(row.get('products') or '-'), quote=True).replace('\n', '&#10;')
         period = f'{start_date.isoformat()} ~ {end_date.isoformat()}'
         tooltip = escape(f'{export_no}\n{period}\n{stage}\n주문목록:\n', quote=True) + products
+        case_id = int(row.get('case_id') or 0)
+        bar_background = escape(str(row.get('bar_background') or '#94a3b8'), quote=True)
+        bar_text = escape(str(row.get('bar_text') or '#1f2937'), quote=True)
+        bar_accent = escape(str(row.get('bar_accent') or '#64748b'), quote=True)
         body_rows.append(
             '<div class="order-row">'
-            f'<div class="order-label"><strong>{export_no}</strong>'
-            f'<span>{party}</span><span class="label-products">{product_summary}</span></div>'
             f'<div class="row-track">{grid_columns}'
             f'<div class="order-bar" data-start="{start_date.isoformat()}" '
-            f'data-end="{end_date.isoformat()}" style="left:{offset}px;width:{width}px" '
-            f'title="{tooltip}"><span class="bar-party">{bar_label}</span>'
+            f'data-case-id="{case_id}" tabindex="0" role="link" '
+            f'data-end="{end_date.isoformat()}" '
+            f'title="{tooltip}" aria-label="{tooltip}" '
+            f'style="left:{offset}px;width:{width}px;--bar-bg:{bar_background};'
+            f'--bar-text:{bar_text};--bar-accent:{bar_accent}">'
+            f'<span class="bar-party">{bar_label}</span>'
             f'<span class="bar-products">{product_summary}</span></div></div></div>'
         )
 
@@ -103,7 +109,6 @@ body {{ margin: 0; color: #2d333b; font-family: Arial, "Noto Sans KR", sans-seri
 .timeline {{ overflow:auto; max-height:{height - 50}px; position:relative; }}
 .canvas {{ min-width:{LABEL_WIDTH + len(dates) * DAY_WIDTH}px; }}
 .month-row,.day-row,.order-row {{ display:flex; min-width:max-content; }}
-.corner {{ position:sticky; left:0; z-index:8; width:{LABEL_WIDTH}px; flex:0 0 {LABEL_WIDTH}px; padding:9px 14px; border-right:1px solid #d5d9df; background:#f8f9fb; font-weight:700; }}
 .month-row {{ position:sticky; top:0; z-index:7; height:34px; border-bottom:1px solid #d5d9df; }}
 .month {{ flex:0 0 auto; padding:8px 12px; border-right:1px solid #d5d9df; background:#f1f2f4; font-weight:700; color:#5d6570; }}
 .day-row {{ position:sticky; top:34px; z-index:7; height:35px; border-bottom:1px solid #cfd4da; background:#fff; }}
@@ -112,28 +117,30 @@ body {{ margin: 0; color: #2d333b; font-family: Arial, "Noto Sans KR", sans-seri
 .day.today-day span {{ padding:3px 7px; border-radius:8px; background:#3b82f6; color:#fff; font-weight:800; }}
 .order-row {{ height:76px; border-bottom:1px solid #edf0f3; }}
 .order-row:last-child {{ border-bottom:0; }}
-.order-label {{ position:sticky; left:0; z-index:5; width:{LABEL_WIDTH}px; flex:0 0 {LABEL_WIDTH}px; display:flex; flex-direction:column; justify-content:center; gap:3px; padding:8px 14px; border-right:1px solid #d5d9df; background:#fff; }}
-.order-label strong {{ color:#293b55; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-.order-label span {{ color:#737b87; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-.order-label .label-products {{ color:#3f536e; font-size:11px; font-weight:700; }}
 .row-track {{ position:relative; width:{len(dates) * DAY_WIDTH}px; flex:0 0 {len(dates) * DAY_WIDTH}px; }}
 .grid-day {{ display:inline-block; width:{DAY_WIDTH}px; height:100%; border-right:1px solid #edf0f3; }}
 .grid-day.today-grid {{ border-left:2px solid #3b82f6; }}
-.order-bar {{ position:absolute; top:14px; height:48px; padding:6px 10px 5px 12px; border-radius:7px; background:#92c943; color:#29420a; font-size:11px; font-weight:800; box-shadow:0 2px 5px rgba(71,111,17,.16); overflow:hidden; cursor:help; display:flex; flex-direction:column; justify-content:center; gap:2px; }}
-.order-bar::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:#6da727; }}
-.order-bar span {{ display:block; margin-left:3px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }}
-.order-bar .bar-products {{ color:#35570d; font-size:10px; font-weight:700; opacity:.9; }}
-@media(max-width:700px) {{ .corner,.order-label {{ width:190px; flex-basis:190px; }} .canvas {{ min-width:{190 + len(dates) * DAY_WIDTH}px; }} }}
+.order-bar {{ position:absolute; top:14px; height:48px; padding:6px 10px 5px 12px; border-radius:7px; background:var(--bar-bg); color:var(--bar-text); font-size:11px; font-weight:800; box-shadow:0 2px 6px rgba(31,41,55,.18); overflow:visible; cursor:pointer; display:flex; flex-direction:column; justify-content:center; gap:2px; z-index:2; }}
+.order-bar:hover,.order-bar:focus {{ z-index:4; outline:2px solid color-mix(in srgb, var(--bar-accent) 70%, white); outline-offset:2px; filter:brightness(.98); }}
+.order-bar::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:7px 0 0 7px; background:var(--bar-accent); }}
+.order-bar span {{ display:block; margin-left:3px; width:max-content; max-width:none; overflow:visible; white-space:nowrap; text-overflow:clip; text-shadow:0 1px 1px rgba(255,255,255,.28); }}
+.order-bar .bar-products {{ color:inherit; font-size:10px; font-weight:700; opacity:.9; }}
 </style></head><body>
 <div class="toolbar"><button data-view="today">오늘</button><button data-view="week">주</button><button data-view="month" class="active">개월</button><button data-view="quarter">분기</button></div>
 <div class="shell"><div class="timeline" id="timeline"><div class="canvas">
-<div class="month-row"><div class="corner">수출 주문</div>{month_headers}</div>
-<div class="day-row"><div class="corner"></div>{day_headers}</div>
+<div class="month-row">{month_headers}</div>
+<div class="day-row">{day_headers}</div>
 {''.join(body_rows)}
 </div></div></div>
 <script>
 const config={payload}; const timeline=document.getElementById('timeline');
 const labelWidth={LABEL_WIDTH};
+function openIntake(caseId) {{
+  if (!caseId) return;
+  const url=new URL(window.parent.location.href);
+  url.searchParams.set('open_intake_case',caseId);
+  window.parent.location.href=url.toString();
+}}
 function centerToday() {{ timeline.scrollLeft=Math.max(0,labelWidth+config.todayOffset-timeline.clientWidth/2); }}
 function setZoom(days) {{
   const available=Math.max(360,timeline.clientWidth-labelWidth); const width=Math.max(24,Math.min(88,available/days));
@@ -154,6 +161,10 @@ document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('clic
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
   const views={{today:3,week:7,month:31,quarter:92}};setZoom(views[btn.dataset.view]);
 }}));
+document.querySelectorAll('.order-bar').forEach(bar=>{{
+  bar.addEventListener('click',()=>openIntake(bar.dataset.caseId));
+  bar.addEventListener('keydown',event=>{{if(event.key==='Enter'||event.key===' '){{event.preventDefault();openIntake(bar.dataset.caseId);}}}});
+}});
 requestAnimationFrame(()=>{{setZoom(31);}});
 </script></body></html>'''
     components.html(document, height=height, scrolling=False)
