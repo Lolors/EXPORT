@@ -83,14 +83,14 @@ def render_order_timeline(rows: list[dict]) -> None:
         body_rows.append(
             '<div class="order-row">'
             f'<div class="row-track">{grid_columns}'
-            f'<div class="order-bar" data-start="{start_date.isoformat()}" '
+            f'<a class="order-bar" data-start="{start_date.isoformat()}" '
             f'data-case-id="{case_id}" tabindex="0" role="link" '
             f'data-end="{end_date.isoformat()}" '
             f'title="{tooltip}" aria-label="{tooltip}" '
             f'style="left:{offset}px;width:{width}px;--bar-bg:{bar_background};'
             f'--bar-text:{bar_text};--bar-accent:{bar_accent}">'
             f'<span class="bar-party">{bar_label}</span>'
-            f'<span class="bar-products">{product_summary}</span></div></div></div>'
+            f'<span class="bar-products">{product_summary}</span></a></div></div>'
         )
 
     payload = json.dumps({
@@ -120,7 +120,7 @@ body {{ margin: 0; color: #2d333b; font-family: Arial, "Noto Sans KR", sans-seri
 .row-track {{ position:relative; width:{len(dates) * DAY_WIDTH}px; flex:0 0 {len(dates) * DAY_WIDTH}px; }}
 .grid-day {{ display:inline-block; width:{DAY_WIDTH}px; height:100%; border-right:1px solid #edf0f3; }}
 .grid-day.today-grid {{ border-left:2px solid #3b82f6; }}
-.order-bar {{ position:absolute; top:14px; height:48px; padding:6px 10px 5px 12px; border-radius:7px; background:var(--bar-bg); color:var(--bar-text); font-size:11px; font-weight:800; box-shadow:0 2px 6px rgba(31,41,55,.18); overflow:visible; cursor:pointer; display:flex; flex-direction:column; justify-content:center; gap:2px; z-index:2; }}
+.order-bar {{ position:absolute; top:14px; height:48px; padding:6px 10px 5px 12px; border-radius:7px; background:var(--bar-bg); color:var(--bar-text); font-size:11px; font-weight:800; box-shadow:0 2px 6px rgba(31,41,55,.18); overflow:visible; cursor:pointer; display:flex; flex-direction:column; justify-content:center; gap:2px; z-index:2; text-decoration:none; }}
 .order-bar:hover,.order-bar:focus {{ z-index:4; outline:2px solid color-mix(in srgb, var(--bar-accent) 70%, white); outline-offset:2px; filter:brightness(.98); }}
 .order-bar::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:7px 0 0 7px; background:var(--bar-accent); }}
 .order-bar span {{ display:block; margin-left:3px; width:max-content; max-width:none; overflow:visible; white-space:nowrap; text-overflow:clip; text-shadow:0 1px 1px rgba(255,255,255,.28); }}
@@ -137,9 +137,11 @@ const config={payload}; const timeline=document.getElementById('timeline');
 const labelWidth={LABEL_WIDTH};
 function openIntake(caseId) {{
   if (!caseId) return;
-  const url=new URL(window.parent.location.href);
+  const parentUrl=document.referrer;
+  if (!parentUrl) return;
+  const url=new URL(parentUrl);
   url.searchParams.set('open_intake_case',caseId);
-  window.parent.location.href=url.toString();
+  window.open(url.toString(),'_parent');
 }}
 function centerToday() {{ timeline.scrollLeft=Math.max(0,labelWidth+config.todayOffset-timeline.clientWidth/2); }}
 function setZoom(days) {{
@@ -162,7 +164,16 @@ document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('clic
   const views={{today:3,week:7,month:31,quarter:92}};setZoom(views[btn.dataset.view]);
 }}));
 document.querySelectorAll('.order-bar').forEach(bar=>{{
-  bar.addEventListener('click',()=>openIntake(bar.dataset.caseId));
+  const parentUrl=document.referrer;
+  if(parentUrl){{
+    const url=new URL(parentUrl);
+    url.searchParams.set('open_intake_case',bar.dataset.caseId);
+    bar.href=url.toString();
+    bar.target='_parent';
+  }}
+  bar.addEventListener('click',event=>{{
+    if(!bar.href){{event.preventDefault();openIntake(bar.dataset.caseId);}}
+  }});
   bar.addEventListener('keydown',event=>{{if(event.key==='Enter'||event.key===' '){{event.preventDefault();openIntake(bar.dataset.caseId);}}}});
 }});
 requestAnimationFrame(()=>{{setZoom(31);}});
