@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import streamlit as st
+
 import db
 from utils.dates import now_text
 
@@ -150,9 +152,12 @@ def cleanup_invalid_links(case_id: int) -> int:
     return len(ids)
 
 
-def list_case_items(case_id: int):
-    """Canonical read-only shipment rows used by intake, packing, and documents."""
-    return db.rows(
+@st.cache_data(show_spinner=False, persist='disk', max_entries=256)
+def _cached_case_items(
+    case_id: int,
+    cache_token: tuple[int, int, int, int],
+) -> list[dict]:
+    rows = db.rows(
         '''SELECT s.id, s.case_id, s.order_item_id,
                   COALESCE(
                       NULLIF(TRIM(s.business_unit), ''),
@@ -172,6 +177,12 @@ def list_case_items(case_id: int):
                     s.id''',
         (case_id,),
     )
+    return [dict(row) for row in rows]
+
+
+def list_case_items(case_id: int):
+    """Canonical read-only shipment rows used by intake, packing, and documents."""
+    return _cached_case_items(int(case_id), db.read_cache_token())
 
 
 def list_actual(case_id: int):
