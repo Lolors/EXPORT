@@ -137,11 +137,18 @@ const config={payload}; const timeline=document.getElementById('timeline');
 const labelWidth={LABEL_WIDTH};
 function openIntake(caseId) {{
   if (!caseId) return;
-  const parentUrl=document.referrer;
-  if (!parentUrl) return;
-  const url=new URL(parentUrl);
+  const parentOrigin=(window.location.ancestorOrigins&&window.location.ancestorOrigins[0])||'';
+  let url;
+  try {{
+    url=document.referrer ? new URL(document.referrer) : new URL('/',parentOrigin);
+  }} catch (_error) {{
+    if (!parentOrigin) return;
+    url=new URL('/',parentOrigin);
+  }}
   url.searchParams.set('open_intake_case',caseId);
-  window.open(url.toString(),'_parent');
+  // Cross-origin iframes may not read the parent URL, but a user click is
+  // allowed to navigate the top-level window to an explicit absolute URL.
+  window.top.location.href=url.toString();
 }}
 function centerToday() {{ timeline.scrollLeft=Math.max(0,labelWidth+config.todayOffset-timeline.clientWidth/2); }}
 function setZoom(days) {{
@@ -164,15 +171,9 @@ document.querySelectorAll('[data-view]').forEach(btn=>btn.addEventListener('clic
   const views={{today:3,week:7,month:31,quarter:92}};setZoom(views[btn.dataset.view]);
 }}));
 document.querySelectorAll('.order-bar').forEach(bar=>{{
-  const parentUrl=document.referrer;
-  if(parentUrl){{
-    const url=new URL(parentUrl);
-    url.searchParams.set('open_intake_case',bar.dataset.caseId);
-    bar.href=url.toString();
-    bar.target='_parent';
-  }}
   bar.addEventListener('click',event=>{{
-    if(!bar.href){{event.preventDefault();openIntake(bar.dataset.caseId);}}
+    event.preventDefault();
+    openIntake(bar.dataset.caseId);
   }});
   bar.addEventListener('keydown',event=>{{if(event.key==='Enter'||event.key===' '){{event.preventDefault();openIntake(bar.dataset.caseId);}}}});
 }});
