@@ -11,7 +11,7 @@ from services.dashboard_view_service import timeline_bounds
 
 
 DAY_WIDTH = 44
-LABEL_WIDTH = 265
+LABEL_WIDTH = 300
 
 
 def _parse_date(value: object) -> date | None:
@@ -72,24 +72,26 @@ def render_order_timeline(rows: list[dict]) -> None:
         party = escape(str(row.get('party') or '국가·바이어 미입력'))
         stage = escape(str(row.get('stage') or '단계 미입력'))
         bar_label = escape(str(row.get('bar_label') or party))
+        product_summary = escape(str(row.get('product_summary') or '주문목록 없음'))
         products = escape(str(row.get('products') or '-'), quote=True).replace('\n', '&#10;')
         period = f'{start_date.isoformat()} ~ {end_date.isoformat()}'
         tooltip = escape(f'{export_no}\n{period}\n{stage}\n주문목록:\n', quote=True) + products
         body_rows.append(
             '<div class="order-row">'
             f'<div class="order-label"><strong>{export_no}</strong>'
-            f'<span>{party}</span></div>'
+            f'<span>{party}</span><span class="label-products">{product_summary}</span></div>'
             f'<div class="row-track">{grid_columns}'
             f'<div class="order-bar" data-start="{start_date.isoformat()}" '
             f'data-end="{end_date.isoformat()}" style="left:{offset}px;width:{width}px" '
-            f'title="{tooltip}"><span>{bar_label}</span></div></div></div>'
+            f'title="{tooltip}"><span class="bar-party">{bar_label}</span>'
+            f'<span class="bar-products">{product_summary}</span></div></div></div>'
         )
 
     payload = json.dumps({
         'todayOffset': max(0, (today - start).days * DAY_WIDTH),
         'dayWidth': DAY_WIDTH,
     })
-    height = min(760, max(330, 150 + len(rows) * 62))
+    height = min(820, max(350, 150 + len(rows) * 76))
     document = f'''<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><style>
 * {{ box-sizing: border-box; }}
@@ -108,17 +110,19 @@ body {{ margin: 0; color: #2d333b; font-family: Arial, "Noto Sans KR", sans-seri
 .day {{ width:{DAY_WIDTH}px; flex:0 0 {DAY_WIDTH}px; text-align:center; padding-top:8px; border-right:1px solid #edf0f3; color:#656d78; }}
 .day.weekend,.grid-day.weekend {{ background:#f7f8fa; }}
 .day.today-day span {{ padding:3px 7px; border-radius:8px; background:#3b82f6; color:#fff; font-weight:800; }}
-.order-row {{ height:62px; border-bottom:1px solid #edf0f3; }}
+.order-row {{ height:76px; border-bottom:1px solid #edf0f3; }}
 .order-row:last-child {{ border-bottom:0; }}
 .order-label {{ position:sticky; left:0; z-index:5; width:{LABEL_WIDTH}px; flex:0 0 {LABEL_WIDTH}px; display:flex; flex-direction:column; justify-content:center; gap:3px; padding:8px 14px; border-right:1px solid #d5d9df; background:#fff; }}
 .order-label strong {{ color:#293b55; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
 .order-label span {{ color:#737b87; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+.order-label .label-products {{ color:#3f536e; font-size:11px; font-weight:700; }}
 .row-track {{ position:relative; width:{len(dates) * DAY_WIDTH}px; flex:0 0 {len(dates) * DAY_WIDTH}px; }}
 .grid-day {{ display:inline-block; width:{DAY_WIDTH}px; height:100%; border-right:1px solid #edf0f3; }}
 .grid-day.today-grid {{ border-left:2px solid #3b82f6; }}
-.order-bar {{ position:absolute; top:17px; height:28px; padding:6px 9px; border-radius:6px; background:#92c943; color:#29420a; font-size:11px; font-weight:800; box-shadow:0 2px 5px rgba(71,111,17,.16); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:help; }}
+.order-bar {{ position:absolute; top:14px; height:48px; padding:6px 10px 5px 12px; border-radius:7px; background:#92c943; color:#29420a; font-size:11px; font-weight:800; box-shadow:0 2px 5px rgba(71,111,17,.16); overflow:hidden; cursor:help; display:flex; flex-direction:column; justify-content:center; gap:2px; }}
 .order-bar::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:#6da727; }}
-.order-bar span {{ margin-left:3px; }}
+.order-bar span {{ display:block; margin-left:3px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }}
+.order-bar .bar-products {{ color:#35570d; font-size:10px; font-weight:700; opacity:.9; }}
 @media(max-width:700px) {{ .corner,.order-label {{ width:190px; flex-basis:190px; }} .canvas {{ min-width:{190 + len(dates) * DAY_WIDTH}px; }} }}
 </style></head><body>
 <div class="toolbar"><button data-view="today">오늘</button><button data-view="week">주</button><button data-view="month" class="active">개월</button><button data-view="quarter">분기</button></div>
