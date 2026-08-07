@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import re
-from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 
 from utils.formatters import fmt_number
 
@@ -65,13 +64,7 @@ def shipment_date(case) -> str:
 
 def default_document_period(reference: date | None = None) -> tuple[date, date]:
     end_date = reference or date.today()
-    previous_month = end_date.month - 1
-    previous_year = end_date.year
-    if previous_month == 0:
-        previous_year -= 1
-        previous_month = 12
-    start_day = min(end_date.day, monthrange(previous_year, previous_month)[1])
-    return date(previous_year, previous_month, start_day), end_date
+    return end_date - timedelta(days=7), end_date
 
 
 def filter_and_sort_cases(
