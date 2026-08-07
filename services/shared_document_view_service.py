@@ -104,10 +104,9 @@ def filter_and_sort_cases(
 
 
 def format_case_option(case) -> str:
-    ship_date = shipment_date(case) or '미출고'
+    country = str(case['country'] or '').strip() or '국가 미입력'
     buyer = str(case['buyer'] or '').strip() or '바이어 미입력'
+    transport_mode = str(case['transport_mode'] or '').strip() or '운송방식 미입력'
+    export_no = str(case['export_no'] or '').strip() or '수출번호 미입력'
     products = summarize_product_names(case['product_names'])
-    return (
-        f"{display_stage(case['stage'])} · {ship_date} · "
-        f"{case['export_no']} · {case['country']} · {buyer} · {products}"
-    )
+    return f'{country} · {buyer} · {transport_mode} · {export_no} · {products}'

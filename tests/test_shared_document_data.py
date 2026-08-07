@@ -3,9 +3,24 @@ from __future__ import annotations
 import unittest
 
 from services.document_service import _build_shipment_product_rows
+from services.shared_document_view_service import format_case_option
 
 
 class SharedDocumentDataTests(unittest.TestCase):
+    def test_formats_case_selector_with_shipping_details(self) -> None:
+        case = {
+            'country': '일본',
+            'buyer': 'ABC Trading',
+            'transport_mode': '항공',
+            'export_no': 'EXP-2026-001',
+            'product_names': '제품 A, 제품 B, 제품 C',
+        }
+
+        self.assertEqual(
+            '일본 · ABC Trading · 항공 · EXP-2026-001 · 제품 A, 제품 B 외 1품목',
+            format_case_option(case),
+        )
+
     def test_uses_order_data_when_product_has_not_arrived(self) -> None:
         orders = [
             {'id': 1, 'product_name': '주문 제품 A', 'quantity': 100, 'unit': 'BOX'},
