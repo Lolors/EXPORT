@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import unittest
+from datetime import date
 
 from services.document_service import _build_shipment_product_rows
-from services.shared_document_view_service import format_case_option
+from services.shared_document_view_service import default_document_period, format_case_option
 
 
 class SharedDocumentDataTests(unittest.TestCase):
+    def test_default_document_period_is_one_week(self) -> None:
+        self.assertEqual(
+            (date(2026, 7, 31), date(2026, 8, 7)),
+            default_document_period(date(2026, 8, 7)),
+        )
+
     def test_formats_case_selector_with_shipping_details(self) -> None:
         case = {
             'country': '일본',
