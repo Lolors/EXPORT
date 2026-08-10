@@ -2,12 +2,27 @@ from __future__ import annotations
 
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 from services.document_service import _build_shipment_product_rows
+from services import export_service
 from services.shared_document_view_service import default_document_period, format_case_option
 
 
 class SharedDocumentDataTests(unittest.TestCase):
+    @patch('services.export_service.now_text', return_value='2026-08-10 12:00:00')
+    @patch('services.export_service.db.execute')
+    def test_updates_actual_ship_date(self, execute, _now_text) -> None:
+        export_service.update_actual_ship_date(17, '2026-08-15')
+
+        sql, params = execute.call_args.args
+        self.assertIn('SET actual_ship_date=?,updated_at=?', sql)
+        self.assertEqual(('2026-08-15', '2026-08-10 12:00:00', 17), params)
+
+    def test_rejects_empty_actual_ship_date(self) -> None:
+        with self.assertRaisesRegex(ValueError, '출고일을 입력하세요'):
+            export_service.update_actual_ship_date(17, '  ')
+
     def test_default_document_period_is_one_week(self) -> None:
         self.assertEqual(
             (date(2026, 7, 31), date(2026, 8, 7)),
