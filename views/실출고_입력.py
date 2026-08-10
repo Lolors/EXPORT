@@ -88,6 +88,28 @@ def product_name_warning_dialog(
         st.rerun()
 
 
+@dialog('수출대기로 되돌리기')
+def reopen_export_waiting_dialog(*, case_id: int, export_no: str) -> None:
+    st.warning(f'{export_no}의 수출확정을 취소하고 수출대기 상태로 되돌립니다.')
+    st.caption('저장된 주문·입고·CTN·국내배송 정보는 삭제되지 않습니다.')
+    confirm_col, cancel_col = st.columns(2)
+    if confirm_col.button('수출대기로 되돌리기', type='primary', use_container_width=True):
+        try:
+            export_service.reopen_for_export_waiting(case_id)
+            folder_service.sync_case_folder(case_id)
+            history_service.add(case_id, '수출확정 취소', '수출대기 상태로 되돌림')
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            st.session_state['shipment_intake_success_message'] = (
+                f'{export_no}을(를) 수출대기 상태로 되돌렸습니다.'
+            )
+            st.rerun()
+
+    if cancel_col.button('취소', use_container_width=True):
+        st.rerun()
+
+
 def render_similar_price_lookup(*, key: str) -> None:
     st.markdown('#### 유사 제품 매입가 조회')
     query = st.text_input(
@@ -173,6 +195,21 @@ case_id = select_export_case(
 st.session_state['actual_packing_case_id'] = case_id
 
 shipment_service.cleanup_invalid_links(case_id)
+selected_case = next(case for case in cases if int(case['id']) == case_id)
+if (
+    str(selected_case['stage'] or '').strip() == '국내배송'
+    and str(selected_case['status'] or '').strip() == '완료'
+):
+    action_col, _ = st.columns([1, 3])
+    if action_col.button(
+        '수출대기로 되돌리기',
+        use_container_width=True,
+        key=f'reopen_export_waiting_{case_id}',
+    ):
+        reopen_export_waiting_dialog(
+            case_id=case_id,
+            export_no=str(selected_case['export_no'] or '').strip() or '선택한 수출 건',
+        )
 orders = order_service.list_for_case(case_id)
 all_linked_rows = shipment_service.list_case_items(case_id)
 linked_rows_by_order: dict[int, list] = {}

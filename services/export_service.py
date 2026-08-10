@@ -74,6 +74,32 @@ def intake_editable_cases():
     return _cached_intake_editable_cases(db.read_cache_token())
 
 
+@db.backup_batch
+def reopen_for_export_waiting(case_id: int) -> None:
+    """Reopen a confirmed current export without discarding its saved data."""
+    case = db.row(
+        'SELECT case_type,status,stage FROM export_cases WHERE id=?',
+        (case_id,),
+    )
+    if case is None:
+        raise ValueError('수출 건을 찾을 수 없습니다.')
+    if case['case_type'] == 'historical':
+        raise ValueError('과거 수출 건은 수출대기로 되돌릴 수 없습니다.')
+    if str(case['status'] or '').strip() == '취소' or str(case['stage'] or '').strip() == '취소':
+        raise ValueError('취소된 수출 건은 수출대기로 되돌릴 수 없습니다.')
+    if str(case['stage'] or '').strip() != '국내배송' or str(case['status'] or '').strip() != '완료':
+        raise ValueError('수출확정된 건만 수출대기로 되돌릴 수 있습니다.')
+
+    db.execute(
+        "UPDATE export_cases SET stage='패킹 대기',status='진행중',updated_at=? WHERE id=?",
+        (now_text(), case_id),
+    )
+    _cached_case.clear()
+    _cached_case_list.clear()
+    _cached_active_cases.clear()
+    _cached_intake_editable_cases.clear()
+
+
 @st.cache_data(show_spinner=False, persist='disk', max_entries=128)
 def _cached_order_items(
     case_id: int,

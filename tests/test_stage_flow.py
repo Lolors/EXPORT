@@ -88,6 +88,52 @@ class StageFlowTests(unittest.TestCase):
 
         self.assertIn(case_id, editable_ids)
 
+    def test_confirmed_export_can_return_to_waiting_without_losing_saved_data(self) -> None:
+        case_id = self._create_case()
+        now = now_text()
+        order = db.row('SELECT id FROM order_items WHERE case_id=? ORDER BY id LIMIT 1', (case_id,))
+        db.execute(
+            '''INSERT INTO boxes(case_id,box_no,length_cm,width_cm,height_cm,weight_kg,updated_at)
+               VALUES (?,?,?,?,?,?,?)''',
+            (case_id, 1, 40, 30, 20, 5, now),
+        )
+        db.execute(
+            '''INSERT INTO shipment_items(
+                   case_id,order_item_id,product_name,requested_qty,box_no,created_at,updated_at
+               ) VALUES (?,?,?,?,?,?,?)''',
+            (case_id, order['id'], 'A', 100, 1, now, now),
+        )
+        db.execute(
+            '''UPDATE export_cases
+               SET stage='국내배송',status='완료',domestic_method='택배',tracking_no='TRACK-001'
+               WHERE id=?''',
+            (case_id,),
+        )
+
+        export_service.reopen_for_export_waiting(case_id)
+
+        case = db.row(
+            'SELECT stage,status,domestic_method,tracking_no FROM export_cases WHERE id=?',
+            (case_id,),
+        )
+        shipment = db.row(
+            'SELECT product_name,requested_qty,box_no FROM shipment_items WHERE case_id=?',
+            (case_id,),
+        )
+        self.assertEqual('패킹 대기', case['stage'])
+        self.assertEqual('진행중', case['status'])
+        self.assertEqual('택배', case['domestic_method'])
+        self.assertEqual('TRACK-001', case['tracking_no'])
+        self.assertEqual('A', shipment['product_name'])
+        self.assertEqual(100, shipment['requested_qty'])
+        self.assertEqual(1, shipment['box_no'])
+
+    def test_only_confirmed_current_export_can_return_to_waiting(self) -> None:
+        case_id = self._create_case()
+
+        with self.assertRaisesRegex(ValueError, '수출확정된 건만'):
+            export_service.reopen_for_export_waiting(case_id)
+
     def test_editing_packed_intake_reopens_case_and_only_unpacks_selected_order(self) -> None:
         case_id = self._create_case()
         orders = db.rows('SELECT id,product_name FROM order_items WHERE case_id=? ORDER BY id', (case_id,))
