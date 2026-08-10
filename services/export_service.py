@@ -160,6 +160,19 @@ def update_basic(
     )
 
 
+def update_actual_ship_date(case_id: int, actual_ship_date: str) -> None:
+    value = actual_ship_date.strip()
+    if not value:
+        raise ValueError('출고일을 입력하세요.')
+
+    db.execute(
+        '''UPDATE export_cases
+           SET actual_ship_date=?,updated_at=?
+           WHERE id=?''',
+        (value, now_text(), case_id),
+    )
+
+
 def cancel_case(case_id: int) -> None:
     db.execute(
         '''UPDATE export_cases
