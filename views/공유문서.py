@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from datetime import date
 from pathlib import Path
 
 import streamlit as st
@@ -116,6 +117,32 @@ if previous_case_id != case_id:
     st.session_state['document_case_id'] = case_id
     st.session_state.pop('shared_document_view', None)
 case = export_service.get_case(case_id)
+
+raw_ship_date = str(case['actual_ship_date'] or '').strip()
+try:
+    current_ship_date = date.fromisoformat(raw_ship_date[:10])
+except ValueError:
+    current_ship_date = date.today()
+
+ship_date_cols = st.columns([3, 1, 6])
+edited_ship_date = ship_date_cols[0].date_input(
+    '출고일',
+    value=current_ship_date,
+    key=f'shared_document_ship_date_{case_id}',
+)
+if ship_date_cols[1].button(
+    '출고일 저장',
+    key=f'save_shared_document_ship_date_{case_id}',
+    use_container_width=True,
+):
+    try:
+        export_service.update_actual_ship_date(case_id, edited_ship_date.isoformat())
+        folder_service.sync_case_folder(case_id)
+    except Exception as exc:
+        st.error(f'출고일을 저장하지 못했습니다: {exc}')
+    else:
+        st.success(f'출고일을 {edited_ship_date.isoformat()}로 저장했습니다.')
+        st.rerun()
 
 is_final_document_available = str(case['stage'] or '').strip() in {
     '패킹 대기',
